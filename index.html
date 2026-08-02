@@ -1619,6 +1619,13 @@
       render();
     }
 
+    function markPickedAndReturn(stopOrder) {
+      localStorage.setItem(getStorageKey(stopOrder), !getPicked(stopOrder) ? "1" : "0");
+      state.selectedRider = null;
+      state.view = "rides";
+      render();
+    }
+
     function render() {
       setActiveNav();
       if (state.view === "profile") screen.innerHTML = profileView();
@@ -1704,7 +1711,7 @@
       const markButton = event.target.closest("[data-mark]");
       if (markButton) {
         const stopOrder = markButton.dataset.mark;
-        setPicked(stopOrder, !getPicked(stopOrder));
+        markPickedAndReturn(stopOrder);
       }
     });
 

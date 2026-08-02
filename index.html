@@ -683,19 +683,19 @@
     :root {
       --ink: #050505;
       --muted: #6b7280;
-      --line: #e5e7eb;
+      --line: #e6e7ea;
       --panel: #ffffff;
-      --soft: #f4f4f4;
-      --green: #0b3d2e;
-      --green-dark: #0b3d2e;
-      --green-light: #eef3ef;
+      --soft: #f4f4f5;
+      --green: #000000;
+      --green-dark: #000000;
+      --green-light: #f1f1f3;
       --shadow: 0 14px 34px rgba(0, 0, 0, 0.08);
       --app-width: min(100vw, 430px);
     }
 
     html,
     body {
-      background: #0b3d2e;
+      background: #f7f7f8;
     }
 
     .page {
@@ -1014,7 +1014,7 @@
       width: 18px;
       height: 18px;
       flex: 0 0 auto;
-      color: #0a7f2f;
+      color: #000000;
     }
 
     .driver-action-group {
@@ -1053,8 +1053,14 @@
       width: 46px;
       height: 46px;
       border-radius: 12px;
-      color: #0a7f2f;
-      background: #e8f6ea;
+      color: #000000;
+      background: #ffffff;
+      border: 1px solid var(--line);
+    }
+
+    .destination-icon .driver-meta-icon {
+      width: 30px;
+      height: 30px;
     }
 
     .destination-copy {
@@ -1093,8 +1099,8 @@
     .pill {
       min-height: 28px;
       padding: 4px 9px;
-      color: #05621f;
-      background: #e9f7eb;
+      color: #050505;
+      background: #f0f0f2;
       font-size: 13px;
       font-weight: 850;
       white-space: nowrap;
@@ -1146,7 +1152,7 @@
     }
 
     .route-stop.is-picked .stop-number {
-      background: #16a34a;
+      background: #000000;
     }
 
     .stop-number {
@@ -1334,7 +1340,7 @@
       .page {
         display: grid;
         place-items: start center;
-        background: #0b3d2e;
+        background: #f7f7f8;
       }
 
       .phone {
@@ -1576,7 +1582,7 @@
     function profileDestinationCard() {
       return `
         <a class="profile-destination-card" href="${googleMaps(DESTINATION_SUMMARY.address)}" target="_blank" rel="noreferrer">
-          <span class="destination-icon">${iconSvg("car")}</span>
+          <span class="destination-icon">${iconSvg("pin")}</span>
           <span class="destination-copy">
             <strong>All routes end at<br>${escapeHtml(DESTINATION_SUMMARY.label)}</strong>
             <p>${escapeHtml(DESTINATION_SUMMARY.address)}</p>

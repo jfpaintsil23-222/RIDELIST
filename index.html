@@ -913,25 +913,56 @@
       gap: 12px;
     }
 
+    .profile-header {
+      padding-top: 44px;
+    }
+
+    .profile-header h1 {
+      font-size: 38px;
+      line-height: 1.02;
+    }
+
+    .profile-header > p:last-child {
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .profile-header .eyebrow {
+      margin-top: 0;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
     .driver-card {
-      min-height: 76px;
-      grid-template-columns: 48px 1fr auto;
-      padding: 14px;
+      position: relative;
+      min-height: 126px;
+      grid-template-columns: 68px minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      gap: 14px;
+      row-gap: 9px;
+      padding: 16px 14px 15px;
       border-color: #dfe3e6;
       background: #ffffff;
     }
 
     .driver-card .avatar.small {
-      width: 44px;
-      height: 44px;
+      grid-row: 1 / 3;
+      width: 58px;
+      height: 58px;
       color: #ffffff;
       background: #000000;
       border: 0;
       box-shadow: none;
-      font-size: 14px;
+      font-size: 24px;
     }
 
-    .driver-card strong,
+    .driver-card strong {
+      color: #050505;
+      font-size: 21px;
+      font-weight: 850;
+    }
+
     .route-stop strong {
       color: #050505;
       font-size: 17px;
@@ -939,20 +970,133 @@
     }
 
     .driver-card p {
-      max-width: 165px;
-      white-space: nowrap;
+      max-width: none;
+      font-size: 14px;
+    }
+
+    .driver-copy {
+      display: grid;
+      grid-column: 2;
+      grid-row: 1;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .driver-copy strong {
+      margin-bottom: 0;
+    }
+
+    .driver-details {
+      display: grid;
+      grid-column: 2;
+      grid-row: 2;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .driver-route-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      color: #111827;
+      font-size: 15px;
+      line-height: 1.22;
+      font-weight: 500;
+    }
+
+    .driver-route-row span:last-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .driver-meta-icon {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      color: #0a7f2f;
+    }
+
+    .driver-action-group {
+      position: absolute;
+      top: 23px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .driver-chevron {
+      color: #6b7280;
+      font-size: 30px;
+      font-weight: 350;
+      line-height: 1;
+    }
+
+    .profile-destination-card {
+      min-height: 82px;
+      display: grid;
+      grid-template-columns: 56px minmax(0, 1fr) 48px;
+      gap: 14px;
+      align-items: center;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: inherit;
+      background: #ffffff;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.04);
+    }
+
+    .destination-icon {
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      color: #0a7f2f;
+      background: #e8f6ea;
+    }
+
+    .destination-copy {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .destination-copy strong {
+      color: #050505;
+      font-size: 15px;
+      line-height: 1.2;
+      font-weight: 850;
+    }
+
+    .destination-copy p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.25;
+      font-weight: 500;
+      white-space: normal;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-size: 12px;
+    }
+
+    .destination-map-icon {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: #6b7280;
     }
 
     .pill {
       min-height: 28px;
-      padding: 4px 10px;
-      color: #050505;
-      background: #f1f1f1;
-      font-size: 12px;
-      font-weight: 750;
+      padding: 4px 9px;
+      color: #05621f;
+      background: #e9f7eb;
+      font-size: 13px;
+      font-weight: 850;
       white-space: nowrap;
     }
 
@@ -1330,6 +1474,40 @@
       "default": { src: "assets/route-map-1.png", position: "center 50%", scale: "1.02" },
     };
 
+    const DESTINATION_SUMMARY = {
+      label: "University of Houston Hilton Hotel",
+      address: "4450 University Drive, Houston, TX 77204",
+    };
+
+    const DRIVER_ROUTE_SUMMARIES = {
+      "joojo": {
+        routeLabel: "West Houston Route",
+        timeLabel: "1 hr 1 min to UH Hilton",
+      },
+      "john-mark": {
+        routeLabel: "Huntsville Route",
+        timeLabel: "2 hr 28 min to UH Hilton",
+      },
+      "annie": {
+        routeLabel: "South Houston Route",
+        timeLabel: "29 min to UH Hilton",
+      },
+      "dawson": {
+        routeLabel: "Neighborhood Route",
+        startLabel: "Starts 11:52 AM",
+        timeLabel: "20 min to UH Hilton",
+      },
+      "naa": {
+        routeLabel: "Neighborhood Route",
+        startLabel: "Starts 12:16 PM",
+        timeLabel: "6 min to UH Hilton",
+      },
+      "blue": {
+        routeLabel: "Southeast Houston Route",
+        timeLabel: "1 hr 5 min to UH Hilton",
+      },
+    };
+
     function routeScene(driverSlug = "default", variant = "dashboard") {
       const routeImage = ROUTE_IMAGES[driverSlug] || ROUTE_IMAGES.default;
       const compactClass = variant === "review" ? " compact" : "";
@@ -1348,6 +1526,63 @@
 
     function countRiders() {
       return state.drivers.reduce((sum, driver) => sum + Number(driver.pickup_count || 0), 0);
+    }
+
+    function pickupCountLabel(count) {
+      const total = Number(count || 0);
+      return `${total} Pickup${total === 1 ? "" : "s"}`;
+    }
+
+    function routeTimeLabel(summary) {
+      return summary?.startLabel ? `${summary.startLabel} · ${summary.timeLabel}` : summary?.timeLabel || "Route time pending";
+    }
+
+    function driverRouteSummary(driver) {
+      return DRIVER_ROUTE_SUMMARIES[driver.slug] || {
+        routeLabel: driver.subtitle || "Assigned Route",
+        timeLabel: "Route time pending",
+      };
+    }
+
+    function iconSvg(name) {
+      const icons = {
+        pin: `<svg class="driver-meta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s6-5.25 6-11a6 6 0 0 0-12 0c0 5.75 6 11 6 11Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.25" stroke="currentColor" stroke-width="2"/></svg>`,
+        clock: `<svg class="driver-meta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+        car: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 1.5-4.5A2 2 0 0 1 8.4 6h7.2a2 2 0 0 1 1.9 1.5L19 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M4 12h16v6H4v-6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 18v2M17 18v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="7.5" cy="15" r="1" fill="currentColor"/><circle cx="16.5" cy="15" r="1" fill="currentColor"/></svg>`,
+        map: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18-6 3V6l6-3m0 15 6 3m-6-3V3m6 18 6-3V3l-6 3m0 15V6m0 0L9 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      };
+      return icons[name] || "";
+    }
+
+    function driverProfileCard(driver) {
+      const summary = driverRouteSummary(driver);
+      return `
+        <button class="driver-card" type="button" data-driver="${escapeHtml(driver.slug)}" aria-label="Open ${escapeHtml(driver.display_name)} profile">
+          <span class="avatar small">${escapeHtml(driver.initials)}</span>
+          <span class="driver-copy">
+            <strong>${escapeHtml(driver.display_name)}</strong>
+          </span>
+          <span class="driver-action-group">
+            <span class="pill">${escapeHtml(pickupCountLabel(driver.pickup_count))}</span>
+            <span class="driver-chevron" aria-hidden="true">&rsaquo;</span>
+          </span>
+          <span class="driver-details">
+            <span class="driver-route-row">${iconSvg("pin")}<span>${escapeHtml(summary.routeLabel)}</span></span>
+            <span class="driver-route-row">${iconSvg("clock")}<span>${escapeHtml(routeTimeLabel(summary))}</span></span>
+          </span>
+        </button>`;
+    }
+
+    function profileDestinationCard() {
+      return `
+        <a class="profile-destination-card" href="${googleMaps(DESTINATION_SUMMARY.address)}" target="_blank" rel="noreferrer">
+          <span class="destination-icon">${iconSvg("car")}</span>
+          <span class="destination-copy">
+            <strong>All routes end at<br>${escapeHtml(DESTINATION_SUMMARY.label)}</strong>
+            <p>${escapeHtml(DESTINATION_SUMMARY.address)}</p>
+          </span>
+          <span class="destination-map-icon">${iconSvg("map")}</span>
+        </a>`;
     }
 
     function setView(view) {
@@ -1410,29 +1645,19 @@
     function profileView() {
       const driverCards = state.loading
         ? `<section class="empty-card"><p>Loading drivers...</p></section>`
-        : state.drivers.map((driver) => `
-          <button class="driver-card" type="button" data-driver="${escapeHtml(driver.slug)}" aria-label="Open ${escapeHtml(driver.display_name)} profile">
-            <span class="avatar small">${escapeHtml(driver.initials)}</span>
-            <span>
-              <strong>${escapeHtml(driver.display_name)}</strong>
-              <p>${escapeHtml(driver.subtitle)}</p>
-            </span>
-            <span class="pill">${Number(driver.pickup_count || 0)} pickups</span>
-          </button>
-        `).join("");
+        : state.drivers.map(driverProfileCard).join("");
 
       return `
         <div class="stack">
-          <section class="intro-block compact">
-            <h1>My Profile</h1>
-            <p>Choose your driver</p>
+          <section class="intro-block compact profile-header">
             <p class="eyebrow">Today</p>
-            <h2>Sunday Ride Plan</h2>
+            <h1>Sunday Ride Plan</h1>
             <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
           </section>
           <section class="driver-list" aria-label="Drivers">
             ${driverCards}
           </section>
+          ${state.loading ? "" : profileDestinationCard()}
           ${state.error ? `<section class="empty-card"><p class="error">${escapeHtml(state.error)}</p></section>` : ""}
         </div>`;
     }

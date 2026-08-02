@@ -1492,7 +1492,6 @@
       },
       "john-mark": {
         routeLabel: "Huntsville Route",
-        timeLabel: "2 hr 28 min to UH Hilton",
       },
       "annie": {
         routeLabel: "South Houston Route",
@@ -1540,7 +1539,8 @@
     }
 
     function routeTimeLabel(summary) {
-      return summary?.startLabel ? `${summary.startLabel} · ${summary.timeLabel}` : summary?.timeLabel || "Route time pending";
+      if (!summary?.timeLabel) return "";
+      return summary.startLabel ? `${summary.startLabel} · ${summary.timeLabel}` : summary.timeLabel;
     }
 
     function driverRouteSummary(driver) {
@@ -1562,6 +1562,7 @@
 
     function driverProfileCard(driver) {
       const summary = driverRouteSummary(driver);
+      const timeLabel = routeTimeLabel(summary);
       return `
         <button class="driver-card" type="button" data-driver="${escapeHtml(driver.slug)}" aria-label="Open ${escapeHtml(driver.display_name)} profile">
           <span class="avatar small">${escapeHtml(driver.initials)}</span>
@@ -1574,7 +1575,7 @@
           </span>
           <span class="driver-details">
             <span class="driver-route-row">${iconSvg("pin")}<span>${escapeHtml(summary.routeLabel)}</span></span>
-            <span class="driver-route-row">${iconSvg("clock")}<span>${escapeHtml(routeTimeLabel(summary))}</span></span>
+            ${timeLabel ? `<span class="driver-route-row">${iconSvg("clock")}<span>${escapeHtml(timeLabel)}</span></span>` : ""}
           </span>
         </button>`;
     }

@@ -1490,11 +1490,28 @@
         </button>`;
     }
 
+    function routeTarget(riders, destination) {
+      const nextRider = riders.find((rider) => !getPicked(rider.stopOrder));
+      if (nextRider) {
+        return {
+          address: nextRider.address,
+          label: `Start route to ${nextRider.name}`,
+          allPicked: false,
+        };
+      }
+
+      return {
+        address: destination.address,
+        label: `Start route to ${destination.label}`,
+        allPicked: true,
+      };
+    }
+
     function ridesView() {
       const driver = state.route?.driver;
       const riders = state.route?.riders || [];
       const destination = state.route?.destination;
-      const firstStop = riders[0]?.address || destination.address;
+      const target = routeTarget(riders, destination);
 
       const cards = riders.map(routeStopRow).join("");
 
@@ -1518,17 +1535,17 @@
 
           <section class="route-list" aria-label="Drop off">
             <h2>Drop-off</h2>
-            <div class="route-stop destination">
+            <div class="route-stop destination ${target.allPicked ? "is-picked" : ""}">
               <span class="stop-number">✓</span>
               <span class="stop-copy">
                 <strong>${escapeHtml(destination.label)}</strong>
                 <span>${escapeHtml(destination.address)}</span>
-                <small>Final destination</small>
+                <small>${target.allPicked ? "Ready for final route" : "Final destination"}</small>
               </span>
             </div>
           </section>
 
-          <a class="primary-action route-start" href="${googleMaps(firstStop)}" target="_blank" rel="noreferrer">Start route <span aria-hidden="true">&rarr;</span></a>
+          <a class="primary-action route-start" href="${googleMaps(target.address)}" target="_blank" rel="noreferrer">${escapeHtml(target.label)} <span aria-hidden="true">&rarr;</span></a>
         </div>`;
     }
 

@@ -1507,12 +1507,10 @@
       "dawson": {
         routeLabel: "Neighborhood Route",
         startLabel: "Starts 11:52 AM",
-        timeLabel: "20 min to UH Hilton",
+        timeLabel: "38 min to UH Hilton",
       },
       "naa": {
-        routeLabel: "Neighborhood Route",
-        startLabel: "Starts 12:16 PM",
-        timeLabel: "6 min to UH Hilton",
+        routeLabel: "No pickups assigned",
       },
       "blue": {
         routeLabel: "Southeast Houston Route",
@@ -1676,11 +1674,19 @@
         </div>`;
     }
 
+    function riderNameList(riders) {
+      const names = riders.map((rider) => rider.name).filter(Boolean);
+      if (names.length === 0) return "No riders assigned";
+      if (names.length === 1) return names[0];
+      if (names.length === 2) return names.join(" and ");
+      return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
+    }
+
     function driverHomeView() {
       const driver = state.route?.driver;
       const riders = state.route?.riders || [];
       const destination = state.route?.destination;
-      const riderNames = riders.map((rider) => rider.name).join(" and ");
+      const riderNames = riderNameList(riders);
 
       return `
         <div class="stack">
@@ -1694,7 +1700,7 @@
             <div>
               <p>Total pickups</p>
               <strong class="count">${riders.length}</strong>
-              <p>${escapeHtml(riderNames || "No riders assigned")}</p>
+              <p>${escapeHtml(riderNames)}</p>
             </div>
           </section>
 

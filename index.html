@@ -1,0 +1,1235 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Church Ride Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #102235;
+      --muted: #667085;
+      --line: #dfe7e4;
+      --panel: #ffffff;
+      --soft: #eef8f1;
+      --green: #07984f;
+      --green-dark: #067a43;
+      --green-light: #dff4e7;
+      --danger: #b42318;
+      --shadow: 0 18px 45px rgba(16, 45, 32, 0.16);
+      --app-width: min(100vw, 520px);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      min-height: 100%;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(95, 194, 122, 0.18), transparent 32%),
+        linear-gradient(135deg, #f6fbf4 0%, #eaf6ed 47%, #f7fbf8 100%);
+    }
+
+    body {
+      min-height: 100%;
+      margin: 0;
+      color: var(--ink);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button,
+    a,
+    input {
+      font: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .page {
+      min-height: 100dvh;
+      margin: 0 auto;
+      background: #fbfdfc;
+    }
+
+    .phone {
+      width: var(--app-width);
+      min-height: 100dvh;
+      margin: 0 auto;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #fbfdfc;
+    }
+
+    .screen {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 18px 22px calc(86px + env(safe-area-inset-bottom));
+      overflow: auto;
+    }
+
+    .secure-row,
+    .top-row,
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .secure-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .shield,
+    .secure-mark {
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      color: #fff;
+      background: linear-gradient(160deg, #12b86a, #047f46);
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .bell,
+    .back-button,
+    .icon-button {
+      display: inline-grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border: 1px solid #e6ece9;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 8px 20px rgba(11, 23, 42, 0.08);
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .back-button {
+      border: 0;
+      box-shadow: none;
+      background: transparent;
+      font-size: 34px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 14px;
+      padding-top: 8px;
+    }
+
+    .greeting {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .greeting small {
+      display: block;
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 48px;
+      line-height: 0.95;
+      letter-spacing: 0;
+      color: #102235;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.38;
+    }
+
+    .avatar {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      color: #fff;
+      background: linear-gradient(160deg, #1dbd69, #068345);
+      border: 4px solid #e8f8ed;
+      box-shadow: 0 7px 18px rgba(6, 122, 67, 0.24);
+      font-size: 21px;
+      font-weight: 900;
+    }
+
+    .avatar.small {
+      width: 44px;
+      height: 44px;
+      border-width: 0;
+      color: var(--green);
+      background: var(--green-light);
+      box-shadow: none;
+      font-size: 17px;
+    }
+
+    .route-scene {
+      height: 130px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, transparent 15%, rgba(205, 231, 213, 0.4) 15% 100%),
+        linear-gradient(90deg, transparent 0 10%, rgba(202, 221, 216, 0.32) 10% 13%, transparent 13% 22%, rgba(202, 221, 216, 0.32) 22% 25%, transparent 25% 40%, rgba(202, 221, 216, 0.32) 40% 43%, transparent 43% 62%, rgba(202, 221, 216, 0.32) 62% 67%, transparent 67% 100%);
+    }
+
+    .tree {
+      position: absolute;
+      bottom: 18px;
+      width: 48px;
+      height: 58px;
+      border-radius: 30px 30px 20px 20px;
+      background: #b7ddc1;
+    }
+
+    .tree::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      bottom: -18px;
+      width: 5px;
+      height: 24px;
+      border-radius: 3px;
+      background: #8dbb96;
+    }
+
+    .tree.left { left: 8px; }
+    .tree.right { right: 16px; width: 36px; height: 52px; }
+
+    .car {
+      position: absolute;
+      left: 70px;
+      bottom: 18px;
+      width: 200px;
+      height: 54px;
+      border-radius: 50px 68px 22px 22px;
+      background: linear-gradient(180deg, #3e9659, #2e7045);
+      box-shadow: 0 9px 0 #245b3a;
+    }
+
+    .car::before {
+      content: "";
+      position: absolute;
+      left: 44px;
+      top: -35px;
+      width: 106px;
+      height: 45px;
+      border: 6px solid #2b7043;
+      border-bottom: 0;
+      border-radius: 60px 65px 0 0;
+      background: rgba(231, 246, 236, 0.92);
+    }
+
+    .wheel {
+      position: absolute;
+      bottom: -17px;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 7px solid #2c3542;
+      background: #e8f0eb;
+    }
+
+    .wheel.one { left: 28px; }
+    .wheel.two { right: 31px; }
+
+    .headlight {
+      position: absolute;
+      right: 14px;
+      top: 25px;
+      width: 32px;
+      height: 12px;
+      border-radius: 20px;
+      background: #dff4d7;
+    }
+
+    .stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .summary-card,
+    .driver-card,
+    .rider-card,
+    .detail-card,
+    .map-panel,
+    .empty-card {
+      border: 1px solid #e3ebe8;
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 10px 24px rgba(11, 23, 42, 0.08);
+    }
+
+    .summary-card {
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 18px;
+    }
+
+    .summary-icon {
+      display: grid;
+      place-items: center;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      color: var(--green);
+      background: var(--green-light);
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .count {
+      display: block;
+      margin-top: 3px;
+      font-size: 38px;
+      line-height: 1;
+      color: #102235;
+      font-weight: 900;
+    }
+
+    .primary-action,
+    .secondary-action,
+    .mark-button {
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .primary-action {
+      border: 0;
+      color: #fff;
+      background: linear-gradient(180deg, #12b96a, #07984f);
+      box-shadow: 0 14px 24px rgba(7, 152, 79, 0.24);
+    }
+
+    .secondary-action,
+    .mark-button {
+      border: 1.5px solid #d1d9d6;
+      color: #111827;
+      background: #fff;
+    }
+
+    .mark-button {
+      color: var(--green-dark);
+      border-color: rgba(7, 152, 79, 0.45);
+    }
+
+    .mark-button.is-picked {
+      color: #fff;
+      background: var(--green);
+      border-color: var(--green);
+    }
+
+    .driver-list,
+    .riders-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .driver-card,
+    .rider-card {
+      width: 100%;
+      min-height: 100px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 14px;
+      align-items: center;
+      padding: 14px;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .driver-card {
+      border-color: rgba(6, 152, 80, 0.3);
+      background: linear-gradient(135deg, #effaf3, #ffffff);
+    }
+
+    .driver-card strong,
+    .rider-card strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 16px;
+      line-height: 1.15;
+    }
+
+    .chevron {
+      color: #102235;
+      font-size: 30px;
+      line-height: 1;
+    }
+
+    .stop-number {
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: #fff;
+      background: linear-gradient(160deg, #10ad61, #078246);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .rider-card {
+      grid-template-columns: 30px 1fr auto;
+      min-height: 112px;
+      background: #fff;
+    }
+
+    .rider-address {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .rider-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .pill,
+    .picked-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 23px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .pill {
+      color: var(--green-dark);
+      background: var(--green-light);
+    }
+
+    .pill.gray {
+      color: #344054;
+      background: #eef2f0;
+    }
+
+    .picked-chip {
+      display: none;
+      color: var(--green-dark);
+      background: var(--green-light);
+    }
+
+    .rider-card.is-picked .picked-chip {
+      display: inline-flex;
+    }
+
+    .detail-top {
+      display: grid;
+      grid-template-columns: 42px 1fr 32px;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .detail-top h2 {
+      text-align: center;
+    }
+
+    .person-banner {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 14px;
+      align-items: center;
+      padding-top: 8px;
+    }
+
+    .person-banner h1 {
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .detail-card {
+      padding: 6px 16px;
+      box-shadow: 0 10px 24px rgba(11, 23, 42, 0.06);
+    }
+
+    .detail-row {
+      display: grid;
+      grid-template-columns: 30px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid #e6ece9;
+    }
+
+    .detail-row:last-child {
+      border-bottom: 0;
+    }
+
+    .detail-icon {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      color: #344054;
+      font-weight: 900;
+    }
+
+    .detail-row small {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .detail-row strong {
+      display: block;
+      color: #111827;
+      font-size: 15px;
+      line-height: 1.32;
+      overflow-wrap: anywhere;
+    }
+
+    .map-panel {
+      height: 170px;
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.38)),
+        linear-gradient(35deg, transparent 0 12%, rgba(160, 198, 175, 0.28) 12% 27%, transparent 27% 100%),
+        repeating-linear-gradient(35deg, #f3f6f4 0 3px, transparent 3px 42px),
+        repeating-linear-gradient(125deg, #f0f4f2 0 3px, transparent 3px 46px);
+    }
+
+    .map-line {
+      position: absolute;
+      height: 7px;
+      border-radius: 20px;
+      background: var(--green);
+      transform-origin: left center;
+    }
+
+    .map-line.one {
+      width: 105px;
+      left: 72px;
+      bottom: 54px;
+      transform: rotate(63deg);
+    }
+
+    .map-line.two {
+      width: 150px;
+      left: 139px;
+      top: 92px;
+      transform: rotate(-19deg);
+    }
+
+    .map-dot {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--green);
+      box-shadow: 0 0 0 7px rgba(255, 255, 255, 0.84), 0 8px 18px rgba(7, 152, 79, 0.2);
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .map-dot.start { left: 55px; bottom: 58px; }
+    .map-dot.end { right: 42px; top: 48px; }
+
+    .map-label {
+      position: absolute;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #334155;
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .start-label { left: 43px; bottom: 23px; }
+    .end-label { right: 44px; top: 91px; }
+
+    .map-logo {
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .map-logo.google {
+      background: conic-gradient(from 40deg, #4285f4, #34a853, #fbbc04, #ea4335, #4285f4);
+    }
+
+    .map-logo.apple {
+      background: conic-gradient(from 20deg, #5ac8fa, #34c759, #ffcc00, #ff3b30, #af52de, #5ac8fa);
+    }
+
+    .bottom-nav {
+      position: fixed;
+      left: 50%;
+      bottom: 0;
+      z-index: 10;
+      width: var(--app-width);
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px;
+      padding: 10px 42px calc(18px + env(safe-area-inset-bottom));
+      border-top: 1px solid #e4ebe8;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(12px);
+    }
+
+    .nav-item {
+      display: grid;
+      place-items: center;
+      gap: 4px;
+      border: 0;
+      background: transparent;
+      color: #111827;
+      font-size: 11px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .nav-item.active {
+      color: var(--green);
+    }
+
+    .nav-icon {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 24px;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .empty-card {
+      padding: 18px;
+    }
+
+    .error {
+      color: var(--danger);
+      font-weight: 800;
+    }
+
+    .modal {
+      position: absolute;
+      inset: 0;
+      z-index: 12;
+      display: none;
+      place-items: end center;
+      padding: 18px;
+      background: rgba(16, 34, 53, 0.38);
+    }
+
+    .modal.open {
+      display: grid;
+    }
+
+    .modal-card {
+      width: 100%;
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border-radius: 12px;
+      border: 1px solid #dfe7e4;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .modal-card input {
+      width: 100%;
+      height: 52px;
+      padding: 0 14px;
+      border: 1.5px solid #cfd8d4;
+      border-radius: 8px;
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .modal-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .primary-action:focus-visible,
+    .secondary-action:focus-visible,
+    .driver-card:focus-visible,
+    .rider-card:focus-visible,
+    .nav-item:focus-visible,
+    .back-button:focus-visible,
+    .icon-button:focus-visible,
+    .mark-button:focus-visible,
+    input:focus-visible {
+      outline: 3px solid rgba(7, 152, 79, 0.34);
+      outline-offset: 3px;
+    }
+
+    @media (max-width: 380px) {
+      .screen {
+        padding-inline: 16px;
+      }
+
+      h1 {
+        font-size: 42px;
+      }
+
+      .car {
+        left: 58px;
+        transform: scale(0.9);
+        transform-origin: bottom left;
+      }
+
+      .bottom-nav {
+        padding-inline: 34px;
+      }
+    }
+
+    @media (min-width: 900px) {
+      .page { background: #f5fbf7; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <article class="phone" aria-live="polite">
+      <div id="screen" class="screen"></div>
+
+      <nav class="bottom-nav" aria-label="Main navigation">
+        <button id="homeNav" class="nav-item active" type="button">
+          <span class="nav-icon">⌂</span>
+          <span>Home</span>
+        </button>
+        <button id="profileNav" class="nav-item" type="button">
+          <span class="nav-icon">♙</span>
+          <span>My Profile</span>
+        </button>
+      </nav>
+
+      <div id="codeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <form id="codeForm" class="modal-card">
+          <div>
+            <h2 id="modalTitle">Driver code</h2>
+            <p id="modalDriver"></p>
+          </div>
+          <input id="driverCode" type="password" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false">
+          <p id="codeError" class="error" hidden></p>
+          <div class="modal-actions">
+            <button class="secondary-action" type="button" id="cancelCode">Cancel</button>
+            <button class="primary-action" type="submit">Open route</button>
+          </div>
+        </form>
+      </div>
+    </article>
+  </main>
+
+  <script>
+    const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
+    const PLAN_DATE = "2026-08-02";
+
+    const state = {
+      view: "home",
+      drivers: [],
+      selectedDriver: null,
+      route: null,
+      selectedRider: null,
+      loading: true,
+      error: "",
+    };
+
+    const screen = document.querySelector("#screen");
+    const homeNav = document.querySelector("#homeNav");
+    const profileNav = document.querySelector("#profileNav");
+    const codeModal = document.querySelector("#codeModal");
+    const codeForm = document.querySelector("#codeForm");
+    const driverCode = document.querySelector("#driverCode");
+    const modalDriver = document.querySelector("#modalDriver");
+    const codeError = document.querySelector("#codeError");
+
+    const escapeHtml = (value) => String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
+    const encodeAddress = (address) => encodeURIComponent(address || "");
+    const googleMaps = (address) => "https://www.google.com/maps/search/?api=1&query=" + encodeAddress(address);
+    const appleMaps = (address) => "https://maps.apple.com/?q=" + encodeAddress(address);
+    const telHref = (phone) => {
+      const digits = String(phone || "").replace(/\D/g, "");
+      if (!digits) return "";
+      return "tel:+" + (digits.length === 10 ? "1" + digits : digits);
+    };
+
+    async function rpc(name, body) {
+      const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + name, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "authorization": "Bearer " + SUPABASE_KEY,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Supabase request failed");
+      }
+
+      return response.json();
+    }
+
+    async function loadDrivers() {
+      state.loading = true;
+      state.error = "";
+      render();
+
+      try {
+        state.drivers = await rpc("ride_driver_directory", { p_plan_date: PLAN_DATE });
+      } catch (error) {
+        state.error = "Could not load drivers.";
+        console.error(error);
+      } finally {
+        state.loading = false;
+        render();
+      }
+    }
+
+    function secureRow() {
+      return `
+        <div class="secure-row">
+          <span class="secure-pill"><span class="shield">✓</span> Secure driver view</span>
+          <span class="bell" aria-hidden="true">⌁</span>
+        </div>`;
+    }
+
+    function routeScene() {
+      return `
+        <div class="route-scene" aria-hidden="true">
+          <span class="tree left"></span>
+          <span class="tree right"></span>
+          <span class="car"><span class="wheel one"></span><span class="wheel two"></span><span class="headlight"></span></span>
+        </div>`;
+    }
+
+    function countRiders() {
+      return state.drivers.reduce((sum, driver) => sum + Number(driver.pickup_count || 0), 0);
+    }
+
+    function setView(view) {
+      state.view = view;
+      state.selectedRider = null;
+      render();
+    }
+
+    function setDriverHome() {
+      state.view = "driverHome";
+      state.selectedRider = null;
+      render();
+    }
+
+    function setRidesView() {
+      state.view = "rides";
+      state.selectedRider = null;
+      render();
+    }
+
+    function openProfile() {
+      setView("profile");
+    }
+
+    function openHome() {
+      setView("home");
+    }
+
+    function setActiveNav() {
+      homeNav.classList.toggle("active", state.view === "home" || state.view === "driverHome" || state.view === "rides" || state.view === "detail");
+      profileNav.classList.toggle("active", state.view === "profile");
+    }
+
+    function homeView() {
+      return `
+        <div class="stack">
+          ${secureRow()}
+          <section class="hero" aria-label="Ride dashboard">
+            <div class="greeting">
+              <div>
+                <small>Good day,</small>
+                <h1>Drivers</h1>
+              </div>
+              <span class="avatar">UH</span>
+            </div>
+            ${routeScene()}
+          </section>
+
+          <section class="summary-card">
+            <span class="summary-icon" aria-hidden="true">●</span>
+            <div>
+              <p>Total pickups</p>
+              <strong class="count">${state.loading ? "..." : countRiders()}</strong>
+              <p>Sunday · UH Hilton</p>
+            </div>
+            <span class="secure-mark">✓</span>
+          </section>
+
+          <button class="primary-action" type="button" data-action="profile">View my profile <span>›</span></button>
+          ${state.error ? `<section class="empty-card"><p class="error">${escapeHtml(state.error)}</p></section>` : ""}
+        </div>`;
+    }
+
+    function profileView() {
+      const driverCards = state.loading
+        ? `<section class="empty-card"><p>Loading drivers...</p></section>`
+        : state.drivers.map((driver) => `
+          <button class="driver-card" type="button" data-driver="${escapeHtml(driver.slug)}" aria-label="Open ${escapeHtml(driver.display_name)} profile">
+            <span class="avatar small">${escapeHtml(driver.initials)}</span>
+            <span>
+              <strong>${escapeHtml(driver.display_name)}</strong>
+              <p>${escapeHtml(driver.subtitle)}</p>
+            </span>
+            <span class="pill">${Number(driver.pickup_count || 0)} pickups</span>
+          </button>
+        `).join("");
+
+      return `
+        <div class="stack">
+          <div class="top-row">
+            <button class="back-button" type="button" data-action="home" aria-label="Back">‹</button>
+            <h2>My Profile</h2>
+            <span class="secure-mark">✓</span>
+          </div>
+          <div class="section-title">
+            <h2>Drivers</h2>
+            <span class="pill">${state.drivers.length || 0}</span>
+          </div>
+          <section class="driver-list" aria-label="Drivers">
+            ${driverCards}
+          </section>
+          ${state.error ? `<section class="empty-card"><p class="error">${escapeHtml(state.error)}</p></section>` : ""}
+        </div>`;
+    }
+
+    function driverHomeView() {
+      const driver = state.route?.driver;
+      const riders = state.route?.riders || [];
+      const destination = state.route?.destination;
+
+      return `
+        <div class="stack">
+          ${secureRow()}
+          <section class="hero" aria-label="${escapeHtml(driver.displayName)} dashboard">
+            <div class="greeting">
+              <div>
+                <small>Good day,</small>
+                <h1>${escapeHtml(driver.displayName)}</h1>
+              </div>
+              <span class="avatar">${escapeHtml(driver.initials)}</span>
+            </div>
+            ${routeScene()}
+          </section>
+
+          <section class="summary-card">
+            <span class="summary-icon" aria-hidden="true">●</span>
+            <div>
+              <p>Total pickups</p>
+              <strong class="count">${riders.length}</strong>
+              <p>${escapeHtml(destination.label)} · ${escapeHtml(state.route.plan.serviceDay)}</p>
+            </div>
+            <span class="secure-mark">✓</span>
+          </section>
+
+          <button class="primary-action" type="button" data-action="rides">View my rides <span>›</span></button>
+          <button class="secondary-action" type="button" data-action="profile">My Profile</button>
+        </div>`;
+    }
+
+    function riderMeta(rider) {
+      return [
+        rider.routeLabel ? `<span class="pill gray">${escapeHtml(rider.routeLabel)}</span>` : "",
+        rider.pickupTime ? `<span class="pill">${escapeHtml(rider.pickupTime)}</span>` : "",
+        rider.readyBy ? `<span class="pill gray">Ready ${escapeHtml(rider.readyBy)}</span>` : "",
+        `<span class="picked-chip" data-picked-chip="${rider.stopOrder}">Picked up</span>`,
+      ].join("");
+    }
+
+    function ridesView() {
+      const driver = state.route?.driver;
+      const riders = state.route?.riders || [];
+
+      const cards = riders.map((rider) => `
+        <button class="rider-card" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} pickup details">
+          <span class="stop-number">${Number(rider.stopOrder)}</span>
+          <span>
+            <strong>${escapeHtml(rider.name)}</strong>
+            <span class="rider-address">${escapeHtml(rider.address)}</span>
+            <span class="rider-meta">${riderMeta(rider)}</span>
+          </span>
+          <span class="chevron" aria-hidden="true">›</span>
+        </button>
+      `).join("");
+
+      return `
+        <div class="stack">
+          <div class="top-row">
+            <button class="back-button" type="button" data-action="driverHome" aria-label="Back">‹</button>
+            <h2>My riders</h2>
+            <span class="secure-mark">✓</span>
+          </div>
+
+          <section class="summary-card">
+            <span class="avatar small">${escapeHtml(driver.initials)}</span>
+            <div>
+              <p>${escapeHtml(driver.fullName)}</p>
+              <strong class="count">${riders.length}</strong>
+              <p>${escapeHtml(driver.routeNotes)}</p>
+            </div>
+            <span class="secure-mark">✓</span>
+          </section>
+
+          <section class="riders-list" aria-label="Assigned riders">
+            ${cards}
+          </section>
+        </div>`;
+    }
+
+    function detailRows(rider) {
+      return [
+        `<div class="detail-row"><span class="detail-icon">⌖</span><span><small>Address</small><strong>${escapeHtml(rider.address)}</strong></span></div>`,
+        rider.phone ? `<div class="detail-row"><span class="detail-icon">☎</span><span><small>Phone</small><strong>${escapeHtml(rider.phone)}</strong></span></div>` : "",
+        rider.routeLabel ? `<div class="detail-row"><span class="detail-icon">#</span><span><small>Route</small><strong>${escapeHtml(rider.routeLabel)}</strong></span></div>` : "",
+        rider.pickupTime ? `<div class="detail-row"><span class="detail-icon">◷</span><span><small>Pickup time</small><strong>${escapeHtml(rider.pickupTime)}</strong></span></div>` : "",
+        rider.readyBy ? `<div class="detail-row"><span class="detail-icon">✓</span><span><small>Ready by</small><strong>${escapeHtml(rider.readyBy)}</strong></span></div>` : "",
+        `<div class="detail-row"><span class="detail-icon">☰</span><span><small>Notes</small><strong>${escapeHtml(rider.notes || "Coordinate pickup directly.")}</strong></span></div>`,
+      ].join("");
+    }
+
+    function detailView() {
+      const rider = state.selectedRider;
+      const picked = getPicked(rider.stopOrder);
+      const phoneLink = telHref(rider.phone);
+
+      return `
+        <div class="stack">
+          <div class="detail-top">
+            <button class="back-button" type="button" data-action="rides" aria-label="Back">‹</button>
+            <h2>Pickup details</h2>
+            <span class="secure-mark">✓</span>
+          </div>
+
+          <section class="person-banner">
+            <span class="avatar">${escapeHtml(rider.name.slice(0, 1))}</span>
+            <div>
+              <h1>${escapeHtml(rider.name)}</h1>
+              <p>${escapeHtml(rider.area)}</p>
+            </div>
+            <span class="stop-number">${Number(rider.stopOrder)}</span>
+          </section>
+
+          <section class="detail-card">
+            ${detailRows(rider)}
+          </section>
+
+          <div class="map-panel" aria-label="Route preview">
+            <span class="map-line one"></span>
+            <span class="map-line two"></span>
+            <span class="map-dot start">●</span>
+            <span class="map-dot end">●</span>
+            <span class="map-label start-label">Pickup</span>
+            <span class="map-label end-label">UH</span>
+          </div>
+
+          <a class="primary-action" href="${googleMaps(rider.address)}" target="_blank" rel="noreferrer">
+            <span class="map-logo google">G</span>
+            <span>Open in Google Maps</span>
+          </a>
+          <a class="secondary-action" href="${appleMaps(rider.address)}" target="_blank" rel="noreferrer">
+            <span class="map-logo apple">A</span>
+            <span>Open in Apple Maps</span>
+          </a>
+          ${phoneLink ? `<a class="secondary-action" href="${phoneLink}">Call rider</a>` : ""}
+          <button class="mark-button ${picked ? "is-picked" : ""}" type="button" data-mark="${Number(rider.stopOrder)}">
+            <span>✓</span>
+            <span>${picked ? "Picked up" : "Mark picked up"}</span>
+          </button>
+        </div>`;
+    }
+
+    function getStorageKey(stopOrder) {
+      const driver = state.route?.driver?.slug || "driver";
+      return "ride-picked-" + PLAN_DATE + "-" + driver + "-" + stopOrder;
+    }
+
+    function getPicked(stopOrder) {
+      return localStorage.getItem(getStorageKey(stopOrder)) === "1";
+    }
+
+    function setPicked(stopOrder, value) {
+      localStorage.setItem(getStorageKey(stopOrder), value ? "1" : "0");
+      render();
+    }
+
+    function render() {
+      setActiveNav();
+      if (state.view === "profile") screen.innerHTML = profileView();
+      else if (state.view === "driverHome" && state.route) screen.innerHTML = driverHomeView();
+      else if (state.view === "rides" && state.route) screen.innerHTML = ridesView();
+      else if (state.view === "detail" && state.selectedRider) screen.innerHTML = detailView();
+      else screen.innerHTML = homeView();
+      syncPickedChips();
+    }
+
+    function syncPickedChips() {
+      document.querySelectorAll(".rider-card[data-rider]").forEach((card) => {
+        const stopOrder = card.dataset.rider;
+        card.classList.toggle("is-picked", getPicked(stopOrder));
+      });
+    }
+
+    async function openCodeModal(slug) {
+      state.selectedDriver = state.drivers.find((driver) => driver.slug === slug);
+      modalDriver.textContent = state.selectedDriver?.display_name || "";
+      codeError.hidden = true;
+      codeError.textContent = "";
+      driverCode.value = "";
+      codeModal.classList.add("open");
+      requestAnimationFrame(() => driverCode.focus());
+    }
+
+    function closeCodeModal() {
+      codeModal.classList.remove("open");
+      codeError.hidden = true;
+      codeError.textContent = "";
+    }
+
+    async function submitCode(event) {
+      event.preventDefault();
+      if (!state.selectedDriver) return;
+      codeError.hidden = true;
+      codeError.textContent = "";
+
+      try {
+        const route = await rpc("ride_driver_route", {
+          p_driver_slug: state.selectedDriver.slug,
+          p_access_code: driverCode.value,
+          p_plan_date: PLAN_DATE,
+        });
+
+        if (!route?.ok) {
+          codeError.textContent = "Code did not match.";
+          codeError.hidden = false;
+          return;
+        }
+
+        state.route = route;
+        closeCodeModal();
+        setDriverHome();
+      } catch (error) {
+        codeError.textContent = "Route could not open.";
+        codeError.hidden = false;
+        console.error(error);
+      }
+    }
+
+    screen.addEventListener("click", (event) => {
+      const action = event.target.closest("[data-action]")?.dataset.action;
+      if (action === "home") openHome();
+      if (action === "profile") openProfile();
+      if (action === "driverHome") setDriverHome();
+      if (action === "rides") setRidesView();
+
+      const driverButton = event.target.closest("[data-driver]");
+      if (driverButton) openCodeModal(driverButton.dataset.driver);
+
+      const riderButton = event.target.closest("[data-rider]");
+      if (riderButton) {
+        const stopOrder = Number(riderButton.dataset.rider);
+        state.selectedRider = (state.route?.riders || []).find((rider) => Number(rider.stopOrder) === stopOrder);
+        if (state.selectedRider) {
+          state.view = "detail";
+          render();
+        }
+      }
+
+      const markButton = event.target.closest("[data-mark]");
+      if (markButton) {
+        const stopOrder = markButton.dataset.mark;
+        setPicked(stopOrder, !getPicked(stopOrder));
+      }
+    });
+
+    homeNav.addEventListener("click", () => {
+      if (state.route) setDriverHome();
+      else openHome();
+    });
+    profileNav.addEventListener("click", openProfile);
+    codeForm.addEventListener("submit", submitCode);
+    document.querySelector("#cancelCode").addEventListener("click", closeCodeModal);
+    codeModal.addEventListener("click", (event) => {
+      if (event.target === codeModal) closeCodeModal();
+    });
+
+    loadDrivers();
+  </script>
+</body>
+</html>

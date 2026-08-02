@@ -203,83 +203,22 @@
     }
 
     .route-scene {
-      height: 130px;
+      height: 176px;
       position: relative;
       overflow: hidden;
-      border-radius: 8px;
-      background:
-        linear-gradient(180deg, transparent 15%, rgba(205, 231, 213, 0.4) 15% 100%),
-        linear-gradient(90deg, transparent 0 10%, rgba(202, 221, 216, 0.32) 10% 13%, transparent 13% 22%, rgba(202, 221, 216, 0.32) 22% 25%, transparent 25% 40%, rgba(202, 221, 216, 0.32) 40% 43%, transparent 43% 62%, rgba(202, 221, 216, 0.32) 62% 67%, transparent 67% 100%);
+      border-radius: 14px;
+      border: 1px solid #edf1ef;
+      background: #f8faf9;
+      box-shadow: 0 14px 30px rgba(11, 23, 42, 0.08);
     }
 
-    .tree {
-      position: absolute;
-      bottom: 18px;
-      width: 48px;
-      height: 58px;
-      border-radius: 30px 30px 20px 20px;
-      background: #b7ddc1;
-    }
-
-    .tree::after {
-      content: "";
-      position: absolute;
-      left: 22px;
-      bottom: -18px;
-      width: 5px;
-      height: 24px;
-      border-radius: 3px;
-      background: #8dbb96;
-    }
-
-    .tree.left { left: 8px; }
-    .tree.right { right: 16px; width: 36px; height: 52px; }
-
-    .car {
-      position: absolute;
-      left: 70px;
-      bottom: 18px;
-      width: 200px;
-      height: 54px;
-      border-radius: 50px 68px 22px 22px;
-      background: linear-gradient(180deg, #3e9659, #2e7045);
-      box-shadow: 0 9px 0 #245b3a;
-    }
-
-    .car::before {
-      content: "";
-      position: absolute;
-      left: 44px;
-      top: -35px;
-      width: 106px;
-      height: 45px;
-      border: 6px solid #2b7043;
-      border-bottom: 0;
-      border-radius: 60px 65px 0 0;
-      background: rgba(231, 246, 236, 0.92);
-    }
-
-    .wheel {
-      position: absolute;
-      bottom: -17px;
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      border: 7px solid #2c3542;
-      background: #e8f0eb;
-    }
-
-    .wheel.one { left: 28px; }
-    .wheel.two { right: 31px; }
-
-    .headlight {
-      position: absolute;
-      right: 14px;
-      top: 25px;
-      width: 32px;
-      height: 12px;
-      border-radius: 20px;
-      background: #dff4d7;
+    .route-image {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      object-position: center;
+      transform-origin: center;
     }
 
     .stack {
@@ -732,12 +671,6 @@
         font-size: 42px;
       }
 
-      .car {
-        left: 58px;
-        transform: scale(0.9);
-        transform-origin: bottom left;
-      }
-
       .bottom-nav {
         padding-inline: 34px;
       }
@@ -745,6 +678,524 @@
 
     @media (min-width: 900px) {
       .page { background: #f5fbf7; }
+    }
+
+    :root {
+      --ink: #050505;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --panel: #ffffff;
+      --soft: #f4f4f4;
+      --green: #0b3d2e;
+      --green-dark: #0b3d2e;
+      --green-light: #eef3ef;
+      --shadow: 0 14px 34px rgba(0, 0, 0, 0.08);
+      --app-width: min(100vw, 430px);
+    }
+
+    html,
+    body {
+      background: #0b3d2e;
+    }
+
+    .page {
+      min-height: 100dvh;
+      background: #ffffff;
+    }
+
+    .phone {
+      width: var(--app-width);
+      min-height: 100dvh;
+      background: #ffffff;
+    }
+
+    .screen {
+      padding: 30px 28px calc(92px + env(safe-area-inset-bottom));
+      background: #ffffff;
+    }
+
+    .screen.full-bottom {
+      padding-bottom: calc(30px + env(safe-area-inset-bottom));
+    }
+
+    .stack {
+      gap: 20px;
+    }
+
+    .intro-block {
+      display: grid;
+      gap: 7px;
+    }
+
+    .intro-block.compact {
+      gap: 6px;
+    }
+
+    .intro-block h1 {
+      margin: 0;
+      color: #050505;
+      font-size: 29px;
+      line-height: 1.05;
+      font-weight: 850;
+      letter-spacing: 0;
+    }
+
+    .intro-block h2 {
+      margin-top: 4px;
+      color: #050505;
+      font-size: 28px;
+      line-height: 1.05;
+      font-weight: 850;
+      letter-spacing: 0;
+    }
+
+    .eyebrow {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .home-art {
+      height: 188px;
+      margin-top: 16px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      border: 1px solid #eeeeee;
+      border-radius: 16px;
+      background: #fbfcfc;
+      box-shadow: 0 16px 38px rgba(0, 0, 0, 0.08);
+    }
+
+    .home-art img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      object-position: center;
+    }
+
+    .route-scene {
+      height: 226px;
+      margin-top: 14px;
+      border: 0;
+      border-radius: 16px;
+      background: #f1f3f2;
+      box-shadow: none;
+    }
+
+    .route-scene.compact {
+      height: 180px;
+      margin-top: 12px;
+    }
+
+    .summary-card,
+    .driver-card,
+    .rider-card,
+    .detail-card,
+    .empty-card,
+    .passcode-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.04);
+    }
+
+    .summary-card {
+      display: block;
+      padding: 22px;
+    }
+
+    .summary-card.dark {
+      border: 0;
+      color: #ffffff;
+      background: #000000;
+      box-shadow: none;
+    }
+
+    .summary-card.dark p {
+      color: #d1d5db;
+    }
+
+    .summary-card.dark .count {
+      color: #ffffff;
+    }
+
+    .summary-card.dark div {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      column-gap: 22px;
+      align-items: end;
+    }
+
+    .summary-card.dark p:first-child {
+      grid-column: 1 / -1;
+    }
+
+    .summary-card.dark p:last-child {
+      padding-bottom: 4px;
+      color: #ffffff;
+      font-weight: 750;
+    }
+
+    .count {
+      margin-top: 8px;
+      color: #050505;
+      font-size: 46px;
+      font-weight: 850;
+      line-height: 0.95;
+    }
+
+    .primary-action,
+    .secondary-action,
+    .mark-button {
+      min-height: 60px;
+      border-radius: 5px;
+      font-size: 16px;
+      font-weight: 750;
+      box-shadow: none;
+    }
+
+    .primary-action {
+      border: 0;
+      color: #ffffff;
+      background: #000000;
+    }
+
+    .secondary-action,
+    .mark-button {
+      border: 1px solid var(--line);
+      color: #050505;
+      background: #ffffff;
+    }
+
+    .mark-button {
+      border-color: #cfd4d2;
+    }
+
+    .mark-button.is-picked {
+      color: #ffffff;
+      background: #000000;
+      border-color: #000000;
+    }
+
+    .destination-block {
+      display: grid;
+      gap: 5px;
+      padding: 8px 20px 16px;
+    }
+
+    .destination-block h2 {
+      color: #050505;
+      font-size: 26px;
+      font-weight: 850;
+    }
+
+    .passcode-card {
+      padding: 17px 20px;
+      background: #f4f4f4;
+      border: 0;
+      box-shadow: none;
+    }
+
+    .passcode-card strong {
+      display: block;
+      margin-top: 6px;
+      color: #050505;
+      font-size: 17px;
+    }
+
+    .driver-list,
+    .riders-list,
+    .route-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .driver-card {
+      min-height: 76px;
+      grid-template-columns: 48px 1fr auto;
+      padding: 14px;
+      border-color: #dfe3e6;
+      background: #ffffff;
+    }
+
+    .driver-card .avatar.small {
+      width: 44px;
+      height: 44px;
+      color: #ffffff;
+      background: #000000;
+      border: 0;
+      box-shadow: none;
+      font-size: 14px;
+    }
+
+    .driver-card strong,
+    .route-stop strong {
+      color: #050505;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .driver-card p {
+      max-width: 165px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 12px;
+    }
+
+    .pill {
+      min-height: 28px;
+      padding: 4px 10px;
+      color: #050505;
+      background: #f1f1f1;
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .title-row {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .back-button {
+      width: 34px;
+      height: 34px;
+      color: #050505;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      font-size: 25px;
+      font-weight: 700;
+    }
+
+    .route-list h2 {
+      margin: 12px 0 8px;
+      color: #050505;
+      font-size: 18px;
+      font-weight: 850;
+    }
+
+    .route-stop {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 30px 1fr auto;
+      gap: 14px;
+      align-items: start;
+      padding: 14px 0;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .route-stop.destination {
+      cursor: default;
+    }
+
+    .route-stop.is-picked .stop-number {
+      background: #16a34a;
+    }
+
+    .stop-number {
+      width: 28px;
+      height: 28px;
+      color: #ffffff;
+      background: #000000;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .stop-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .stop-copy span,
+    .stop-copy small {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .stop-time {
+      padding-top: 2px;
+      color: #050505;
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .route-start {
+      margin-top: 12px;
+    }
+
+    .person-banner {
+      grid-template-columns: 44px 1fr auto;
+      padding: 0;
+    }
+
+    .person-banner .avatar.small {
+      color: #ffffff;
+      background: #000000;
+      border: 0;
+      box-shadow: none;
+    }
+
+    .detail-card {
+      padding: 0 18px;
+      box-shadow: none;
+    }
+
+    .detail-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4px;
+      padding: 15px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .detail-row small {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .detail-row strong {
+      color: #050505;
+      font-size: 17px;
+      font-weight: 800;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    .bottom-nav {
+      width: var(--app-width);
+      gap: 4px;
+      padding: 12px 56px calc(18px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    .bottom-nav[hidden] {
+      display: none;
+    }
+
+    .nav-item {
+      color: #9ca3af;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .nav-item.active {
+      color: #000000;
+    }
+
+    .nav-icon {
+      position: relative;
+      width: 30px;
+      height: 28px;
+      font-size: 0;
+    }
+
+    .nav-icon svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .home-fill {
+      display: none;
+    }
+
+    .nav-item.active .home-outline {
+      display: none;
+    }
+
+    .nav-item.active .home-fill {
+      display: block;
+    }
+
+    .modal {
+      position: absolute;
+      inset: 0;
+      padding: 18px;
+      background: rgba(0, 0, 0, 0.42);
+    }
+
+    .modal-card {
+      gap: 14px;
+      border: 0;
+      border-radius: 18px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+    }
+
+    .modal-card input {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 18px;
+    }
+
+    .primary-action:focus-visible,
+    .secondary-action:focus-visible,
+    .driver-card:focus-visible,
+    .route-stop:focus-visible,
+    .nav-item:focus-visible,
+    .back-button:focus-visible,
+    .mark-button:focus-visible,
+    input:focus-visible {
+      outline: 3px solid rgba(0, 0, 0, 0.18);
+      outline-offset: 3px;
+    }
+
+    @media (max-width: 380px) {
+      .screen {
+        padding-inline: 22px;
+      }
+
+      .intro-block h1 {
+        font-size: 27px;
+      }
+
+      .intro-block h2 {
+        font-size: 25px;
+      }
+
+      .route-scene {
+        height: 206px;
+      }
+
+      .route-scene.compact {
+        height: 160px;
+      }
+
+      .bottom-nav {
+        padding-inline: 44px;
+      }
+    }
+
+    @media (min-width: 700px) {
+      .page {
+        display: grid;
+        place-items: start center;
+        background: #0b3d2e;
+      }
+
+      .phone {
+        min-height: 100dvh;
+      }
     }
   </style>
 </head>
@@ -755,11 +1206,23 @@
 
       <nav class="bottom-nav" aria-label="Main navigation">
         <button id="homeNav" class="nav-item active" type="button">
-          <span class="nav-icon">⌂</span>
+          <span class="nav-icon home-icon" aria-hidden="true">
+            <svg class="home-outline" viewBox="0 0 28 28" focusable="false">
+              <path d="M5 12.5 14 4l9 8.5v10.2h-6.2v-7h-5.6v7H5V12.5Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+            </svg>
+            <svg class="home-fill" viewBox="0 0 28 28" focusable="false">
+              <path d="M5 12.5 14 4l9 8.5v10.2h-6.2v-7h-5.6v7H5V12.5Z" fill="currentColor"/>
+            </svg>
+          </span>
           <span>Home</span>
         </button>
         <button id="profileNav" class="nav-item" type="button">
-          <span class="nav-icon">♙</span>
+          <span class="nav-icon profile-icon" aria-hidden="true">
+            <svg viewBox="0 0 28 28" focusable="false">
+              <circle cx="14" cy="9" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M5.5 24c1.6-5.1 5-7.7 8.5-7.7S20.9 18.9 22.5 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </span>
           <span>My Profile</span>
         </button>
       </nav>
@@ -799,6 +1262,7 @@
     const screen = document.querySelector("#screen");
     const homeNav = document.querySelector("#homeNav");
     const profileNav = document.querySelector("#profileNav");
+    const bottomNav = document.querySelector(".bottom-nav");
     const codeModal = document.querySelector("#codeModal");
     const codeForm = document.querySelector("#codeForm");
     const driverCode = document.querySelector("#driverCode");
@@ -856,20 +1320,29 @@
       }
     }
 
-    function secureRow() {
+    const ROUTE_IMAGES = {
+      "joojo": { src: "assets/route-map-1.png", position: "center 50%", scale: "1.02" },
+      "john-mark": { src: "assets/route-map-2.png", position: "center 50%", scale: "1.02" },
+      "annie": { src: "assets/route-map-3.png", position: "center 50%", scale: "1.02" },
+      "dawson": { src: "assets/route-map-1.png", position: "center 38%", scale: "1.10" },
+      "naa": { src: "assets/route-map-2.png", position: "center 62%", scale: "1.09" },
+      "blue": { src: "assets/route-map-3.png", position: "center 36%", scale: "1.08" },
+      "default": { src: "assets/route-map-1.png", position: "center 50%", scale: "1.02" },
+    };
+
+    function routeScene(driverSlug = "default", variant = "dashboard") {
+      const routeImage = ROUTE_IMAGES[driverSlug] || ROUTE_IMAGES.default;
+      const compactClass = variant === "review" ? " compact" : "";
       return `
-        <div class="secure-row">
-          <span class="secure-pill"><span class="shield">✓</span> Secure driver view</span>
-          <span class="bell" aria-hidden="true">⌁</span>
+        <div class="route-scene${compactClass}" aria-hidden="true">
+          <img class="route-image" src="${routeImage.src}" style="object-position: ${routeImage.position}; transform: scale(${routeImage.scale});" alt="">
         </div>`;
     }
 
-    function routeScene() {
+    function homeArt() {
       return `
-        <div class="route-scene" aria-hidden="true">
-          <span class="tree left"></span>
-          <span class="tree right"></span>
-          <span class="car"><span class="wheel one"></span><span class="wheel two"></span><span class="headlight"></span></span>
+        <div class="home-art" aria-hidden="true">
+          <img src="assets/home-car.png" alt="">
         </div>`;
     }
 
@@ -904,36 +1377,32 @@
     }
 
     function setActiveNav() {
-      homeNav.classList.toggle("active", state.view === "home" || state.view === "driverHome" || state.view === "rides" || state.view === "detail");
+      const routeScreen = state.view === "rides" || state.view === "detail";
+      bottomNav.hidden = routeScreen;
+      screen.classList.toggle("full-bottom", routeScreen);
+      homeNav.classList.toggle("active", state.view === "home" || state.view === "driverHome" || routeScreen);
       profileNav.classList.toggle("active", state.view === "profile");
     }
 
     function homeView() {
       return `
         <div class="stack">
-          ${secureRow()}
-          <section class="hero" aria-label="Ride dashboard">
-            <div class="greeting">
-              <div>
-                <small>Good day,</small>
-                <h1>Drivers</h1>
-              </div>
-              <span class="avatar">UH</span>
-            </div>
-            ${routeScene()}
+          <section class="intro-block" aria-label="Sunday ride dashboard">
+            <p class="eyebrow">Today</p>
+            <h1>Sunday ride plan</h1>
+            <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
+            ${homeArt()}
           </section>
 
-          <section class="summary-card">
-            <span class="summary-icon" aria-hidden="true">●</span>
+          <section class="summary-card dark">
             <div>
               <p>Total pickups</p>
               <strong class="count">${state.loading ? "..." : countRiders()}</strong>
               <p>Sunday · UH Hilton</p>
             </div>
-            <span class="secure-mark">✓</span>
           </section>
 
-          <button class="primary-action" type="button" data-action="profile">View my profile <span>›</span></button>
+          <button class="primary-action" type="button" data-action="profile">Choose driver <span aria-hidden="true">&rarr;</span></button>
           ${state.error ? `<section class="empty-card"><p class="error">${escapeHtml(state.error)}</p></section>` : ""}
         </div>`;
     }
@@ -954,15 +1423,13 @@
 
       return `
         <div class="stack">
-          <div class="top-row">
-            <button class="back-button" type="button" data-action="home" aria-label="Back">‹</button>
-            <h2>My Profile</h2>
-            <span class="secure-mark">✓</span>
-          </div>
-          <div class="section-title">
-            <h2>Drivers</h2>
-            <span class="pill">${state.drivers.length || 0}</span>
-          </div>
+          <section class="intro-block compact">
+            <h1>My Profile</h1>
+            <p>Choose your driver</p>
+            <p class="eyebrow">Today</p>
+            <h2>Sunday ride plan</h2>
+            <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
+          </section>
           <section class="driver-list" aria-label="Drivers">
             ${driverCards}
           </section>
@@ -974,137 +1441,147 @@
       const driver = state.route?.driver;
       const riders = state.route?.riders || [];
       const destination = state.route?.destination;
+      const riderNames = riders.map((rider) => rider.name).join(" and ");
 
       return `
         <div class="stack">
-          ${secureRow()}
-          <section class="hero" aria-label="${escapeHtml(driver.displayName)} dashboard">
-            <div class="greeting">
-              <div>
-                <small>Good day,</small>
-                <h1>${escapeHtml(driver.displayName)}</h1>
-              </div>
-              <span class="avatar">${escapeHtml(driver.initials)}</span>
-            </div>
-            ${routeScene()}
+          <section class="intro-block compact" aria-label="${escapeHtml(driver.displayName)} dashboard">
+            <h1>Good day, ${escapeHtml(driver.displayName)}</h1>
+            <p>Driver mode</p>
+            ${routeScene(driver.slug)}
           </section>
 
-          <section class="summary-card">
-            <span class="summary-icon" aria-hidden="true">●</span>
+          <section class="summary-card dark">
             <div>
               <p>Total pickups</p>
               <strong class="count">${riders.length}</strong>
-              <p>${escapeHtml(destination.label)} · ${escapeHtml(state.route.plan.serviceDay)}</p>
+              <p>${escapeHtml(riderNames || "No riders assigned")}</p>
             </div>
-            <span class="secure-mark">✓</span>
           </section>
 
-          <button class="primary-action" type="button" data-action="rides">View my rides <span>›</span></button>
-          <button class="secondary-action" type="button" data-action="profile">My Profile</button>
+          <section class="destination-block">
+            <p>Destination</p>
+            <h2>${escapeHtml(destination.label)}</h2>
+            <p>${escapeHtml(destination.address)}</p>
+          </section>
+
+          <button class="primary-action" type="button" data-action="rides">View my rides <span aria-hidden="true">&rarr;</span></button>
+          <section class="passcode-card">
+            <p>Passcode</p>
+            <strong>rides123</strong>
+          </section>
         </div>`;
     }
 
-    function riderMeta(rider) {
-      return [
-        rider.routeLabel ? `<span class="pill gray">${escapeHtml(rider.routeLabel)}</span>` : "",
-        rider.pickupTime ? `<span class="pill">${escapeHtml(rider.pickupTime)}</span>` : "",
-        rider.readyBy ? `<span class="pill gray">Ready ${escapeHtml(rider.readyBy)}</span>` : "",
-        `<span class="picked-chip" data-picked-chip="${rider.stopOrder}">Picked up</span>`,
-      ].join("");
+    function readyText(rider) {
+      return rider.readyBy ? `Ready by ${rider.readyBy}` : "Coordinate pickup directly";
+    }
+
+    function pickupTimeText(rider) {
+      return rider.pickupTime || "";
+    }
+
+    function routeStopRow(rider) {
+      return `
+        <button class="route-stop" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} pickup details">
+          <span class="stop-number">${Number(rider.stopOrder)}</span>
+          <span class="stop-copy">
+            <strong>${escapeHtml(rider.name)}</strong>
+            <span>${escapeHtml(rider.address)}</span>
+            <small>${escapeHtml(readyText(rider))}</small>
+          </span>
+          <span class="stop-time">${escapeHtml(pickupTimeText(rider))}</span>
+        </button>`;
     }
 
     function ridesView() {
       const driver = state.route?.driver;
       const riders = state.route?.riders || [];
+      const destination = state.route?.destination;
+      const firstStop = riders[0]?.address || destination.address;
 
-      const cards = riders.map((rider) => `
-        <button class="rider-card" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} pickup details">
-          <span class="stop-number">${Number(rider.stopOrder)}</span>
-          <span>
-            <strong>${escapeHtml(rider.name)}</strong>
-            <span class="rider-address">${escapeHtml(rider.address)}</span>
-            <span class="rider-meta">${riderMeta(rider)}</span>
-          </span>
-          <span class="chevron" aria-hidden="true">›</span>
-        </button>
-      `).join("");
+      const cards = riders.map(routeStopRow).join("");
 
       return `
         <div class="stack">
-          <div class="top-row">
-            <button class="back-button" type="button" data-action="driverHome" aria-label="Back">‹</button>
-            <h2>My riders</h2>
-            <span class="secure-mark">✓</span>
-          </div>
-
-          <section class="summary-card">
-            <span class="avatar small">${escapeHtml(driver.initials)}</span>
-            <div>
-              <p>${escapeHtml(driver.fullName)}</p>
-              <strong class="count">${riders.length}</strong>
-              <p>${escapeHtml(driver.routeNotes)}</p>
+          <section class="intro-block compact">
+            <div class="title-row">
+              <button class="back-button" type="button" data-action="driverHome" aria-label="Back">&larr;</button>
+              <div>
+                <h1>Review route</h1>
+                <p>${escapeHtml(driver.displayName)}'s pickups</p>
+              </div>
             </div>
-            <span class="secure-mark">✓</span>
+            ${routeScene(driver.slug, "review")}
           </section>
 
-          <section class="riders-list" aria-label="Assigned riders">
+          <section class="route-list" aria-label="Assigned riders">
+            <h2>Pick-up</h2>
             ${cards}
           </section>
+
+          <section class="route-list" aria-label="Drop off">
+            <h2>Drop-off</h2>
+            <div class="route-stop destination">
+              <span class="stop-number">✓</span>
+              <span class="stop-copy">
+                <strong>${escapeHtml(destination.label)}</strong>
+                <span>${escapeHtml(destination.address)}</span>
+                <small>Final destination</small>
+              </span>
+            </div>
+          </section>
+
+          <a class="primary-action route-start" href="${googleMaps(firstStop)}" target="_blank" rel="noreferrer">Start route <span aria-hidden="true">&rarr;</span></a>
         </div>`;
     }
 
     function detailRows(rider) {
       return [
-        `<div class="detail-row"><span class="detail-icon">⌖</span><span><small>Address</small><strong>${escapeHtml(rider.address)}</strong></span></div>`,
-        rider.phone ? `<div class="detail-row"><span class="detail-icon">☎</span><span><small>Phone</small><strong>${escapeHtml(rider.phone)}</strong></span></div>` : "",
-        rider.routeLabel ? `<div class="detail-row"><span class="detail-icon">#</span><span><small>Route</small><strong>${escapeHtml(rider.routeLabel)}</strong></span></div>` : "",
-        rider.pickupTime ? `<div class="detail-row"><span class="detail-icon">◷</span><span><small>Pickup time</small><strong>${escapeHtml(rider.pickupTime)}</strong></span></div>` : "",
-        rider.readyBy ? `<div class="detail-row"><span class="detail-icon">✓</span><span><small>Ready by</small><strong>${escapeHtml(rider.readyBy)}</strong></span></div>` : "",
-        `<div class="detail-row"><span class="detail-icon">☰</span><span><small>Notes</small><strong>${escapeHtml(rider.notes || "Coordinate pickup directly.")}</strong></span></div>`,
+        `<div class="detail-row"><small>Address</small><strong>${escapeHtml(rider.address)}</strong></div>`,
+        rider.phone ? `<div class="detail-row"><small>Phone</small><strong>${escapeHtml(rider.phone)}</strong></div>` : "",
+        rider.routeLabel ? `<div class="detail-row"><small>Route</small><strong>${escapeHtml(rider.routeLabel)}</strong></div>` : "",
+        rider.pickupTime ? `<div class="detail-row"><small>Pickup time</small><strong>${escapeHtml(rider.pickupTime)}</strong></div>` : "",
+        rider.readyBy ? `<div class="detail-row"><small>Ready by</small><strong>${escapeHtml(rider.readyBy)}</strong></div>` : "",
+        `<div class="detail-row"><small>Notes</small><strong>${escapeHtml(rider.notes || "Coordinate pickup directly.")}</strong></div>`,
       ].join("");
     }
 
     function detailView() {
       const rider = state.selectedRider;
+      const driver = state.route?.driver;
       const picked = getPicked(rider.stopOrder);
       const phoneLink = telHref(rider.phone);
 
       return `
         <div class="stack">
-          <div class="detail-top">
-            <button class="back-button" type="button" data-action="rides" aria-label="Back">‹</button>
-            <h2>Pickup details</h2>
-            <span class="secure-mark">✓</span>
-          </div>
+          <section class="intro-block compact">
+            <div class="title-row">
+              <button class="back-button" type="button" data-action="rides" aria-label="Back">&larr;</button>
+              <div>
+                <h1>Pickup details</h1>
+                <p>${escapeHtml(rider.area)}</p>
+              </div>
+            </div>
+            ${routeScene(driver.slug, "review")}
+          </section>
 
           <section class="person-banner">
-            <span class="avatar">${escapeHtml(rider.name.slice(0, 1))}</span>
+            <span class="avatar small">${escapeHtml(rider.name.slice(0, 1))}</span>
             <div>
-              <h1>${escapeHtml(rider.name)}</h1>
-              <p>${escapeHtml(rider.area)}</p>
+              <h2>${escapeHtml(rider.name)}</h2>
+              <p>${escapeHtml(rider.address)}</p>
             </div>
             <span class="stop-number">${Number(rider.stopOrder)}</span>
           </section>
-
           <section class="detail-card">
             ${detailRows(rider)}
           </section>
 
-          <div class="map-panel" aria-label="Route preview">
-            <span class="map-line one"></span>
-            <span class="map-line two"></span>
-            <span class="map-dot start">●</span>
-            <span class="map-dot end">●</span>
-            <span class="map-label start-label">Pickup</span>
-            <span class="map-label end-label">UH</span>
-          </div>
-
           <a class="primary-action" href="${googleMaps(rider.address)}" target="_blank" rel="noreferrer">
-            <span class="map-logo google">G</span>
             <span>Open in Google Maps</span>
           </a>
           <a class="secondary-action" href="${appleMaps(rider.address)}" target="_blank" rel="noreferrer">
-            <span class="map-logo apple">A</span>
             <span>Open in Apple Maps</span>
           </a>
           ${phoneLink ? `<a class="secondary-action" href="${phoneLink}">Call rider</a>` : ""}
@@ -1140,7 +1617,7 @@
     }
 
     function syncPickedChips() {
-      document.querySelectorAll(".rider-card[data-rider]").forEach((card) => {
+      document.querySelectorAll(".rider-card[data-rider], .route-stop[data-rider]").forEach((card) => {
         const stopOrder = card.dataset.rider;
         card.classList.toggle("is-picked", getPicked(stopOrder));
       });

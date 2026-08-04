@@ -46,6 +46,23 @@ test("admin snapshot rejects wrong passcodes and accepts the admin passcode", as
   assert.ok(snapshot.stops.some((stop) => stop.name === "Tinnie" && stop.driverSlug === "dawson"));
 });
 
+test("admin snapshot includes protected PeopleData and Blu display update", async () => {
+  const snapshot = await rpc("ride_admin_snapshot", {
+    p_admin_code: ADMIN_CODE,
+    p_plan_date: PLAN_DATE,
+  });
+
+  assert.equal(snapshot.ok, true);
+  assert.ok(Array.isArray(snapshot.people), "people bank should be returned to admins");
+  assert.ok(snapshot.people.length >= 80, "PeopleData seed should include the uploaded names");
+  assert.ok(snapshot.people.some((person) => person.name === "Siah"));
+  assert.ok(snapshot.people.some((person) => person.name === "Nicholas" && /Burdine/i.test(person.homeAddress)));
+
+  const blu = snapshot.drivers.find((driver) => driver.slug === "blue");
+  assert.equal(blu?.displayName, "Blu");
+  assert.equal(blu?.initials, "BLU");
+});
+
 test("admin can add, move, update, and delete a rider through publish", async () => {
   const testName = `TEST Admin Rider ${Date.now()}`;
 

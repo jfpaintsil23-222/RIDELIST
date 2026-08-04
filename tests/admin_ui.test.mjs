@@ -57,6 +57,7 @@ async function loadApp() {
     globalThis.__app = {
       state,
       adminView,
+      adminEditView,
       adminChangedCount,
       adminChangeList: typeof adminChangeList === "function" ? adminChangeList : undefined,
     };
@@ -111,6 +112,24 @@ test("admin tabs render functional riders search and changes review screens", as
         notes: "",
       },
     ],
+    people: [
+      {
+        id: "person-1",
+        name: "Tinnie",
+        campusAddress: "ICON Apartments TSU, 3410 Wheeler Ave, Houston, TX 77004",
+        homeAddress: "",
+        phone: "713-000-0000",
+        preferredAddress: "ICON Apartments TSU, 3410 Wheeler Ave, Houston, TX 77004",
+      },
+      {
+        id: "person-2",
+        name: "Zay",
+        campusAddress: "",
+        homeAddress: "2906 Paige St, Houston, TX",
+        phone: "",
+        preferredAddress: "2906 Paige St, Houston, TX",
+      },
+    ],
   };
   app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
   app.state.adminDeletedStopIds = [];
@@ -121,11 +140,11 @@ test("admin tabs render functional riders search and changes review screens", as
   assert.match(routesHtml, /data-admin-tab="changes"/);
 
   app.state.adminActiveTab = "riders";
-  app.state.adminSearch = "tinnie";
+  app.state.adminPeopleSearch = "tinnie";
   const ridersHtml = app.adminView();
-  assert.match(ridersHtml, /data-admin-search/);
+  assert.match(ridersHtml, /data-admin-people-search/);
   assert.match(ridersHtml, /Tinnie/);
-  assert.match(ridersHtml, /Dawson/);
+  assert.match(ridersHtml, /data-admin-add-person="person-1"/);
   assert.doesNotMatch(ridersHtml, /Zay/);
 
   app.state.adminActiveTab = "changes";
@@ -147,4 +166,121 @@ test("admin tabs render functional riders search and changes review screens", as
   assert.equal(changes.length, 1);
   assert.match(changesHtml, /Added TEST New Rider to Naa/);
   assert.match(changesHtml, /Publish route changes \(1\)/);
+});
+
+test("admin routes collapse by driver and rider rows use move instead of remove", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [
+      { slug: "dawson", displayName: "Dawson", initials: "DW" },
+      { slug: "blue", displayName: "Blu", initials: "BLU" },
+    ],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "dawson",
+        stopOrder: 1,
+        name: "Tinnie",
+        phone: "713-000-0000",
+        address: "3410 Wheeler Ave, Houston, TX",
+        area: "UH",
+        pickupTime: "12:25 PM",
+        readyBy: "12:20 PM",
+        routeLabel: "Ride 1",
+        notes: "",
+      },
+    ],
+    people: [],
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminDeletedStopIds = [];
+  app.state.adminActiveTab = "routes";
+  app.state.adminExpandedDriverSlug = "";
+
+  const collapsed = app.adminView();
+  assert.match(collapsed, /data-admin-driver-toggle="dawson"/);
+  assert.doesNotMatch(collapsed, /data-admin-edit="stop-1"/);
+  assert.match(collapsed, /BLU/);
+
+  app.state.adminExpandedDriverSlug = "dawson";
+  const expanded = app.adminView();
+  assert.match(expanded, /Tinnie/);
+  assert.match(expanded, /data-admin-move="stop-1"/);
+  assert.doesNotMatch(expanded, /data-admin-delete="stop-1"/);
+});
+
+test("riders and data tabs use the PeopleData bank", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "dawson", displayName: "Dawson", initials: "DW" }],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Siah",
+        campusAddress: "2304 Sam Houston Ave, Huntsville, TX",
+        homeAddress: "2304 Sam Houston Ave, Huntsville, TX",
+        phone: "(301) 543-7407",
+        preferredAddress: "2304 Sam Houston Ave, Huntsville, TX",
+      },
+      {
+        id: "person-2",
+        name: "Nicholas",
+        campusAddress: "",
+        homeAddress: "11525 Burdine St, Houston, TX 77035",
+        phone: "(832) 794-2032",
+        preferredAddress: "11525 Burdine St, Houston, TX 77035",
+      },
+    ],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminDeletedStopIds = [];
+
+  app.state.adminActiveTab = "riders";
+  app.state.adminPeopleSearch = "siah";
+  const ridersHtml = app.adminView();
+  assert.match(ridersHtml, /data-admin-people-search/);
+  assert.match(ridersHtml, /Siah/);
+  assert.match(ridersHtml, /data-admin-add-person="person-1"/);
+  assert.doesNotMatch(ridersHtml, /Nicholas/);
+
+  app.state.adminActiveTab = "data";
+  app.state.adminPeopleSearch = "burdine";
+  const dataHtml = app.adminView();
+  assert.match(dataHtml, /PeopleData/);
+  assert.match(dataHtml, /Nicholas/);
+  assert.match(dataHtml, /11525 Burdine St/);
+});
+
+test("edit screen contains the red remove control above form actions", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "dawson", displayName: "Dawson", initials: "DW" }],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "dawson",
+        stopOrder: 1,
+        name: "Tinnie",
+        phone: "",
+        address: "3410 Wheeler Ave, Houston, TX",
+        area: "",
+        pickupTime: "",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+    people: [],
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminSelectedStopId = "stop-1";
+
+  const html = app.adminEditView();
+  assert.match(html, /Remove rider/);
+  assert.match(html, /data-admin-delete="stop-1"/);
+  assert.ok(html.indexOf("Remove rider") < html.indexOf("Cancel"), "remove should appear above Cancel");
 });

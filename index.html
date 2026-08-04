@@ -1129,7 +1129,7 @@
 
     .admin-tabs {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 5px;
       padding: 4px;
       border-radius: 12px;
@@ -1221,6 +1221,25 @@
       gap: 10px;
     }
 
+    .admin-route-card.is-open {
+      gap: 12px;
+    }
+
+    .admin-driver-toggle {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+
     .admin-route-card .avatar.small {
       width: 44px;
       height: 44px;
@@ -1229,6 +1248,28 @@
       border: 0;
       box-shadow: none;
       font-size: 18px;
+    }
+
+    .admin-route-card .avatar.small.three-letter {
+      font-size: 15px;
+    }
+
+    .admin-route-toggle-copy {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .admin-route-arrow {
+      color: #6b7280;
+      font-size: 24px;
+      line-height: 1;
+      transform: rotate(0deg);
+      transition: transform 160ms ease;
+    }
+
+    .admin-route-card.is-open .admin-route-arrow {
+      transform: rotate(90deg);
     }
 
     .admin-rider-card {
@@ -1287,6 +1328,16 @@
     .admin-delete-button {
       color: var(--danger);
       background: #fff5f5;
+    }
+
+    .admin-remove-action {
+      width: 100%;
+      justify-content: center;
+      min-height: 46px;
+      border-color: #ffd7d7;
+      color: var(--danger);
+      background: #fff5f5;
+      font-size: 14px;
     }
 
     .admin-message {
@@ -1611,6 +1662,7 @@
     .admin-entry-button:focus-visible,
     .admin-icon-button:focus-visible,
     .admin-tab:focus-visible,
+    .admin-driver-toggle:focus-visible,
     .admin-chip-button:focus-visible,
     .admin-delete-button:focus-visible,
     .mark-button:focus-visible,
@@ -1722,8 +1774,12 @@
       adminDraftStops: [],
       adminDeletedStopIds: [],
       adminSelectedStopId: null,
+      adminPersonSeed: null,
+      adminEditMode: "edit",
       adminActiveTab: "routes",
       adminSearch: "",
+      adminPeopleSearch: "",
+      adminExpandedDriverSlug: "",
       adminMessage: "",
       adminError: "",
       adminLoading: false,
@@ -1925,6 +1981,19 @@
       return state.adminDraftStops || [];
     }
 
+    function adminPeople() {
+      return state.admin?.people || [];
+    }
+
+    function adminPersonById(personId) {
+      return adminPeople().find((person) => person.id === personId);
+    }
+
+    function preferredPersonAddress(person) {
+      if (!person) return "";
+      return person.preferredAddress || person.homeAddress || person.campusAddress || "";
+    }
+
     function adminStopsForDriver(slug) {
       return adminStops()
         .filter((stop) => stop.driverSlug === slug)
@@ -2041,6 +2110,27 @@
       return stops.filter((stop) => adminSearchText(stop).includes(query));
     }
 
+    function adminPeopleSearchText(person) {
+      return [
+        person.name,
+        person.phone,
+        person.campusAddress,
+        person.homeAddress,
+        person.preferredAddress,
+        person.sourceLabel,
+      ].filter(Boolean).join(" ").toLowerCase();
+    }
+
+    function adminFilteredPeople() {
+      const query = String(state.adminPeopleSearch || "").trim().toLowerCase();
+      const people = adminPeople()
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      if (!query) return people;
+      return people.filter((person) => adminPeopleSearchText(person).includes(query));
+    }
+
     function normalizeAdminDraftStops() {
       const byDriver = new Map();
       adminStops().forEach((stop) => {
@@ -2064,8 +2154,23 @@
       `).join("");
     }
 
-    function openAdminEditor(stopId = "new") {
+    function openAdminEditor(stopId = "new", mode = "edit") {
       state.adminSelectedStopId = stopId;
+      state.adminPersonSeed = null;
+      state.adminEditMode = mode;
+      state.adminError = "";
+      state.adminMessage = "";
+      state.view = "adminEdit";
+      render();
+    }
+
+    function openAdminPersonEditor(personId) {
+      const person = adminPersonById(personId);
+      if (!person) return;
+
+      state.adminSelectedStopId = "new";
+      state.adminPersonSeed = person;
+      state.adminEditMode = "add";
       state.adminError = "";
       state.adminMessage = "";
       state.view = "adminEdit";
@@ -2074,14 +2179,16 @@
 
     function adminSelectedStop() {
       if (state.adminSelectedStopId === "new") {
+        const seed = state.adminPersonSeed;
+        const preferredAddress = preferredPersonAddress(seed);
         return {
           id: "",
           driverSlug: adminDrivers()[0]?.slug || "",
           stopOrder: 1,
-          name: "",
-          phone: "",
-          address: "",
-          area: "",
+          name: seed?.name || "",
+          phone: seed?.phone || "",
+          address: preferredAddress,
+          area: seed ? (seed.preferredAddressType === "campus" ? "Campus" : "Home") : "",
           pickupTime: "",
           readyBy: "",
           routeLabel: "",
@@ -2120,6 +2227,8 @@
 
       normalizeAdminDraftStops();
       state.adminSelectedStopId = null;
+      state.adminPersonSeed = null;
+      state.adminEditMode = "edit";
       state.adminMessage = `${stop.name} is ready to publish.`;
       state.adminError = "";
       state.adminActiveTab = "changes";
@@ -2133,12 +2242,16 @@
 
       state.adminDraftStops = adminStops().filter((item) => item.id !== stopId);
       if (!String(stopId).startsWith("temp-")) {
-        state.adminDeletedStopIds.push(stopId);
+        if (!state.adminDeletedStopIds.includes(stopId)) state.adminDeletedStopIds.push(stopId);
       }
       normalizeAdminDraftStops();
+      state.adminSelectedStopId = null;
+      state.adminPersonSeed = null;
+      state.adminEditMode = "edit";
       state.adminMessage = `${stop.name} will be removed when you publish.`;
       state.adminError = "";
       state.adminActiveTab = "changes";
+      state.view = "admin";
       render();
     }
 
@@ -2162,8 +2275,12 @@
         state.adminDraftStops = cloneStops(snapshot.stops);
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
+        state.adminPersonSeed = null;
+        state.adminEditMode = "edit";
         state.adminActiveTab = "routes";
         state.adminSearch = "";
+        state.adminPeopleSearch = "";
+        state.adminExpandedDriverSlug = "";
         state.adminMessage = "";
         state.view = "admin";
         closeCodeModal();
@@ -2205,8 +2322,12 @@
         state.adminDraftStops = cloneStops(published.stops);
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
+        state.adminPersonSeed = null;
+        state.adminEditMode = "edit";
         state.adminActiveTab = "routes";
         state.adminSearch = "";
+        state.adminPeopleSearch = "";
+        state.adminExpandedDriverSlug = "";
         state.adminMessage = "Route changes published.";
         state.drivers = await rpc("ride_driver_directory", { p_plan_date: PLAN_DATE });
       } catch (error) {
@@ -2331,7 +2452,7 @@
             <button class="admin-chip-button" type="button" data-admin-edit="${escapeHtml(stop.id)}">Edit</button>
             <a class="admin-chip-button" href="${googleMaps(stop.address)}" target="_blank" rel="noreferrer">Map</a>
             ${stop.phone ? `<a class="admin-chip-button" href="${telHref(stop.phone)}">Call</a>` : ""}
-            <button class="admin-delete-button" type="button" data-admin-delete="${escapeHtml(stop.id)}">Remove</button>
+            ${options.routeActions ? `<button class="admin-chip-button" type="button" data-admin-move="${escapeHtml(stop.id)}">Move</button>` : `<button class="admin-delete-button" type="button" data-admin-delete="${escapeHtml(stop.id)}">Remove</button>`}
           </div>
         </article>`;
     }
@@ -2347,21 +2468,73 @@
 
     function adminRouteCard(driver) {
       const stops = adminStopsForDriver(driver.slug);
+      const isOpen = state.adminExpandedDriverSlug === driver.slug;
+      const avatarClass = String(driver.initials || "").length > 2 ? "avatar small three-letter" : "avatar small";
       return `
-        <section class="admin-route-card">
-          <div class="admin-card-row">
-            <div class="admin-card-row">
-              <span class="avatar small">${escapeHtml(driver.initials)}</span>
-              <span class="admin-route-copy">
-                <strong>${escapeHtml(driver.displayName)}</strong>
-                <span>${escapeHtml(stops.length ? riderNameList(stops) : "No pickups assigned")}</span>
-              </span>
-            </div>
-            <span class="pill">${escapeHtml(pickupCountLabel(stops.length))}</span>
-          </div>
+        <section class="admin-route-card ${isOpen ? "is-open" : ""}">
+          <button class="admin-driver-toggle" type="button" data-admin-driver-toggle="${escapeHtml(driver.slug)}" aria-expanded="${isOpen ? "true" : "false"}">
+            <span class="${avatarClass}">${escapeHtml(driver.initials)}</span>
+            <span class="admin-route-copy">
+              <strong>${escapeHtml(driver.displayName)}</strong>
+              <span>${escapeHtml(stops.length ? "Tap to view pickups" : "No pickups assigned")}</span>
+            </span>
+            <span class="admin-route-toggle-copy">
+              <span class="pill">${escapeHtml(pickupCountLabel(stops.length))}</span>
+              <span class="admin-route-arrow" aria-hidden="true">&rsaquo;</span>
+            </span>
+          </button>
+          ${isOpen ? `
           <div class="admin-rider-list">
-            ${stops.length ? stops.map(adminRiderCard).join("") : `<section class="empty-card"><p>No riders assigned.</p></section>`}
+            ${stops.length ? stops.map((stop) => adminRiderCard(stop, { routeActions: true })).join("") : `<section class="empty-card"><p>No riders assigned.</p></section>`}
+          </div>` : ""}
+        </section>`;
+    }
+
+    function adminPeopleResultCard(person, options = {}) {
+      const preferredAddress = preferredPersonAddress(person);
+      const campusLine = person.campusAddress ? `Campus: ${person.campusAddress}` : "";
+      const homeLine = person.homeAddress ? `Home: ${person.homeAddress}` : "";
+      const mapAddress = preferredAddress || person.campusAddress || person.homeAddress;
+      return `
+        <article class="admin-rider-card">
+          <div class="admin-rider-row">
+            <div class="admin-rider-copy">
+              <strong>${escapeHtml(person.name)}</strong>
+              <span>${escapeHtml(preferredAddress || "No address listed")}</span>
+              <span>${escapeHtml([person.phone, options.showSource ? person.sourceLabel : ""].filter(Boolean).join(" · ") || "No phone listed")}</span>
+              ${options.showData ? `${campusLine ? `<span>${escapeHtml(campusLine)}</span>` : ""}${homeLine ? `<span>${escapeHtml(homeLine)}</span>` : ""}` : ""}
+            </div>
+            <span class="pill">${escapeHtml(person.preferredAddressType === "campus" ? "Campus" : "Home")}</span>
           </div>
+          <div class="admin-actions">
+            <button class="admin-chip-button" type="button" data-admin-add-person="${escapeHtml(person.id)}">Add to route</button>
+            ${mapAddress ? `<a class="admin-chip-button" href="${googleMaps(mapAddress)}" target="_blank" rel="noreferrer">Map</a>` : ""}
+            ${person.phone ? `<a class="admin-chip-button" href="${telHref(person.phone)}">Call</a>` : ""}
+          </div>
+        </article>`;
+    }
+
+    function adminPeopleResultsHtml(options = {}) {
+      const people = adminFilteredPeople();
+      if (!people.length) {
+        return `<section class="empty-card"><p>No people match that search.</p></section>`;
+      }
+
+      return people.map((person) => adminPeopleResultCard(person, options)).join("");
+    }
+
+    function adminPeopleSearchInput(placeholder = "Search PeopleData by name, phone, or address") {
+      return `<input class="admin-search-input" data-admin-people-search type="search" value="${escapeHtml(state.adminPeopleSearch)}" placeholder="${escapeHtml(placeholder)}" aria-label="Search PeopleData">`;
+    }
+
+    function adminDataView() {
+      return `
+        <section class="admin-message">
+          PeopleData · ${adminPeople().length} people stored
+        </section>
+        ${adminPeopleSearchInput("Search full PeopleData")}
+        <section class="admin-rider-list" data-admin-people-results aria-label="PeopleData">
+          ${adminPeopleResultsHtml({ showData: true, showSource: true })}
         </section>`;
     }
 
@@ -2374,19 +2547,14 @@
     }
 
     function adminRidersResultsHtml() {
-      const stops = adminFilteredStops();
-      if (!stops.length) {
-        return `<section class="empty-card"><p>No riders match that search.</p></section>`;
-      }
-
-      return stops.map((stop) => adminRiderCard(stop, { showDriver: true })).join("");
+      return adminPeopleResultsHtml({ showData: false });
     }
 
     function adminRidersView() {
       return `
         <button class="primary-action" type="button" data-action="adminNew">Add rider</button>
-        <input class="admin-search-input" data-admin-search type="search" value="${escapeHtml(state.adminSearch)}" placeholder="Search rider, phone, address, or driver" aria-label="Search riders">
-        <section class="admin-rider-list" data-admin-riders-results aria-label="All assigned riders">
+        ${adminPeopleSearchInput("Search people to add to a route")}
+        <section class="admin-rider-list" data-admin-people-results aria-label="PeopleData riders">
           ${adminRidersResultsHtml()}
         </section>`;
     }
@@ -2418,12 +2586,14 @@
 
       const drivers = adminDrivers();
       const changed = adminChangedCount();
-      const activeTab = ["routes", "riders", "changes"].includes(state.adminActiveTab) ? state.adminActiveTab : "routes";
+      const activeTab = ["routes", "riders", "data", "changes"].includes(state.adminActiveTab) ? state.adminActiveTab : "routes";
       const activeView = activeTab === "riders"
         ? adminRidersView()
         : activeTab === "changes"
           ? adminChangesView(changed)
-          : adminRoutesView(drivers);
+          : activeTab === "data"
+            ? adminDataView()
+            : adminRoutesView(drivers);
 
       return `
         <div class="stack">
@@ -2443,6 +2613,7 @@
           <section class="admin-tabs" aria-label="Admin sections">
             ${adminTabButton("routes", "Routes")}
             ${adminTabButton("riders", "Riders")}
+            ${adminTabButton("data", "Data")}
             ${adminTabButton("changes", "Changes")}
           </section>
 
@@ -2475,8 +2646,8 @@
           <section class="intro-block compact">
             <div class="admin-top-row">
               <div>
-                <p class="eyebrow">${stop.id ? "Edit rider" : "Add rider"}</p>
-                <h1>${stop.id ? escapeHtml(stop.name) : "New rider"}</h1>
+                <p class="eyebrow">${state.adminEditMode === "move" ? "Move rider" : stop.id ? "Edit rider" : "Add rider"}</p>
+                <h1>${stop.id || stop.name ? escapeHtml(stop.name || "New rider") : "New rider"}</h1>
                 <p>Save as draft, then publish</p>
               </div>
               <button class="admin-icon-button" type="button" data-action="adminBack" aria-label="Back to admin">
@@ -2530,6 +2701,8 @@
               <textarea name="notes">${escapeHtml(stop.notes || "")}</textarea>
             </label>
           </section>
+
+          ${stop.id ? `<button class="admin-delete-button admin-remove-action" type="button" data-admin-delete="${escapeHtml(stop.id)}">Remove rider</button>` : ""}
 
           <div class="admin-form-actions">
             <button class="secondary-action" type="button" data-action="adminBack">Cancel</button>
@@ -2826,6 +2999,14 @@
         return;
       }
 
+      const adminDriverToggle = event.target.closest("[data-admin-driver-toggle]");
+      if (adminDriverToggle) {
+        const slug = adminDriverToggle.dataset.adminDriverToggle;
+        state.adminExpandedDriverSlug = state.adminExpandedDriverSlug === slug ? "" : slug;
+        render();
+        return;
+      }
+
       const action = event.target.closest("[data-action]")?.dataset.action;
       if (action === "home") openHome();
       if (action === "profile") openProfile();
@@ -2835,6 +3016,8 @@
       if (action === "adminBack") {
         state.adminError = "";
         state.adminSelectedStopId = null;
+        state.adminPersonSeed = null;
+        state.adminEditMode = "edit";
         state.view = "admin";
         render();
       }
@@ -2843,6 +3026,12 @@
 
       const adminEditButton = event.target.closest("[data-admin-edit]");
       if (adminEditButton) openAdminEditor(adminEditButton.dataset.adminEdit);
+
+      const adminMoveButton = event.target.closest("[data-admin-move]");
+      if (adminMoveButton) openAdminEditor(adminMoveButton.dataset.adminMove, "move");
+
+      const adminAddPersonButton = event.target.closest("[data-admin-add-person]");
+      if (adminAddPersonButton) openAdminPersonEditor(adminAddPersonButton.dataset.adminAddPerson);
 
       const adminDeleteButton = event.target.closest("[data-admin-delete]");
       if (adminDeleteButton) {
@@ -2874,6 +3063,17 @@
     });
 
     screen.addEventListener("input", (event) => {
+      const peopleSearchInput = event.target.closest("[data-admin-people-search]");
+      if (peopleSearchInput) {
+        state.adminPeopleSearch = peopleSearchInput.value;
+        const results = screen.querySelector("[data-admin-people-results]");
+        if (results) results.innerHTML = adminPeopleResultsHtml({
+          showData: state.adminActiveTab === "data",
+          showSource: state.adminActiveTab === "data",
+        });
+        return;
+      }
+
       const searchInput = event.target.closest("[data-admin-search]");
       if (!searchInput) return;
 

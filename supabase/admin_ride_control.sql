@@ -29,6 +29,38 @@ as $$
   );
 $$;
 
+create table if not exists rides_private.ride_people (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  name_key text not null unique,
+  campus_address text not null default '',
+  home_address text not null default '',
+  phone text not null default '',
+  campus_google_maps text not null default '',
+  campus_apple_maps text not null default '',
+  home_google_maps text not null default '',
+  home_apple_maps text not null default '',
+  preferred_address_type text not null default 'home',
+  source_label text not null default 'PeopleData',
+  active boolean not null default true,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint ride_people_preferred_address_type_check
+    check (preferred_address_type in ('home', 'campus'))
+);
+
+alter table rides_private.ride_people enable row level security;
+alter table rides_private.ride_people force row level security;
+
+create or replace function rides_private.ride_people_name_key(p_name text)
+returns text
+language sql
+immutable
+set search_path to ''
+as $$
+  select lower(regexp_replace(btrim(coalesce(p_name, '')), '\s+', ' ', 'g'));
+$$;
+
 create or replace function rides_private.ride_parse_time(p_value text)
 returns time
 language plpgsql
@@ -85,6 +117,7 @@ declare
   v_plan record;
   v_drivers jsonb;
   v_stops jsonb;
+  v_people jsonb;
   v_total_drivers integer;
   v_total_stops integer;
 begin
@@ -160,6 +193,35 @@ begin
   join rides_private.ride_drivers d on d.id = s.driver_id
   where d.plan_id = v_plan.id;
 
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', p.id::text,
+        'name', p.name,
+        'campusAddress', p.campus_address,
+        'homeAddress', p.home_address,
+        'phone', p.phone,
+        'preferredAddressType', p.preferred_address_type,
+        'preferredAddress', case
+          when p.preferred_address_type = 'campus' and p.campus_address <> '' then p.campus_address
+          when p.home_address <> '' then p.home_address
+          else p.campus_address
+        end,
+        'campusGoogleMaps', p.campus_google_maps,
+        'campusAppleMaps', p.campus_apple_maps,
+        'homeGoogleMaps', p.home_google_maps,
+        'homeAppleMaps', p.home_apple_maps,
+        'sourceLabel', p.source_label,
+        'active', p.active
+      )
+      order by lower(p.name), p.name
+    ),
+    '[]'::jsonb
+  )
+  into v_people
+  from rides_private.ride_people p
+  where p.active;
+
   select count(*)::integer into v_total_drivers
   from rides_private.ride_drivers d
   where d.plan_id = v_plan.id;
@@ -186,8 +248,101 @@ begin
       'review', 0
     ),
     'drivers', v_drivers,
-    'stops', v_stops
+    'stops', v_stops,
+    'people', v_people
   );
+end;
+$$;
+
+create or replace function public.ride_admin_upsert_people(
+  p_admin_code text,
+  p_people jsonb default '[]'::jsonb,
+  p_source_label text default 'PeopleData'
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_person jsonb;
+  v_name text;
+  v_name_key text;
+  v_count integer := 0;
+  v_preferred text;
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if p_people is null or jsonb_typeof(p_people) <> 'array' then
+    return jsonb_build_object('ok', false, 'error', 'people_array_required');
+  end if;
+
+  for v_person in select value from jsonb_array_elements(p_people) loop
+    v_name := btrim(coalesce(v_person->>'name', ''));
+    v_name_key := rides_private.ride_people_name_key(v_name);
+
+    if v_name = '' or v_name_key = '' then
+      continue;
+    end if;
+
+    v_preferred := lower(btrim(coalesce(v_person->>'preferredAddressType', '')));
+    if v_preferred not in ('home', 'campus') then
+      v_preferred := case
+        when btrim(coalesce(v_person->>'homeAddress', '')) = ''
+             and btrim(coalesce(v_person->>'campusAddress', '')) <> '' then 'campus'
+        else 'home'
+      end;
+    end if;
+
+    insert into rides_private.ride_people (
+      name,
+      name_key,
+      campus_address,
+      home_address,
+      phone,
+      campus_google_maps,
+      campus_apple_maps,
+      home_google_maps,
+      home_apple_maps,
+      preferred_address_type,
+      source_label,
+      active
+    )
+    values (
+      v_name,
+      v_name_key,
+      btrim(coalesce(v_person->>'campusAddress', '')),
+      btrim(coalesce(v_person->>'homeAddress', '')),
+      btrim(coalesce(v_person->>'phone', '')),
+      btrim(coalesce(v_person->>'campusGoogleMaps', '')),
+      btrim(coalesce(v_person->>'campusAppleMaps', '')),
+      btrim(coalesce(v_person->>'homeGoogleMaps', '')),
+      btrim(coalesce(v_person->>'homeAppleMaps', '')),
+      v_preferred,
+      btrim(coalesce(p_source_label, 'PeopleData')),
+      true
+    )
+    on conflict (name_key) do update
+    set name = excluded.name,
+        campus_address = excluded.campus_address,
+        home_address = excluded.home_address,
+        phone = excluded.phone,
+        campus_google_maps = excluded.campus_google_maps,
+        campus_apple_maps = excluded.campus_apple_maps,
+        home_google_maps = excluded.home_google_maps,
+        home_apple_maps = excluded.home_apple_maps,
+        preferred_address_type = excluded.preferred_address_type,
+        source_label = excluded.source_label,
+        active = true,
+        updated_at = now();
+
+    v_count := v_count + 1;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'upserted', v_count);
 end;
 $$;
 
@@ -354,4 +509,5 @@ end;
 $$;
 
 grant execute on function public.ride_admin_snapshot(text, date) to anon, authenticated;
+grant execute on function public.ride_admin_upsert_people(text, jsonb, text) to anon, authenticated;
 grant execute on function public.ride_admin_publish_plan(text, date, jsonb, text[]) to anon, authenticated;

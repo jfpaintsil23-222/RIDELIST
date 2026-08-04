@@ -9,6 +9,7 @@ Add a mobile admin area to the existing ride app so trusted coordinators can mak
 - Add an admin button on the main ride plan screen.
 - Protect admin tools with a shared admin passcode stored only as a database hash.
 - Show all drivers, rider counts, and all assigned riders in one admin view.
+- Split admin ride control into working `Routes`, `Riders`, and `Changes` tabs.
 - Let admins add a rider, edit rider details, move a rider to another driver, change pickup/ready times, and delete a rider.
 - Keep changes as an admin draft in the browser until the admin presses a publish/save action.
 - After publishing, driver route screens read the updated route from Supabase the next time they open or refresh.
@@ -29,11 +30,12 @@ The admin code is never embedded in the page or committed to the public repo. Th
 
 1. Admin taps the top-right admin control.
 2. Admin enters the passcode.
-3. Ride Control opens with driver route cards and rider cards.
-4. Admin edits a rider or creates a new rider.
-5. The browser shows the draft change.
-6. Admin presses publish/save.
-7. Supabase updates the plan and the admin view refreshes.
+3. Ride Control opens on `Routes`, where drivers are grouped with their assigned riders.
+4. Admin can switch to `Riders` to search every assigned rider by name, driver, phone, address, area, or time.
+5. Admin edits a rider, creates a new rider, or removes a rider.
+6. The browser opens `Changes`, showing the unpublished draft before anything goes live.
+7. Admin presses publish/save.
+8. Supabase updates the plan and the admin view refreshes.
 
 ## Error Handling
 
@@ -44,5 +46,5 @@ The admin code is never embedded in the page or committed to the public repo. Th
 
 ## Verification
 
-- Automated checks cover admin RPC login, snapshot loading, add/move/edit/delete of a temporary rider, and expected admin UI strings.
-- Manual browser verification covers admin login, adding a temporary rider, moving it, publishing, and confirming the driver route reflects the change.
+- Automated checks cover admin RPC login, snapshot loading, add/move/edit/delete of a temporary rider, functional admin tab rendering, rider search, and changes review.
+- Manual browser verification covers admin login, rider search, adding a temporary rider, reviewing the pending change, publishing, removing the temporary rider, and confirming cleanup.

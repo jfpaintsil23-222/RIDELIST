@@ -30,7 +30,7 @@
 
 - [ ] Add tests that call admin RPCs with a wrong passcode and with `RIDES_ADMIN_CODE`.
 - [ ] Add tests that insert, move, update, and delete a temporary rider through the publish RPC.
-- [ ] Add tests that read `index.html` and assert admin UI functions and RPC names are present.
+- [ ] Add tests that assert admin UI entry points, functional `Routes`/`Riders`/`Changes` tabs, rider search, and changes review output.
 - [ ] Run `node --test tests/*.test.mjs` and confirm the tests fail before implementation.
 
 ### Task 2: Supabase admin RPCs
@@ -57,10 +57,10 @@
 - Consumes: `ride_admin_snapshot` and `ride_admin_publish_plan`.
 - Produces: admin login, route control view, edit/add rider form, local drafts, and publish action.
 
-- [ ] Add CSS for admin button, admin route cards, rider cards, form fields, and publish banner.
+- [ ] Add CSS for admin button, admin tabs, admin route cards, rider cards, search field, change cards, form fields, and publish banner.
 - [ ] Add admin state fields to the existing `state` object.
 - [ ] Add `openAdminModal`, `submitAdminCode`, `adminView`, `adminEditView`, and draft helper functions.
-- [ ] Add event handlers for opening admin, editing riders, adding riders, saving draft changes, deleting draft riders, and publishing.
+- [ ] Add event handlers for opening admin, switching admin tabs, searching riders, editing riders, adding riders, saving draft changes, deleting draft riders, and publishing.
 - [ ] Keep driver views unchanged except for receiving updated Supabase data after publish.
 - [ ] Run UI tests until they pass.
 
@@ -74,7 +74,7 @@
 - Produces: live GitHub Pages app with admin ride control.
 
 - [ ] Run `node --test tests/*.test.mjs`.
-- [ ] Open the local app in a mobile viewport and verify admin login and route control.
-- [ ] Publish a temporary rider, move it, verify driver route output, then delete it.
+- [ ] Open the local app in a mobile viewport and verify admin login, route control, rider search, and changes review.
+- [ ] Publish a temporary rider through the UI, verify it appears, then delete it and verify cleanup.
 - [ ] Push to GitHub Pages.
 - [ ] Verify the live page with a cache-busted URL.

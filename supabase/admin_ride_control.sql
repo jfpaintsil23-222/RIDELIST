@@ -105,7 +105,7 @@ $$;
 
 create or replace function public.ride_admin_snapshot(
   p_admin_code text,
-  p_plan_date date default '2026-08-02'::date
+  p_plan_date date default '2026-08-09'::date
 )
 returns jsonb
 language plpgsql
@@ -128,7 +128,7 @@ begin
   select p.id, p.title, p.service_day, p.plan_date, p.destination_label, p.destination_address
   into v_plan
   from rides_private.ride_plans p
-  where p.plan_date = coalesce(p_plan_date, date '2026-08-02')
+  where p.plan_date = coalesce(p_plan_date, date '2026-08-09')
   limit 1;
 
   if v_plan.id is null then
@@ -348,7 +348,7 @@ $$;
 
 create or replace function public.ride_admin_publish_plan(
   p_admin_code text,
-  p_plan_date date default '2026-08-02'::date,
+  p_plan_date date default '2026-08-09'::date,
   p_stops jsonb default '[]'::jsonb,
   p_deleted_stop_ids text[] default '{}'::text[]
 )
@@ -374,7 +374,7 @@ begin
   select p.id
   into v_plan
   from rides_private.ride_plans p
-  where p.plan_date = coalesce(p_plan_date, date '2026-08-02')
+  where p.plan_date = coalesce(p_plan_date, date '2026-08-09')
   limit 1;
 
   if v_plan.id is null then
@@ -504,7 +504,7 @@ begin
       updated_at = now()
   where d.plan_id = v_plan.id;
 
-  return public.ride_admin_snapshot(p_admin_code, coalesce(p_plan_date, date '2026-08-02'));
+  return public.ride_admin_snapshot(p_admin_code, coalesce(p_plan_date, date '2026-08-09'));
 end;
 $$;
 

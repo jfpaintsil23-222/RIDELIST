@@ -72,6 +72,7 @@ test("app contains admin ride control entry points", async () => {
   assert.match(html, /data-action="admin"/);
   assert.match(html, /ride_admin_snapshot/);
   assert.match(html, /ride_admin_publish_plan/);
+  assert.match(html, /const PLAN_DATE = "2026-08-09"/);
   assert.match(html, /function adminView/);
   assert.match(html, /function adminEditView/);
 });

@@ -3,7 +3,7 @@ import test from "node:test";
 
 const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
 const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
-const PLAN_DATE = "2026-08-02";
+const PLAN_DATE = "2026-08-09";
 const ADMIN_CODE = process.env.RIDES_ADMIN_CODE;
 
 if (!ADMIN_CODE) {
@@ -43,7 +43,8 @@ test("admin snapshot rejects wrong passcodes and accepts the admin passcode", as
   assert.equal(snapshot.ok, true);
   assert.equal(snapshot.plan.date, PLAN_DATE);
   assert.ok(snapshot.drivers.some((driver) => driver.slug === "dawson"));
-  assert.ok(snapshot.stops.some((stop) => stop.name === "Tinnie" && stop.driverSlug === "dawson"));
+  assert.equal(snapshot.drivers.length, 6);
+  assert.equal(snapshot.stops.length, 0);
 });
 
 test("admin snapshot includes protected PeopleData and Blu display update", async () => {

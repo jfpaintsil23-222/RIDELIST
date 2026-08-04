@@ -1096,6 +1096,235 @@
       color: #6b7280;
     }
 
+    .home-header-row,
+    .admin-top-row,
+    .admin-card-row,
+    .admin-rider-row,
+    .admin-form-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .admin-entry-button,
+    .admin-icon-button {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 46px;
+      height: 46px;
+      border: 0;
+      border-radius: 50%;
+      color: #ffffff;
+      background: #000000;
+      cursor: pointer;
+    }
+
+    .admin-entry-button svg,
+    .admin-icon-button svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .admin-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      padding: 4px;
+      border-radius: 12px;
+      background: #f1f1f3;
+    }
+
+    .admin-tab {
+      min-height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .admin-tab.active {
+      color: #050505;
+      background: #ffffff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .admin-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .admin-stat,
+    .admin-route-card,
+    .admin-rider-card,
+    .admin-form-card,
+    .admin-message {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.04);
+    }
+
+    .admin-stat {
+      min-height: 76px;
+      padding: 12px;
+    }
+
+    .admin-stat strong {
+      display: block;
+      color: #050505;
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 850;
+    }
+
+    .admin-stat span {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .admin-route-list,
+    .admin-rider-list,
+    .admin-form-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-route-card {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-route-card .avatar.small {
+      width: 44px;
+      height: 44px;
+      color: #ffffff;
+      background: #000000;
+      border: 0;
+      box-shadow: none;
+      font-size: 18px;
+    }
+
+    .admin-rider-card {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-rider-row {
+      align-items: start;
+    }
+
+    .admin-rider-copy,
+    .admin-route-copy {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .admin-rider-copy strong,
+    .admin-route-copy strong {
+      color: #050505;
+      font-size: 16px;
+      line-height: 1.15;
+      font-weight: 850;
+    }
+
+    .admin-rider-copy span,
+    .admin-route-copy span,
+    .admin-form-card label span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .admin-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .admin-chip-button,
+    .admin-delete-button {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: #050505;
+      background: #f4f4f4;
+      font-size: 12px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .admin-delete-button {
+      color: var(--danger);
+      background: #fff5f5;
+    }
+
+    .admin-message {
+      padding: 12px;
+      color: #050505;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .admin-message.error {
+      color: var(--danger);
+    }
+
+    .admin-form-card {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .admin-form-card label {
+      display: grid;
+      gap: 6px;
+      color: #050505;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .admin-form-card input,
+    .admin-form-card select,
+    .admin-form-card textarea {
+      width: 100%;
+      min-height: 46px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: #050505;
+      background: #ffffff;
+      font-size: 15px;
+      font-weight: 650;
+    }
+
+    .admin-form-card textarea {
+      min-height: 82px;
+      resize: vertical;
+    }
+
+    .admin-form-actions {
+      align-items: stretch;
+    }
+
+    .admin-form-actions .secondary-action,
+    .admin-form-actions .primary-action {
+      flex: 1;
+      min-height: 52px;
+    }
+
     .pill {
       min-height: 28px;
       padding: 4px 9px;
@@ -1311,8 +1540,14 @@
     .route-stop:focus-visible,
     .nav-item:focus-visible,
     .back-button:focus-visible,
+    .admin-entry-button:focus-visible,
+    .admin-icon-button:focus-visible,
+    .admin-chip-button:focus-visible,
+    .admin-delete-button:focus-visible,
     .mark-button:focus-visible,
-    input:focus-visible {
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
       outline: 3px solid rgba(0, 0, 0, 0.18);
       outline-offset: 3px;
     }
@@ -1394,7 +1629,7 @@
           <p id="codeError" class="error" hidden></p>
           <div class="modal-actions">
             <button class="secondary-action" type="button" id="cancelCode">Cancel</button>
-            <button class="primary-action" type="submit">Open route</button>
+            <button class="primary-action" type="submit" id="codeSubmit">Open route</button>
           </div>
         </form>
       </div>
@@ -1412,6 +1647,15 @@
       selectedDriver: null,
       route: null,
       selectedRider: null,
+      codeMode: "driver",
+      adminCode: "",
+      admin: null,
+      adminDraftStops: [],
+      adminDeletedStopIds: [],
+      adminSelectedStopId: null,
+      adminMessage: "",
+      adminError: "",
+      adminLoading: false,
       loading: true,
       error: "",
     };
@@ -1425,6 +1669,7 @@
     const driverCode = document.querySelector("#driverCode");
     const modalDriver = document.querySelector("#modalDriver");
     const codeError = document.querySelector("#codeError");
+    const codeSubmit = document.querySelector("#codeSubmit");
 
     const escapeHtml = (value) => String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -1597,6 +1842,231 @@
         </a>`;
     }
 
+    function cloneStops(stops = []) {
+      return stops.map((stop) => ({ ...stop }));
+    }
+
+    function adminDrivers() {
+      return state.admin?.drivers || [];
+    }
+
+    function adminStops() {
+      return state.adminDraftStops || [];
+    }
+
+    function adminStopsForDriver(slug) {
+      return adminStops()
+        .filter((stop) => stop.driverSlug === slug)
+        .sort((a, b) => Number(a.stopOrder || 0) - Number(b.stopOrder || 0) || a.name.localeCompare(b.name));
+    }
+
+    function adminOriginalStopMap() {
+      return new Map((state.admin?.stops || []).map((stop) => [stop.id, stop]));
+    }
+
+    function adminComparableStop(stop) {
+      return {
+        id: String(stop.id || ""),
+        driverSlug: stop.driverSlug || "",
+        stopOrder: Number(stop.stopOrder || 0),
+        name: stop.name || "",
+        phone: stop.phone || "",
+        address: stop.address || "",
+        area: stop.area || "",
+        pickupTime: stop.pickupTime || "",
+        readyBy: stop.readyBy || "",
+        routeLabel: stop.routeLabel || "",
+        notes: stop.notes || "",
+      };
+    }
+
+    function adminChangedCount() {
+      const original = adminOriginalStopMap();
+      let changed = state.adminDeletedStopIds.length;
+      adminStops().forEach((stop) => {
+        if (String(stop.id || "").startsWith("temp-")) {
+          changed += 1;
+          return;
+        }
+        const before = original.get(stop.id);
+        if (!before || JSON.stringify(adminComparableStop(before)) !== JSON.stringify(adminComparableStop(stop))) {
+          changed += 1;
+        }
+      });
+      return changed;
+    }
+
+    function normalizeAdminDraftStops() {
+      const byDriver = new Map();
+      adminStops().forEach((stop) => {
+        const list = byDriver.get(stop.driverSlug) || [];
+        list.push(stop);
+        byDriver.set(stop.driverSlug, list);
+      });
+
+      byDriver.forEach((list) => {
+        list
+          .sort((a, b) => Number(a.stopOrder || 0) - Number(b.stopOrder || 0) || a.name.localeCompare(b.name))
+          .forEach((stop, index) => {
+            stop.stopOrder = index + 1;
+          });
+      });
+    }
+
+    function adminDriverOptionList(selectedSlug) {
+      return adminDrivers().map((driver) => `
+        <option value="${escapeHtml(driver.slug)}" ${driver.slug === selectedSlug ? "selected" : ""}>${escapeHtml(driver.displayName)}</option>
+      `).join("");
+    }
+
+    function openAdminEditor(stopId = "new") {
+      state.adminSelectedStopId = stopId;
+      state.adminError = "";
+      state.adminMessage = "";
+      state.view = "adminEdit";
+      render();
+    }
+
+    function adminSelectedStop() {
+      if (state.adminSelectedStopId === "new") {
+        return {
+          id: "",
+          driverSlug: adminDrivers()[0]?.slug || "",
+          stopOrder: 1,
+          name: "",
+          phone: "",
+          address: "",
+          area: "",
+          pickupTime: "",
+          readyBy: "",
+          routeLabel: "",
+          notes: "",
+        };
+      }
+
+      return adminStops().find((stop) => stop.id === state.adminSelectedStopId);
+    }
+
+    function saveAdminDraftFromForm(form) {
+      const formData = new FormData(form);
+      const stop = {
+        id: formData.get("id") || `temp-${Date.now()}`,
+        driverSlug: String(formData.get("driverSlug") || ""),
+        stopOrder: Number(formData.get("stopOrder") || 1),
+        name: String(formData.get("name") || "").trim(),
+        phone: String(formData.get("phone") || "").trim(),
+        address: String(formData.get("address") || "").trim(),
+        area: String(formData.get("area") || "").trim(),
+        pickupTime: String(formData.get("pickupTime") || "").trim(),
+        readyBy: String(formData.get("readyBy") || "").trim(),
+        routeLabel: String(formData.get("routeLabel") || "").trim(),
+        notes: String(formData.get("notes") || "").trim(),
+      };
+
+      if (!stop.name || !stop.address || !stop.driverSlug) {
+        state.adminError = "Name, address, and driver are required.";
+        render();
+        return;
+      }
+
+      const index = state.adminDraftStops.findIndex((item) => item.id === stop.id);
+      if (index >= 0) state.adminDraftStops[index] = stop;
+      else state.adminDraftStops.push(stop);
+
+      normalizeAdminDraftStops();
+      state.adminSelectedStopId = null;
+      state.adminMessage = `${stop.name} is ready to publish.`;
+      state.adminError = "";
+      state.view = "admin";
+      render();
+    }
+
+    function deleteAdminDraftStop(stopId) {
+      const stop = adminStops().find((item) => item.id === stopId);
+      if (!stop) return;
+
+      state.adminDraftStops = adminStops().filter((item) => item.id !== stopId);
+      if (!String(stopId).startsWith("temp-")) {
+        state.adminDeletedStopIds.push(stopId);
+      }
+      normalizeAdminDraftStops();
+      state.adminMessage = `${stop.name} will be removed when you publish.`;
+      state.adminError = "";
+      render();
+    }
+
+    async function loadAdminSnapshot(adminCode = state.adminCode) {
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const snapshot = await rpc("ride_admin_snapshot", {
+          p_admin_code: adminCode,
+          p_plan_date: PLAN_DATE,
+        });
+
+        if (!snapshot?.ok) {
+          throw new Error(snapshot?.error || "invalid_admin_code");
+        }
+
+        state.adminCode = adminCode;
+        state.admin = snapshot;
+        state.adminDraftStops = cloneStops(snapshot.stops);
+        state.adminDeletedStopIds = [];
+        state.adminSelectedStopId = null;
+        state.adminMessage = "";
+        state.view = "admin";
+        closeCodeModal();
+      } catch (error) {
+        state.adminError = error.message === "invalid_admin_code" ? "Admin code did not match." : "Admin could not open.";
+        if (state.codeMode === "admin" && codeModal.classList.contains("open")) {
+          codeError.textContent = state.adminError;
+          codeError.hidden = false;
+        }
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
+    async function publishAdminDraft() {
+      if (!state.adminCode) return;
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const published = await rpc("ride_admin_publish_plan", {
+          p_admin_code: state.adminCode,
+          p_plan_date: PLAN_DATE,
+          p_stops: adminStops().map((stop) => ({
+            ...stop,
+            id: String(stop.id || "").startsWith("temp-") ? null : stop.id,
+          })),
+          p_deleted_stop_ids: state.adminDeletedStopIds,
+        });
+
+        if (!published?.ok) {
+          throw new Error(published?.error || "publish_failed");
+        }
+
+        state.admin = published;
+        state.adminDraftStops = cloneStops(published.stops);
+        state.adminDeletedStopIds = [];
+        state.adminSelectedStopId = null;
+        state.adminMessage = "Route changes published.";
+        state.drivers = await rpc("ride_driver_directory", { p_plan_date: PLAN_DATE });
+      } catch (error) {
+        state.adminError = "Could not publish changes.";
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
     function setView(view) {
       state.view = view;
       state.selectedRider = null;
@@ -1625,8 +2095,9 @@
 
     function setActiveNav() {
       const routeScreen = state.view === "rides" || state.view === "detail";
-      bottomNav.hidden = routeScreen;
-      screen.classList.toggle("full-bottom", routeScreen);
+      const adminScreen = state.view === "admin" || state.view === "adminEdit";
+      bottomNav.hidden = routeScreen || adminScreen;
+      screen.classList.toggle("full-bottom", routeScreen || adminScreen);
       homeNav.classList.toggle("active", state.view === "home" || state.view === "driverHome" || routeScreen);
       profileNav.classList.toggle("active", state.view === "profile");
     }
@@ -1635,9 +2106,21 @@
       return `
         <div class="stack">
           <section class="intro-block" aria-label="Sunday ride dashboard">
-            <p class="eyebrow">Today</p>
-            <h1>Sunday Ride Plan</h1>
-            <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
+            <div class="home-header-row">
+              <div>
+                <p class="eyebrow">Today</p>
+                <h1>Sunday Ride Plan</h1>
+                <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
+              </div>
+              <button class="admin-entry-button" type="button" data-action="admin" aria-label="Open admin ride control">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M4 7h16M7 12h10M10 17h4" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/>
+                  <circle cx="8" cy="7" r="2.1" fill="currentColor"/>
+                  <circle cx="15" cy="12" r="2.1" fill="currentColor"/>
+                  <circle cx="12" cy="17" r="2.1" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
             ${homeArt()}
           </section>
 
@@ -1672,6 +2155,171 @@
           ${state.loading ? "" : profileDestinationCard()}
           ${state.error ? `<section class="empty-card"><p class="error">${escapeHtml(state.error)}</p></section>` : ""}
         </div>`;
+    }
+
+    function adminRiderCard(stop) {
+      return `
+        <article class="admin-rider-card">
+          <div class="admin-rider-row">
+            <div class="admin-rider-copy">
+              <strong>${escapeHtml(stop.stopOrder)}. ${escapeHtml(stop.name)}</strong>
+              <span>${escapeHtml(stop.address)}</span>
+              <span>${escapeHtml([stop.pickupTime, stop.readyBy ? `Ready ${stop.readyBy}` : "", stop.phone].filter(Boolean).join(" · ") || "No time listed")}</span>
+            </div>
+            <span class="pill">${escapeHtml(stop.routeLabel || "Route")}</span>
+          </div>
+          <div class="admin-actions">
+            <button class="admin-chip-button" type="button" data-admin-edit="${escapeHtml(stop.id)}">Edit</button>
+            <a class="admin-chip-button" href="${googleMaps(stop.address)}" target="_blank" rel="noreferrer">Map</a>
+            ${stop.phone ? `<a class="admin-chip-button" href="${telHref(stop.phone)}">Call</a>` : ""}
+            <button class="admin-delete-button" type="button" data-admin-delete="${escapeHtml(stop.id)}">Remove</button>
+          </div>
+        </article>`;
+    }
+
+    function adminRouteCard(driver) {
+      const stops = adminStopsForDriver(driver.slug);
+      return `
+        <section class="admin-route-card">
+          <div class="admin-card-row">
+            <div class="admin-card-row">
+              <span class="avatar small">${escapeHtml(driver.initials)}</span>
+              <span class="admin-route-copy">
+                <strong>${escapeHtml(driver.displayName)}</strong>
+                <span>${escapeHtml(stops.length ? riderNameList(stops) : "No pickups assigned")}</span>
+              </span>
+            </div>
+            <span class="pill">${escapeHtml(pickupCountLabel(stops.length))}</span>
+          </div>
+          <div class="admin-rider-list">
+            ${stops.length ? stops.map(adminRiderCard).join("") : `<section class="empty-card"><p>No riders assigned.</p></section>`}
+          </div>
+        </section>`;
+    }
+
+    function adminView() {
+      if (state.adminLoading && !state.admin) {
+        return `<div class="stack"><section class="empty-card"><p>Loading admin...</p></section></div>`;
+      }
+
+      const drivers = adminDrivers();
+      const changed = adminChangedCount();
+      return `
+        <div class="stack">
+          <section class="intro-block compact">
+            <div class="admin-top-row">
+              <div>
+                <p class="eyebrow">Admin</p>
+                <h1>Ride Control</h1>
+                <p>Sunday · UH Hilton</p>
+              </div>
+              <button class="admin-icon-button" type="button" data-action="home" aria-label="Close admin">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+          <section class="admin-tabs" aria-label="Admin sections">
+            <span class="admin-tab active">Routes</span>
+            <span class="admin-tab">Riders</span>
+            <span class="admin-tab">Changes</span>
+          </section>
+
+          <section class="admin-stats" aria-label="Ride control stats">
+            <div class="admin-stat"><strong>${drivers.length}</strong><span>drivers</span></div>
+            <div class="admin-stat"><strong>${adminStops().length}</strong><span>assigned</span></div>
+            <div class="admin-stat"><strong>${changed}</strong><span>changes</span></div>
+          </section>
+
+          ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+          <button class="primary-action" type="button" data-action="adminNew">Add rider</button>
+
+          <section class="admin-route-list" aria-label="Driver routes">
+            ${drivers.map(adminRouteCard).join("")}
+          </section>
+
+          <button class="primary-action" type="button" data-action="adminPublish">${state.adminLoading ? "Publishing..." : `Publish route changes${changed ? ` (${changed})` : ""}`}</button>
+        </div>`;
+    }
+
+    function adminEditView() {
+      const stop = adminSelectedStop();
+      if (!stop) {
+        return `
+          <div class="stack">
+            <button class="back-button" type="button" data-action="adminBack" aria-label="Back">&larr;</button>
+            <section class="empty-card"><p>Rider not found.</p></section>
+          </div>`;
+      }
+
+      return `
+        <form class="stack" data-admin-form="rider">
+          <section class="intro-block compact">
+            <div class="admin-top-row">
+              <div>
+                <p class="eyebrow">${stop.id ? "Edit rider" : "Add rider"}</p>
+                <h1>${stop.id ? escapeHtml(stop.name) : "New rider"}</h1>
+                <p>Save as draft, then publish</p>
+              </div>
+              <button class="admin-icon-button" type="button" data-action="adminBack" aria-label="Back to admin">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+          <section class="admin-form-card">
+            <input type="hidden" name="id" value="${escapeHtml(stop.id || "")}">
+            <label>
+              <span>Driver</span>
+              <select name="driverSlug" required>${adminDriverOptionList(stop.driverSlug)}</select>
+            </label>
+            <label>
+              <span>Stop order</span>
+              <input name="stopOrder" inputmode="numeric" value="${escapeHtml(stop.stopOrder || 1)}">
+            </label>
+            <label>
+              <span>Rider name</span>
+              <input name="name" value="${escapeHtml(stop.name || "")}" required>
+            </label>
+            <label>
+              <span>Phone</span>
+              <input name="phone" value="${escapeHtml(stop.phone || "")}" inputmode="tel">
+            </label>
+            <label>
+              <span>Pickup address</span>
+              <input name="address" value="${escapeHtml(stop.address || "")}" required>
+            </label>
+            <label>
+              <span>Area</span>
+              <input name="area" value="${escapeHtml(stop.area || "")}">
+            </label>
+            <label>
+              <span>Pickup time</span>
+              <input name="pickupTime" value="${escapeHtml(stop.pickupTime || "")}" placeholder="12:25 PM">
+            </label>
+            <label>
+              <span>Ready by</span>
+              <input name="readyBy" value="${escapeHtml(stop.readyBy || "")}" placeholder="12:20 PM">
+            </label>
+            <label>
+              <span>Route label</span>
+              <input name="routeLabel" value="${escapeHtml(stop.routeLabel || "")}" placeholder="Ride 1">
+            </label>
+            <label>
+              <span>Driver notes</span>
+              <textarea name="notes">${escapeHtml(stop.notes || "")}</textarea>
+            </label>
+          </section>
+
+          <div class="admin-form-actions">
+            <button class="secondary-action" type="button" data-action="adminBack">Cancel</button>
+            <button class="primary-action" type="submit">Save draft</button>
+          </div>
+        </form>`;
     }
 
     function riderNameList(riders) {
@@ -1877,6 +2525,8 @@
       else if (state.view === "driverHome" && state.route) screen.innerHTML = driverHomeView();
       else if (state.view === "rides" && state.route) screen.innerHTML = ridesView();
       else if (state.view === "detail" && state.selectedRider) screen.innerHTML = detailView();
+      else if (state.view === "admin") screen.innerHTML = adminView();
+      else if (state.view === "adminEdit") screen.innerHTML = adminEditView();
       else screen.innerHTML = homeView();
       syncPickedChips();
     }
@@ -1889,8 +2539,23 @@
     }
 
     async function openCodeModal(slug) {
+      state.codeMode = "driver";
       state.selectedDriver = state.drivers.find((driver) => driver.slug === slug);
+      document.querySelector("#modalTitle").textContent = "Passcode";
       modalDriver.textContent = state.selectedDriver?.display_name || "";
+      codeSubmit.textContent = "Open route";
+      codeError.hidden = true;
+      codeError.textContent = "";
+      driverCode.value = "";
+      codeModal.classList.add("open");
+    }
+
+    function openAdminCodeModal() {
+      state.codeMode = "admin";
+      state.selectedDriver = null;
+      document.querySelector("#modalTitle").textContent = "Admin passcode";
+      modalDriver.textContent = "Ride Control";
+      codeSubmit.textContent = "Open admin";
       codeError.hidden = true;
       codeError.textContent = "";
       driverCode.value = "";
@@ -1905,6 +2570,11 @@
 
     async function submitCode(event) {
       event.preventDefault();
+      if (state.codeMode === "admin") {
+        await loadAdminSnapshot(driverCode.value);
+        return;
+      }
+
       if (!state.selectedDriver) return;
       codeError.hidden = true;
       codeError.textContent = "";
@@ -1938,6 +2608,27 @@
       if (action === "profile") openProfile();
       if (action === "driverHome") setDriverHome();
       if (action === "rides") setRidesView();
+      if (action === "admin") openAdminCodeModal();
+      if (action === "adminBack") {
+        state.adminError = "";
+        state.adminSelectedStopId = null;
+        state.view = "admin";
+        render();
+      }
+      if (action === "adminNew") openAdminEditor("new");
+      if (action === "adminPublish") publishAdminDraft();
+
+      const adminEditButton = event.target.closest("[data-admin-edit]");
+      if (adminEditButton) openAdminEditor(adminEditButton.dataset.adminEdit);
+
+      const adminDeleteButton = event.target.closest("[data-admin-delete]");
+      if (adminDeleteButton) {
+        const stopId = adminDeleteButton.dataset.adminDelete;
+        const stop = adminStops().find((item) => item.id === stopId);
+        if (stop && confirm(`Remove ${stop.name} from the ride plan?`)) {
+          deleteAdminDraftStop(stopId);
+        }
+      }
 
       const driverButton = event.target.closest("[data-driver]");
       if (driverButton) openCodeModal(driverButton.dataset.driver);
@@ -1957,6 +2648,13 @@
         const stopOrder = markButton.dataset.mark;
         markPickedAndReturn(stopOrder);
       }
+    });
+
+    screen.addEventListener("submit", (event) => {
+      const adminForm = event.target.closest("[data-admin-form='rider']");
+      if (!adminForm) return;
+      event.preventDefault();
+      saveAdminDraftFromForm(adminForm);
     });
 
     homeNav.addEventListener("click", () => {

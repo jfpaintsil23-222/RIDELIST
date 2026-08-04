@@ -1,0 +1,107 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
+const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
+const PLAN_DATE = "2026-08-02";
+const ADMIN_CODE = process.env.RIDES_ADMIN_CODE;
+
+if (!ADMIN_CODE) {
+  throw new Error("RIDES_ADMIN_CODE is required for admin RPC tests.");
+}
+
+async function rpc(name, body) {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY,
+      authorization: `Bearer ${SUPABASE_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await response.text();
+  assert.equal(response.ok, true, `${name} failed: ${response.status} ${text}`);
+  return JSON.parse(text);
+}
+
+test("admin snapshot rejects wrong passcodes and accepts the admin passcode", async () => {
+  const rejected = await rpc("ride_admin_snapshot", {
+    p_admin_code: "wrong-code",
+    p_plan_date: PLAN_DATE,
+  });
+
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error, "invalid_admin_code");
+
+  const snapshot = await rpc("ride_admin_snapshot", {
+    p_admin_code: ADMIN_CODE,
+    p_plan_date: PLAN_DATE,
+  });
+
+  assert.equal(snapshot.ok, true);
+  assert.equal(snapshot.plan.date, PLAN_DATE);
+  assert.ok(snapshot.drivers.some((driver) => driver.slug === "dawson"));
+  assert.ok(snapshot.stops.some((stop) => stop.name === "Tinnie" && stop.driverSlug === "dawson"));
+});
+
+test("admin can add, move, update, and delete a rider through publish", async () => {
+  const testName = `TEST Admin Rider ${Date.now()}`;
+
+  const added = await rpc("ride_admin_publish_plan", {
+    p_admin_code: ADMIN_CODE,
+    p_plan_date: PLAN_DATE,
+    p_stops: [
+      {
+        id: null,
+        driverSlug: "naa",
+        stopOrder: 1,
+        name: testName,
+        phone: "(555) 010-0000",
+        address: "100 Test Church Rd, Houston, TX",
+        area: "Test Area",
+        pickupTime: "1:23 PM",
+        readyBy: "1:18 PM",
+        routeLabel: "Test",
+        notes: "Temporary automated admin test rider.",
+      },
+    ],
+    p_deleted_stop_ids: [],
+  });
+
+  assert.equal(added.ok, true);
+  const created = added.stops.find((stop) => stop.name === testName);
+  assert.ok(created?.id, "temporary rider was created");
+  assert.equal(created.driverSlug, "naa");
+
+  const moved = await rpc("ride_admin_publish_plan", {
+    p_admin_code: ADMIN_CODE,
+    p_plan_date: PLAN_DATE,
+    p_stops: [
+      {
+        ...created,
+        driverSlug: "dawson",
+        stopOrder: 99,
+        phone: "(555) 010-1111",
+        notes: "Temporary automated admin test rider moved.",
+      },
+    ],
+    p_deleted_stop_ids: [],
+  });
+
+  assert.equal(moved.ok, true);
+  const updated = moved.stops.find((stop) => stop.id === created.id);
+  assert.equal(updated.driverSlug, "dawson");
+  assert.equal(updated.phone, "(555) 010-1111");
+
+  const deleted = await rpc("ride_admin_publish_plan", {
+    p_admin_code: ADMIN_CODE,
+    p_plan_date: PLAN_DATE,
+    p_stops: [],
+    p_deleted_stop_ids: [created.id],
+  });
+
+  assert.equal(deleted.ok, true);
+  assert.equal(deleted.stops.some((stop) => stop.id === created.id), false);
+});

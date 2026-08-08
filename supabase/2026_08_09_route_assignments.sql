@@ -23,7 +23,7 @@ with plan_row as (
 ), driver_seed(slug, display_name, full_name, initials, sort_order, route_notes) as (
   values
     ('danny', 'Danny', 'Danny', 'DN', 1, 'Pick up Faith at 8:45 AM and Precious at 9:00 AM. Estimated arrival at UH Hilton: 9:45-9:50 AM.'),
-    ('john-mark', 'John Mark', 'John Mark', 'JM', 2, 'Far north morning route, then second pickup at Alina and Christopher L by 12:00 PM. Target return: by 12:45 PM.'),
+    ('john-mark', 'John Mark', 'John Mark', 'JM', 2, 'Far north morning route, then second pickup at A''lena and Christopher L by 12:00 PM. Target return: by 12:45 PM.'),
     ('annie', 'Annie', 'Annie', 'AK', 3, 'Nicholas, Kadie, Vera, and Zay route. Estimated route from first pickup to UH Hilton: about 35 minutes.'),
     ('dawson', 'Dawson', 'Dawson', 'DW', 4, 'Two-seat route. Arrive to Sherese by 11:45 AM and Amanda by 12:00 PM.'),
     ('precious', 'Precious', 'Precious', 'PR', 5, 'Pick up DaSilva and Emmanuel Mitch by about 10:30 AM, then Christopher R.'),
@@ -71,8 +71,8 @@ with plan_row as (
     ('danny', 2, 'Precious', '', '5300 Berkley Knoll Circle, Richmond, TX 77407', 'Richmond', '9:00 AM', '8:55 AM', 'Morning route', 'Precious the rider, different from Precious the driver. Estimated arrival at UH Hilton: 9:45-9:50 AM.'),
     ('john-mark', 1, 'Siah', '(301) 543-7407', '2304 Sam Houston Ave, Huntsville, TX', 'Huntsville', '9:10 AM', '9:05 AM', 'Far route', 'First far pickup. John Mark should be back by 12:45 PM.'),
     ('john-mark', 2, 'Nehemiah', '(346) 280-2774', '24157 Wilde Dr, Magnolia, TX', 'Magnolia', '10:35 AM', '10:30 AM', 'Far route', 'Second far pickup before heading toward Houston.'),
-    ('john-mark', 3, 'Alina', '(713) 902-2393', '9425 Ashville Dr, Houston, TX', 'South Houston', '12:00 PM', '11:55 AM', 'Second pickup', 'John Mark should arrive to Alina and Christopher L by 12:00 PM.'),
-    ('john-mark', 4, 'Christopher L', '(832) 942-1381', '9425 Ashville Dr, Houston, TX', 'South Houston', '12:00 PM', '11:55 AM', 'Second pickup', 'Same pickup stop as Alina.'),
+    ('john-mark', 3, 'A''lena', '(713) 902-2393', '9425 Ashville Dr, Houston, TX', 'South Houston', '12:00 PM', '11:55 AM', 'Second pickup', 'John Mark should arrive to A''lena and Christopher L by 12:00 PM.'),
+    ('john-mark', 4, 'Christopher L', '(832) 942-1381', '9425 Ashville Dr, Houston, TX', 'South Houston', '12:00 PM', '11:55 AM', 'Second pickup', 'Same pickup stop as A''lena.'),
     ('annie', 1, 'Nicholas Montiel', '(832) 794-2032', '11525 Burdine St, Houston, TX 77035', 'Westbury', '11:15 AM', '11:10 AM', 'Annie route', 'Annie gets Nicholas Montiel.'),
     ('annie', 2, 'Kadie', '(281) 389-5846', '7900 Cambridge St, Houston, TX 77054', 'Med Center', '11:30 AM', '11:25 AM', 'Annie route', ''),
     ('annie', 3, 'Vera', '8325178929', '4971 Martin Luther King Blvd, Houston, TX 77021', 'Southeast Houston', '11:40 AM', '11:35 AM', 'Annie route', ''),

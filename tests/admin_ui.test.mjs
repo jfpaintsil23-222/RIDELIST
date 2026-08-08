@@ -58,6 +58,8 @@ async function loadApp() {
       state,
       adminView,
       adminEditView,
+      driverProfileCard,
+      driverRouteSummary,
       adminChangedCount,
       adminChangeList: typeof adminChangeList === "function" ? adminChangeList : undefined,
     };
@@ -75,6 +77,35 @@ test("app contains admin ride control entry points", async () => {
   assert.match(html, /const PLAN_DATE = "2026-08-09"/);
   assert.match(html, /function adminView/);
   assert.match(html, /function adminEditView/);
+});
+
+test("driver profile cards show route areas instead of rider names", async () => {
+  const app = await loadApp();
+
+  const dannyHtml = app.driverProfileCard({
+    slug: "danny",
+    display_name: "Danny",
+    initials: "DN",
+    pickup_count: 2,
+    subtitle: "Faith and Precious",
+  });
+  const preciousHtml = app.driverProfileCard({
+    slug: "precious",
+    display_name: "Precious",
+    initials: "PR",
+    pickup_count: 3,
+    subtitle: "DaSilva, Emmanuel Mitch, and Christopher R",
+  });
+  const dawsonSummary = app.driverRouteSummary({
+    slug: "dawson",
+    subtitle: "Amanda and Sherese",
+  });
+
+  assert.match(dannyHtml, /Richmond Route/);
+  assert.doesNotMatch(dannyHtml, /Faith and Precious/);
+  assert.match(preciousHtml, /South Houston Route/);
+  assert.doesNotMatch(preciousHtml, /DaSilva, Emmanuel Mitch, and Christopher R/);
+  assert.equal(dawsonSummary.routeLabel, "West Houston Route");
 });
 
 test("admin tabs render functional riders search and changes review screens", async () => {

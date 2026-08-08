@@ -1854,6 +1854,8 @@
       "john-mark": { src: "assets/route-map-2.png", position: "center 50%", scale: "1.02" },
       "annie": { src: "assets/route-map-3.png", position: "center 50%", scale: "1.02" },
       "dawson": { src: "assets/route-map-1.png", position: "center 38%", scale: "1.10" },
+      "danny": { src: "assets/route-map-2.png", position: "center 50%", scale: "1.02" },
+      "precious": { src: "assets/route-map-3.png", position: "center 42%", scale: "1.06" },
       "naa": { src: "assets/route-map-2.png", position: "center 62%", scale: "1.09" },
       "blue": { src: "assets/route-map-3.png", position: "center 36%", scale: "1.08" },
       "default": { src: "assets/route-map-1.png", position: "center 50%", scale: "1.02" },
@@ -1866,20 +1868,30 @@
 
     const DRIVER_ROUTE_SUMMARIES = {
       "joojo": {
-        routeLabel: "West / North Houston Route",
+        routeLabel: "Cypress / North Houston Route",
         timeLabel: "1 hr 22 min to UH Hilton",
       },
       "john-mark": {
-        routeLabel: "Huntsville Route",
+        routeLabel: "Huntsville / Magnolia Route",
       },
       "annie": {
         routeLabel: "Southwest Houston Route",
         timeLabel: "35 min to UH Hilton",
       },
       "dawson": {
-        routeLabel: "Neighborhood Route",
+        routeLabel: "West Houston Route",
         startLabel: "Starts 11:52 AM",
         timeLabel: "38 min to UH Hilton",
+      },
+      "danny": {
+        routeLabel: "Richmond Route",
+        startLabel: "Starts 8:45 AM",
+        timeLabel: "1 hr to UH Hilton",
+      },
+      "precious": {
+        routeLabel: "South Houston Route",
+        startLabel: "Starts 10:00 AM",
+        timeLabel: "Route time pending",
       },
       "naa": {
         routeLabel: "No pickups assigned",
@@ -1922,8 +1934,8 @@
 
     function driverRouteSummary(driver) {
       return DRIVER_ROUTE_SUMMARIES[driver.slug] || {
-        routeLabel: driver.subtitle || "Assigned Route",
-        timeLabel: "Route time pending",
+        routeLabel: driver.route_label || driver.routeLabel || "Assigned Route",
+        timeLabel: driver.time_label || driver.timeLabel || "Route time pending",
       };
     }
 

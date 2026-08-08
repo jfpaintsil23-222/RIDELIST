@@ -78,7 +78,7 @@ test("August 9 route assignments match the approved Sunday plan", async () => {
   assert.deepEqual(byDriver["john-mark"], [
     "Siah|9:10 AM",
     "Nehemiah|10:35 AM",
-    "Alina|12:00 PM",
+    "A'lena|12:00 PM",
     "Christopher L|12:00 PM",
   ]);
   assert.deepEqual(byDriver.annie, [

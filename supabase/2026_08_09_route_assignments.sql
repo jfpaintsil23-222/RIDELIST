@@ -24,7 +24,7 @@ with plan_row as (
   values
     ('danny', 'Danny', 'Danny', 'DN', 1, 'Pick up Faith at 8:45 AM and Zoe.'),
     ('john-mark', 'John Mark', 'John Mark', 'JM', 2, 'Huntsville route: Siah, nadia, and Nehemiah. Target return: by 12:45 PM.'),
-    ('dq', 'DQ', 'DQ', 'DQ', 3, 'South Houston route: A''lena and Christopher L at 12:00 PM.'),
+    ('dq', 'DQ', 'DQ', 'DQ', 3, 'South Houston route: A''lena, Christopher L, and Vicky.'),
     ('annie', 'Annie', 'Annie', 'AK', 4, 'Nicholas, Vera, and Zay route. Estimated route from first pickup to UH Hilton: about 35 minutes.'),
     ('dawson', 'Dawson', 'Dawson', 'DW', 5, 'Two-seat route. Arrive to Sherese by 11:45 AM and Amanda by 12:00 PM.'),
     ('precious', 'Precious', 'Precious', 'PR', 6, 'Pick up DaSilva and Emmanuel Mitch by about 10:30 AM, then Christopher R.'),
@@ -75,6 +75,7 @@ with plan_row as (
     ('john-mark', 3, 'Nehemiah', '(346) 280-2774', '24157 Wilde Dr, Magnolia, TX', 'Magnolia', '10:35 AM', '10:30 AM', 'Far route', 'Second far pickup before heading toward Houston.'),
     ('dq', 1, 'A''lena', '(713) 902-2393', '9425 Ashville Dr, Houston, TX', 'South Houston', '12:00 PM', '11:55 AM', 'DQ route', 'DQ pickup at the same address as Christopher L.'),
     ('dq', 2, 'Christopher L', '(832) 942-1381', '9425 Ashville Dr, Houston, TX', 'South Houston', '12:00 PM', '11:55 AM', 'DQ route', 'Same pickup stop as A''lena.'),
+    ('dq', 3, 'Vicky', '+1 (934) 233-4260', '2111 Holly Hall St, Houston, TX 77054', 'Med Center', '12:15 PM', '12:10 PM', 'DQ route', 'Added to DQ route with updated Holly Hall address.'),
     ('annie', 1, 'Nicholas Montiel', '(832) 794-2032', '11525 Burdine St, Houston, TX 77035', 'Westbury', '11:15 AM', '11:10 AM', 'Annie route', 'Annie gets Nicholas Montiel.'),
     ('annie', 2, 'Vera', '8325178929', '4971 Martin Luther King Blvd, Houston, TX 77021', 'Southeast Houston', '11:40 AM', '11:35 AM', 'Annie route', ''),
     ('annie', 3, 'Zay', '7134473139', '5050 Sunflower St, Houston, TX 77033', 'South Houston', '11:50 AM', '11:45 AM', 'Annie route', ''),

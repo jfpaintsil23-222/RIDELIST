@@ -80,23 +80,28 @@ test("August 9 route assignments match the approved Sunday plan", async () => {
     "Nehemiah|10:35 AM",
   ]);
   assert.deepEqual(byDriver.dq, [
-    "A'lena|12:00 PM",
-    "Christopher L|12:00 PM",
+    "A'lena|11:30 AM",
+    "Christopher L|11:30 AM",
   ]);
   assert.deepEqual(byDriver.annie, [
     "Nicholas Montiel|11:15 AM",
     "Vera|11:40 AM",
     "Zay|11:50 AM",
+    "Amanda|12:00 PM",
   ]);
   assert.equal(
     snapshot.stops.find((stop) => stop.name === "Zay")?.address,
     "5050 Sunflower St, Houston, TX 77033",
   );
-  assert.deepEqual(byDriver.dawson, ["Sherese|11:45 AM", "Amanda|12:00 PM"]);
+  assert.equal(
+    snapshot.stops.find((stop) => stop.name === "Amanda")?.driverSlug,
+    "annie",
+  );
+  assert.deepEqual(byDriver.dawson, ["Sherese|11:45 AM"]);
   assert.deepEqual(byDriver.precious, [
-    "DaSilva|10:00 AM",
-    "Emmanuel Mitch|10:25 AM",
-    "Christopher R|10:35 AM",
+    "DaSilva|10:50 AM",
+    "Emmanuel Mitch|11:15 AM",
+    "Christopher R|11:25 AM",
   ]);
   assert.deepEqual(byDriver.joojo, [
     "Kayla Williams|",

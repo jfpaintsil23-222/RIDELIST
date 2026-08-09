@@ -77,20 +77,12 @@ test("August 9 route assignments match the approved Sunday plan", async () => {
   assert.deepEqual(byDriver.danny, ["Faith|8:45 AM", "Zoe|"]);
   assert.deepEqual(byDriver["john-mark"], [
     "Siah|9:10 AM",
-    "nadia|9:25 AM",
     "Nehemiah|10:35 AM",
   ]);
   assert.deepEqual(byDriver.dq, [
     "A'lena|12:00 PM",
     "Christopher L|12:00 PM",
-    "Vicky|12:15 PM",
   ]);
-  assert.deepEqual(
-    snapshot.stops
-      .filter((stop) => stop.name === "Vicky" && stop.driverSlug === "dq")
-      .map((stop) => [stop.phone, stop.address]),
-    [["+1 (934) 233-4260", "2111 Holly Hall St, Houston, TX 77054"]],
-  );
   assert.deepEqual(byDriver.annie, [
     "Nicholas Montiel|11:15 AM",
     "Vera|11:40 AM",
@@ -110,7 +102,18 @@ test("August 9 route assignments match the approved Sunday plan", async () => {
     "Kayla Williams|",
     "Simi|11:15 AM",
     "Simi's brother|11:15 AM",
+    "Elmer|12:00 PM",
+    "Vicky|12:15 PM",
   ]);
+  assert.deepEqual(
+    snapshot.stops
+      .filter((stop) => ["Elmer", "Vicky"].includes(stop.name) && stop.driverSlug === "joojo")
+      .map((stop) => [stop.name, stop.phone, stop.address]),
+    [
+      ["Elmer", "737-864-5126", "1722 Rice Boulevard, Houston, TX"],
+      ["Vicky", "+1 (934) 233-4260", "2111 Holly Hall St, Houston, TX 77054"],
+    ],
+  );
 });
 
 test("admin can add, move, update, and delete a rider through publish", async () => {

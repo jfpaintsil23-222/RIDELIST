@@ -24,7 +24,7 @@ with plan_row as (
   values
     ('danny', 'Danny', 'Danny', 'DN', 1, 'Pick up Faith at 8:45 AM and Precious at 9:00 AM. Estimated arrival at UH Hilton: 9:45-9:50 AM.'),
     ('john-mark', 'John Mark', 'John Mark', 'JM', 2, 'Far north morning route, then second pickup at A''lena and Christopher L by 12:00 PM. Target return: by 12:45 PM.'),
-    ('annie', 'Annie', 'Annie', 'AK', 3, 'Nicholas, Kadie, Vera, and Zay route. Estimated route from first pickup to UH Hilton: about 35 minutes.'),
+    ('annie', 'Annie', 'Annie', 'AK', 3, 'Nicholas, Vera, and Zay route. Estimated route from first pickup to UH Hilton: about 35 minutes.'),
     ('dawson', 'Dawson', 'Dawson', 'DW', 4, 'Two-seat route. Arrive to Sherese by 11:45 AM and Amanda by 12:00 PM.'),
     ('precious', 'Precious', 'Precious', 'PR', 5, 'Pick up DaSilva and Emmanuel Mitch by about 10:30 AM, then Christopher R.'),
     ('joojo', 'Joojo', 'Joojo Paintsil', 'JP', 6, 'Nora at 11:00 AM, then Simi, Simi''s brother, and Daglyn. Target return: by 12:30 PM.')
@@ -74,9 +74,8 @@ with plan_row as (
     ('john-mark', 3, 'A''lena', '(713) 902-2393', '9425 Ashville Dr, Houston, TX', 'South Houston', '12:00 PM', '11:55 AM', 'Second pickup', 'John Mark should arrive to A''lena and Christopher L by 12:00 PM.'),
     ('john-mark', 4, 'Christopher L', '(832) 942-1381', '9425 Ashville Dr, Houston, TX', 'South Houston', '12:00 PM', '11:55 AM', 'Second pickup', 'Same pickup stop as A''lena.'),
     ('annie', 1, 'Nicholas Montiel', '(832) 794-2032', '11525 Burdine St, Houston, TX 77035', 'Westbury', '11:15 AM', '11:10 AM', 'Annie route', 'Annie gets Nicholas Montiel.'),
-    ('annie', 2, 'Kadie', '(281) 389-5846', '7900 Cambridge St, Houston, TX 77054', 'Med Center', '11:30 AM', '11:25 AM', 'Annie route', ''),
-    ('annie', 3, 'Vera', '8325178929', '4971 Martin Luther King Blvd, Houston, TX 77021', 'Southeast Houston', '11:40 AM', '11:35 AM', 'Annie route', ''),
-    ('annie', 4, 'Zay', '7134473139', '2906 Paige St, Houston, TX', 'Third Ward', '11:50 AM', '11:45 AM', 'Annie route', ''),
+    ('annie', 2, 'Vera', '8325178929', '4971 Martin Luther King Blvd, Houston, TX 77021', 'Southeast Houston', '11:40 AM', '11:35 AM', 'Annie route', ''),
+    ('annie', 3, 'Zay', '7134473139', '5050 Sunflower St, Houston, TX 77033', 'South Houston', '11:50 AM', '11:45 AM', 'Annie route', ''),
     ('dawson', 1, 'Sherese', '', '3416 Benfield Dr, Houston, TX', 'West Houston', '11:45 AM', '11:40 AM', 'Dawson route', 'Dawson has two seats.'),
     ('dawson', 2, 'Amanda', '', '9700 Leawood Blvd Apt 1004, Houston, TX', 'Southwest Houston', '12:00 PM', '11:55 AM', 'Dawson route', 'Dawson has two seats.'),
     ('precious', 1, 'DaSilva', '(928) 310-2377', '9796 Windwater Dr, Houston, TX', 'Southeast Houston', '10:00 AM', '9:55 AM', 'Precious route', 'Precious should pick up DaSilva and Emmanuel Mitch by about 10:30 AM.'),

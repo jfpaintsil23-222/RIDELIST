@@ -47,7 +47,7 @@ test("admin snapshot rejects wrong passcodes and accepts the admin passcode", as
     snapshot.drivers.map((driver) => driver.slug),
     ["danny", "john-mark", "annie", "dawson", "precious", "joojo"],
   );
-  assert.equal(snapshot.stops.length, 19);
+  assert.equal(snapshot.stops.length, 18);
 });
 
 test("admin snapshot includes protected PeopleData", async () => {
@@ -83,10 +83,13 @@ test("August 9 route assignments match the approved Sunday plan", async () => {
   ]);
   assert.deepEqual(byDriver.annie, [
     "Nicholas Montiel|11:15 AM",
-    "Kadie|11:30 AM",
     "Vera|11:40 AM",
     "Zay|11:50 AM",
   ]);
+  assert.equal(
+    snapshot.stops.find((stop) => stop.name === "Zay")?.address,
+    "5050 Sunflower St, Houston, TX 77033",
+  );
   assert.deepEqual(byDriver.dawson, ["Sherese|11:45 AM", "Amanda|12:00 PM"]);
   assert.deepEqual(byDriver.precious, [
     "DaSilva|10:00 AM",

@@ -100,12 +100,17 @@ test("driver profile cards show route areas instead of rider names", async () =>
     slug: "dawson",
     subtitle: "Amanda and Sherese",
   });
+  const dqSummary = app.driverRouteSummary({
+    slug: "dq",
+    subtitle: "A'lena and Christopher L",
+  });
 
   assert.match(dannyHtml, /Richmond Route/);
   assert.doesNotMatch(dannyHtml, /Faith and Precious/);
   assert.match(preciousHtml, /South Houston Route/);
   assert.doesNotMatch(preciousHtml, /DaSilva, Emmanuel Mitch, and Christopher R/);
   assert.equal(dawsonSummary.routeLabel, "West Houston Route");
+  assert.equal(dqSummary.routeLabel, "South Houston Route");
 });
 
 test("admin tabs render functional riders search and changes review screens", async () => {

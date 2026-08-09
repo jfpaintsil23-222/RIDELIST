@@ -42,10 +42,10 @@ test("admin snapshot rejects wrong passcodes and accepts the admin passcode", as
 
   assert.equal(snapshot.ok, true);
   assert.equal(snapshot.plan.date, PLAN_DATE);
-  assert.equal(snapshot.drivers.length, 6);
+  assert.equal(snapshot.drivers.length, 7);
   assert.deepEqual(
     snapshot.drivers.map((driver) => driver.slug),
-    ["danny", "john-mark", "annie", "dawson", "precious", "joojo"],
+    ["danny", "john-mark", "dq", "annie", "dawson", "precious", "joojo"],
   );
   assert.equal(snapshot.stops.length, 18);
 });
@@ -71,13 +71,16 @@ test("August 9 route assignments match the approved Sunday plan", async () => {
 
   const byDriver = Object.fromEntries(snapshot.drivers.map((driver) => [driver.slug, []]));
   for (const stop of snapshot.stops) {
-    byDriver[stop.driverSlug].push(`${stop.name}|${stop.pickupTime}`);
+    byDriver[stop.driverSlug].push(`${stop.name}|${stop.pickupTime || ""}`);
   }
 
-  assert.deepEqual(byDriver.danny, ["Faith|8:45 AM", "Precious|9:00 AM"]);
+  assert.deepEqual(byDriver.danny, ["Faith|8:45 AM", "Zoe|"]);
   assert.deepEqual(byDriver["john-mark"], [
     "Siah|9:10 AM",
+    "nadia|9:25 AM",
     "Nehemiah|10:35 AM",
+  ]);
+  assert.deepEqual(byDriver.dq, [
     "A'lena|12:00 PM",
     "Christopher L|12:00 PM",
   ]);
@@ -97,10 +100,9 @@ test("August 9 route assignments match the approved Sunday plan", async () => {
     "Christopher R|10:35 AM",
   ]);
   assert.deepEqual(byDriver.joojo, [
-    "Nora|11:00 AM",
+    "Kayla Williams|",
     "Simi|11:15 AM",
     "Simi's brother|11:15 AM",
-    "Daglyn|11:45 AM",
   ]);
 });
 

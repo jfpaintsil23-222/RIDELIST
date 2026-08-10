@@ -943,8 +943,16 @@
       grid-template-columns: 28px minmax(0, 1fr);
       gap: 10px;
       align-items: start;
+      width: 100%;
       padding: 13px 0;
       border-top: 1px solid var(--line);
+      border-right: 0;
+      border-bottom: 0;
+      border-left: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      letter-spacing: 0;
     }
 
     .driver-overview-row strong,
@@ -959,6 +967,30 @@
     .driver-overview-row span:last-child,
     .route-complete-card span {
       display: block;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 650;
+    }
+
+    .weather-toggle-row {
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      cursor: pointer;
+    }
+
+    .weather-chevron {
+      color: #6b7280;
+      font-size: 24px;
+      line-height: 1;
+      transform: rotate(90deg);
+    }
+
+    .weather-toggle-row[aria-expanded="true"] .weather-chevron {
+      transform: rotate(-90deg);
+    }
+
+    .weather-details {
+      margin: 0 0 15px 38px;
       color: var(--muted);
       font-size: 13px;
       line-height: 1.35;
@@ -2037,6 +2069,11 @@
     const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
     const FALLBACK_PLAN_DATE = "2026-08-09";
     const ADMIN_SESSION_KEY = "ride-admin-session";
+    const WEATHER_LOCATION = {
+      latitude: "29.7604",
+      longitude: "-95.3698",
+      label: "Houston",
+    };
 
     function readAdminSession() {
       try {
@@ -2090,6 +2127,10 @@
       adminMessage: "",
       adminError: "",
       adminLoading: false,
+      weatherOpen: false,
+      weatherStatus: "idle",
+      weatherForecast: null,
+      weatherDate: "",
       loading: true,
       error: "",
     };
@@ -2348,6 +2389,12 @@
       return summary.startLabel ? `${summary.startLabel} · ${summary.timeLabel}` : summary.timeLabel;
     }
 
+    function totalRouteTimeLabel(summary) {
+      const label = String(summary?.timeLabel || "").trim();
+      if (!label || /pending/i.test(label)) return "Total route time pending";
+      return `Total route: ${label}`;
+    }
+
     function orderedStops(stops = []) {
       return stops
         .slice()
@@ -2415,9 +2462,104 @@
       return {
         routeLabel: routeAreaFromStops(riders) || summary.routeLabel || "Assigned Route",
         firstPickupLine: riders.length ? `First pickup: ${pickupTime || "coordinate directly"}` : "No pickups assigned",
-        timeLine: routeTimeLabel(summary),
+        timeLine: totalRouteTimeLabel(summary),
         destinationLine: `Ends at ${destination.label}`,
       };
+    }
+
+    function weatherCodeLabel(code) {
+      const labels = {
+        0: "Clear",
+        1: "Mostly clear",
+        2: "Partly cloudy",
+        3: "Cloudy",
+        45: "Foggy",
+        48: "Foggy",
+        51: "Light drizzle",
+        53: "Drizzle",
+        55: "Heavy drizzle",
+        61: "Light rain",
+        63: "Rain",
+        65: "Heavy rain",
+        80: "Rain showers",
+        81: "Rain showers",
+        82: "Heavy showers",
+        95: "Thunderstorms",
+      };
+      return labels[Number(code)] || "Forecast";
+    }
+
+    function roundedWeatherValue(value) {
+      if (value === null || value === undefined || value === "") return "";
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "";
+      return String(Math.round(number));
+    }
+
+    function weatherSummaryText() {
+      if (state.weatherStatus === "loading") return `${WEATHER_LOCATION.label} forecast loading...`;
+      if (state.weatherStatus === "error") return "Weather unavailable";
+      const forecast = state.weatherForecast;
+      if (!forecast) return "Tap to show Sunday forecast";
+      return `${forecast.condition} · ${forecast.high}° / ${forecast.low}° · Rain ${forecast.rainChance}%`;
+    }
+
+    function weatherDetailsText() {
+      const forecast = state.weatherForecast;
+      if (state.weatherStatus === "loading") return `${WEATHER_LOCATION.label} forecast is loading.`;
+      if (state.weatherStatus === "error") return "Forecast could not load for this Sunday.";
+      if (!forecast) return "Open to check the Sunday forecast.";
+      return `${WEATHER_LOCATION.label} · ${forecast.condition} · High ${forecast.high}°, low ${forecast.low}° · Rain ${forecast.rainChance}% · Wind ${forecast.wind} mph`;
+    }
+
+    function weatherApiUrl(dateValue = activePlanDate()) {
+      const params = new URLSearchParams({
+        latitude: WEATHER_LOCATION.latitude,
+        longitude: WEATHER_LOCATION.longitude,
+        daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max",
+        temperature_unit: "fahrenheit",
+        wind_speed_unit: "mph",
+        timezone: "America/Chicago",
+        start_date: dateValue,
+        end_date: dateValue,
+      });
+      return "https://api.open-meteo.com/v1/forecast?" + params.toString();
+    }
+
+    async function loadWeatherForecast() {
+      const dateValue = activePlanDate();
+      if (state.weatherStatus === "loading") return;
+      if (state.weatherStatus === "ready" && state.weatherDate === dateValue) return;
+
+      state.weatherStatus = "loading";
+      state.weatherForecast = null;
+      state.weatherDate = dateValue;
+      render();
+
+      try {
+        const response = await fetch(weatherApiUrl(dateValue));
+        const payload = await response.json();
+        if (!response.ok || payload?.error) throw new Error(payload?.reason || "Weather request failed");
+
+        const daily = payload.daily || {};
+        const index = (daily.time || []).indexOf(dateValue);
+        if (index < 0) throw new Error("Forecast date unavailable");
+
+        state.weatherForecast = {
+          condition: weatherCodeLabel(daily.weather_code?.[index]),
+          high: roundedWeatherValue(daily.temperature_2m_max?.[index]) || "--",
+          low: roundedWeatherValue(daily.temperature_2m_min?.[index]) || "--",
+          rainChance: roundedWeatherValue(daily.precipitation_probability_max?.[index]) || "0",
+          wind: roundedWeatherValue(daily.wind_speed_10m_max?.[index]) || "--",
+        };
+        state.weatherStatus = "ready";
+      } catch (error) {
+        state.weatherStatus = "error";
+        state.weatherForecast = null;
+        console.warn(error);
+      } finally {
+        render();
+      }
     }
 
     function iconSvg(name) {
@@ -2426,6 +2568,7 @@
         clock: `<svg class="driver-meta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
         car: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 1.5-4.5A2 2 0 0 1 8.4 6h7.2a2 2 0 0 1 1.9 1.5L19 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M4 12h16v6H4v-6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 18v2M17 18v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="7.5" cy="15" r="1" fill="currentColor"/><circle cx="16.5" cy="15" r="1" fill="currentColor"/></svg>`,
         map: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18-6 3V6l6-3m0 15 6 3m-6-3V3m6 18 6-3V3l-6 3m0 15V6m0 0L9 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+        weather: `<svg class="driver-meta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.3 10.5 3.5 3.5 0 0 0 7 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 21h.01M12 21h.01M16 21h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
       };
       return icons[name] || "";
     }
@@ -3553,27 +3696,22 @@
                 <span>${escapeHtml(meta.firstPickupLine)}</span>
               </span>
             </div>
-            ${meta.timeLine ? `
             <div class="driver-overview-row">
               ${iconSvg("clock")}
               <span>
                 <strong>${escapeHtml(meta.timeLine)}</strong>
                 <span>${escapeHtml(meta.destinationLine)}</span>
               </span>
-            </div>` : `
-            <div class="driver-overview-row">
-              ${iconSvg("car")}
+            </div>
+            <button class="driver-overview-row weather-toggle-row" type="button" data-action="toggleWeather" aria-expanded="${state.weatherOpen ? "true" : "false"}">
+              ${iconSvg("weather")}
               <span>
-                <strong>${escapeHtml(meta.destinationLine)}</strong>
-                <span>${escapeHtml(destination.address)}</span>
+                <strong>Weather</strong>
+                <span>${escapeHtml(weatherSummaryText())}</span>
               </span>
-            </div>`}
-          </section>
-
-          <section class="destination-block">
-            <p>Destination</p>
-            <h2>${escapeHtml(destination.label)}</h2>
-            <p>${escapeHtml(destination.address)}</p>
+              <span class="weather-chevron" aria-hidden="true">&rsaquo;</span>
+            </button>
+            ${state.weatherOpen ? `<p class="weather-details">${escapeHtml(weatherDetailsText())}</p>` : ""}
           </section>
 
           <button class="primary-action" type="button" data-action="rides">View my rides <span aria-hidden="true">&rarr;</span></button>
@@ -3861,8 +3999,13 @@
         }
 
         state.route = route;
+        state.weatherOpen = false;
+        state.weatherStatus = "idle";
+        state.weatherForecast = null;
+        state.weatherDate = "";
         closeCodeModal();
         setDriverHome();
+        loadWeatherForecast();
       } catch (error) {
         codeError.textContent = "Route could not open.";
         codeError.hidden = false;
@@ -3891,6 +4034,11 @@
       if (action === "profile") openProfile();
       if (action === "driverHome") setDriverHome();
       if (action === "rides") setRidesView();
+      if (action === "toggleWeather") {
+        state.weatherOpen = !state.weatherOpen;
+        if (state.weatherOpen && state.weatherStatus === "idle") loadWeatherForecast();
+        render();
+      }
       if (action === "admin") openAdminCodeModal();
       if (action === "adminSignOut") signOutAdmin();
       if (action === "adminBack") {

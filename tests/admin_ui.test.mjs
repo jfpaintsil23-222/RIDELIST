@@ -69,6 +69,7 @@ async function loadApp() {
       driverHomeView,
       ridesView,
       driverRouteSummary,
+      weatherSummaryText: typeof weatherSummaryText === "function" ? weatherSummaryText : undefined,
       adminChangedCount,
       adminChangeList: typeof adminChangeList === "function" ? adminChangeList : undefined,
       nextSundayDate: typeof nextSundayDate === "function" ? nextSundayDate : undefined,
@@ -402,7 +403,24 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   assert.match(homeHtml, /Route overview/);
   assert.match(homeHtml, /Cypress Route/);
   assert.match(homeHtml, /First pickup: 11:00 AM/);
+  assert.match(homeHtml, /Total route/);
+  assert.match(homeHtml, /1 hr 22 min to UH Hilton/);
   assert.match(homeHtml, /Ends at UH Hilton/);
+  assert.match(homeHtml, /Weather/);
+  assert.doesNotMatch(homeHtml, /<section class="destination-block">/);
+
+  app.state.weatherOpen = true;
+  app.state.weatherStatus = "ready";
+  app.state.weatherForecast = {
+    condition: "Partly cloudy",
+    high: 92,
+    low: 78,
+    rainChance: 30,
+    wind: 12,
+  };
+  const weatherHtml = app.driverHomeView();
+  assert.match(weatherHtml, /Partly cloudy · 92° \/ 78° · Rain 30%/);
+  assert.match(weatherHtml, /Wind 12 mph/);
 
   const pendingHtml = app.ridesView();
   assert.match(pendingHtml, /Start route to Nora/);

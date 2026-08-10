@@ -94,6 +94,22 @@ test("app contains admin ride control entry points", async () => {
   assert.match(html, /function adminEditView/);
 });
 
+test("driver route modal shows only the passcode field", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const driverModal = html.match(/async function openCodeModal[\s\S]*?function openAdminCodeModal/)?.[0] || "";
+  const adminModal = html.match(/function openAdminCodeModal[\s\S]*?function setAdminCodeFallbackMode/)?.[0] || "";
+
+  assert.match(html, /\.admin-auth-fields\[hidden\]\s*{\s*display:\s*none;?\s*}/);
+  assert.match(driverModal, /document\.querySelector\("#modalTitle"\)\.textContent = "Passcode"/);
+  assert.match(driverModal, /adminAuthFields\.hidden = true/);
+  assert.match(driverModal, /driverCode\.hidden = false/);
+  assert.match(driverModal, /adminEmail\.value = ""/);
+  assert.match(driverModal, /adminPassword\.value = ""/);
+  assert.match(adminModal, /document\.querySelector\("#modalTitle"\)\.textContent = "Admin sign in"/);
+  assert.match(adminModal, /adminAuthFields\.hidden = false/);
+  assert.match(adminModal, /driverCode\.hidden = true/);
+});
+
 test("app exposes home screen icon metadata", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const manifest = JSON.parse(await readFile(new URL("../manifest.webmanifest", import.meta.url), "utf8"));

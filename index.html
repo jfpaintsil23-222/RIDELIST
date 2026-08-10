@@ -655,6 +655,10 @@
       gap: 10px;
     }
 
+    .admin-auth-fields[hidden] {
+      display: none;
+    }
+
     .admin-text-button {
       justify-self: start;
       border: 0;
@@ -3613,6 +3617,8 @@
       codeError.hidden = true;
       codeError.textContent = "";
       driverCode.value = "";
+      adminEmail.value = "";
+      adminPassword.value = "";
       codeModal.classList.add("open");
     }
 

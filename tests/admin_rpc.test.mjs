@@ -6,9 +6,14 @@ const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
 const PLAN_DATE = "2026-08-09";
 const RESET_TEST_DATE = "2099-01-04";
 const ADMIN_CODE = process.env.RIDES_ADMIN_CODE;
+const DRIVER_CODE = process.env.RIDES_DRIVER_CODE;
 
 if (!ADMIN_CODE) {
   throw new Error("RIDES_ADMIN_CODE is required for admin RPC tests.");
+}
+
+if (!DRIVER_CODE) {
+  throw new Error("RIDES_DRIVER_CODE is required for driver RPC tests.");
 }
 
 async function rpc(name, body) {
@@ -34,6 +39,29 @@ test("active ride context exposes the current public Sunday plan", async () => {
   assert.match(context.plan.date, /^\d{4}-\d{2}-\d{2}$/);
   assert.notEqual(context.plan.date, RESET_TEST_DATE);
   assert.equal(context.destination.label, "UH Hilton");
+});
+
+test("driver routes reject wrong passcodes and accept the shared driver passcode", async () => {
+  const context = await rpc("ride_app_context", {});
+
+  const rejected = await rpc("ride_driver_route", {
+    p_driver_slug: "joojo",
+    p_access_code: "wrong-code",
+    p_plan_date: context.plan.date,
+  });
+
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error, "invalid_code");
+
+  const route = await rpc("ride_driver_route", {
+    p_driver_slug: "joojo",
+    p_access_code: DRIVER_CODE,
+    p_plan_date: context.plan.date,
+  });
+
+  assert.equal(route.ok, true);
+  assert.equal(route.driver.slug, "joojo");
+  assert.equal(route.plan.date, context.plan.date);
 });
 
 test("admin snapshot rejects wrong passcodes and accepts the admin passcode", async () => {

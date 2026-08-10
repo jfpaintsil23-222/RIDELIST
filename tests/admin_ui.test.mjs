@@ -57,6 +57,7 @@ async function loadApp() {
     globalThis.__app = {
       state,
       adminView,
+      adminReviewView: typeof adminReviewView === "function" ? adminReviewView : undefined,
       adminResetView: typeof adminResetView === "function" ? adminResetView : undefined,
       adminEditView,
       driverProfileCard,
@@ -118,7 +119,7 @@ test("driver profile cards show route areas instead of rider names", async () =>
   assert.equal(dqSummary.routeLabel, "South Houston Route");
 });
 
-test("admin tabs render functional riders search and changes review screens", async () => {
+test("admin uses routes and people tabs with a review action for pending changes", async () => {
   const app = await loadApp();
 
   app.state.admin = {
@@ -178,18 +179,22 @@ test("admin tabs render functional riders search and changes review screens", as
 
   const routesHtml = app.adminView();
   assert.match(routesHtml, /data-admin-tab="routes"/);
-  assert.match(routesHtml, /data-admin-tab="riders"/);
-  assert.match(routesHtml, /data-admin-tab="changes"/);
+  assert.match(routesHtml, /data-admin-tab="people"/);
+  assert.doesNotMatch(routesHtml, /data-admin-tab="riders"/);
+  assert.doesNotMatch(routesHtml, /data-admin-tab="data"/);
+  assert.doesNotMatch(routesHtml, /data-admin-tab="changes"/);
+  assert.doesNotMatch(routesHtml, /Publish route changes/);
 
-  app.state.adminActiveTab = "riders";
+  app.state.adminActiveTab = "people";
   app.state.adminPeopleSearch = "tinnie";
-  const ridersHtml = app.adminView();
-  assert.match(ridersHtml, /data-admin-people-search/);
-  assert.match(ridersHtml, /Tinnie/);
-  assert.match(ridersHtml, /data-admin-add-person="person-1"/);
-  assert.doesNotMatch(ridersHtml, /Zay/);
+  const peopleHtml = app.adminView();
+  assert.match(peopleHtml, /PeopleData · 2 people stored/);
+  assert.match(peopleHtml, /data-admin-people-search/);
+  assert.match(peopleHtml, /Tinnie/);
+  assert.match(peopleHtml, /data-admin-add-person="person-1"/);
+  assert.doesNotMatch(peopleHtml, /Zay/);
 
-  app.state.adminActiveTab = "changes";
+  app.state.adminActiveTab = "routes";
   app.state.adminDraftStops.push({
     id: "temp-test",
     driverSlug: "naa",
@@ -204,8 +209,15 @@ test("admin tabs render functional riders search and changes review screens", as
     notes: "",
   });
   const changes = app.adminChangeList();
-  const changesHtml = app.adminView();
+  const routesWithChangeHtml = app.adminView();
   assert.equal(changes.length, 1);
+  assert.match(routesWithChangeHtml, /1 change pending/);
+  assert.match(routesWithChangeHtml, /data-action="adminReviewChanges"/);
+  assert.doesNotMatch(routesWithChangeHtml, /Added TEST New Rider to Naa/);
+
+  assert.equal(typeof app.adminReviewView, "function");
+  const changesHtml = app.adminReviewView();
+  assert.match(changesHtml, /Review Changes/);
   assert.match(changesHtml, /Added TEST New Rider to Naa/);
   assert.match(changesHtml, /Publish route changes \(1\)/);
 });
@@ -252,7 +264,7 @@ test("admin routes collapse by driver and rider rows use move instead of remove"
   assert.doesNotMatch(expanded, /data-admin-delete="stop-1"/);
 });
 
-test("riders and data tabs use the PeopleData bank", async () => {
+test("people tab uses the PeopleData bank with full rider details", async () => {
   const app = await loadApp();
 
   app.state.admin = {
@@ -280,20 +292,20 @@ test("riders and data tabs use the PeopleData bank", async () => {
   app.state.adminDraftStops = [];
   app.state.adminDeletedStopIds = [];
 
-  app.state.adminActiveTab = "riders";
+  app.state.adminActiveTab = "people";
   app.state.adminPeopleSearch = "siah";
-  const ridersHtml = app.adminView();
-  assert.match(ridersHtml, /data-admin-people-search/);
-  assert.match(ridersHtml, /Siah/);
-  assert.match(ridersHtml, /data-admin-add-person="person-1"/);
-  assert.doesNotMatch(ridersHtml, /Nicholas/);
+  const siahHtml = app.adminView();
+  assert.match(siahHtml, /PeopleData/);
+  assert.match(siahHtml, /data-admin-people-search/);
+  assert.match(siahHtml, /Siah/);
+  assert.match(siahHtml, /data-admin-add-person="person-1"/);
+  assert.doesNotMatch(siahHtml, /Nicholas/);
 
-  app.state.adminActiveTab = "data";
   app.state.adminPeopleSearch = "burdine";
-  const dataHtml = app.adminView();
-  assert.match(dataHtml, /PeopleData/);
-  assert.match(dataHtml, /Nicholas/);
-  assert.match(dataHtml, /11525 Burdine St/);
+  const nicholasHtml = app.adminView();
+  assert.match(nicholasHtml, /PeopleData/);
+  assert.match(nicholasHtml, /Nicholas/);
+  assert.match(nicholasHtml, /11525 Burdine St/);
 });
 
 test("edit screen contains the red remove control above form actions", async () => {

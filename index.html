@@ -1129,7 +1129,7 @@
 
     .admin-tabs {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 5px;
       padding: 4px;
       border-radius: 12px;
@@ -1349,6 +1349,48 @@
 
     .admin-message.error {
       color: var(--danger);
+    }
+
+    .admin-review-bar {
+      position: sticky;
+      bottom: 0;
+      z-index: 3;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid rgba(5, 5, 5, 0.08);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 16px 42px rgba(0, 0, 0, 0.14);
+      backdrop-filter: blur(16px);
+    }
+
+    .admin-review-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      color: #050505;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .admin-review-dot {
+      flex: 0 0 auto;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #050505;
+    }
+
+    .admin-review-bar .primary-action {
+      min-height: 42px;
+      padding: 0 18px;
+      background: #050505;
+      box-shadow: none;
+      font-size: 14px;
     }
 
     .admin-change-card {
@@ -2332,7 +2374,7 @@
       state.adminEditMode = "edit";
       state.adminMessage = `${stop.name} is ready to publish.`;
       state.adminError = "";
-      state.adminActiveTab = "changes";
+      state.adminActiveTab = "routes";
       state.view = "admin";
       render();
     }
@@ -2351,7 +2393,7 @@
       state.adminEditMode = "edit";
       state.adminMessage = `${stop.name} will be removed when you publish.`;
       state.adminError = "";
-      state.adminActiveTab = "changes";
+      state.adminActiveTab = "routes";
       state.view = "admin";
       render();
     }
@@ -2436,6 +2478,7 @@
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
         state.adminMessage = "Route changes published.";
+        state.view = "admin";
         state.drivers = await rpc("ride_driver_directory", { p_plan_date: activePlanDate() });
       } catch (error) {
         state.adminError = "Could not publish changes.";
@@ -2547,7 +2590,7 @@
 
     function setActiveNav() {
       const routeScreen = state.view === "rides" || state.view === "detail";
-      const adminScreen = state.view === "admin" || state.view === "adminEdit" || state.view === "adminReset";
+      const adminScreen = state.view === "admin" || state.view === "adminEdit" || state.view === "adminReset" || state.view === "adminReview";
       bottomNav.hidden = routeScreen || adminScreen;
       screen.classList.toggle("full-bottom", routeScreen || adminScreen);
       homeNav.classList.toggle("active", state.view === "home" || state.view === "driverHome" || routeScreen);
@@ -2707,11 +2750,12 @@
       return `<input class="admin-search-input" data-admin-people-search type="search" value="${escapeHtml(state.adminPeopleSearch)}" placeholder="${escapeHtml(placeholder)}" aria-label="Search PeopleData">`;
     }
 
-    function adminDataView() {
+    function adminPeopleView() {
       return `
         <section class="admin-message">
           PeopleData · ${adminPeople().length} people stored
         </section>
+        <button class="primary-action" type="button" data-action="adminNew">Add rider</button>
         ${adminPeopleSearchInput("Search full PeopleData")}
         <section class="admin-rider-list" data-admin-people-results aria-label="PeopleData">
           ${adminPeopleResultsHtml({ showData: true, showSource: true })}
@@ -2726,19 +2770,6 @@
         </section>`;
     }
 
-    function adminRidersResultsHtml() {
-      return adminPeopleResultsHtml({ showData: false });
-    }
-
-    function adminRidersView() {
-      return `
-        <button class="primary-action" type="button" data-action="adminNew">Add rider</button>
-        ${adminPeopleSearchInput("Search people to add to a route")}
-        <section class="admin-rider-list" data-admin-people-results aria-label="PeopleData riders">
-          ${adminRidersResultsHtml()}
-        </section>`;
-    }
-
     function adminChangeCard(change) {
       return `
         <article class="admin-change-card">
@@ -2750,13 +2781,41 @@
         </article>`;
     }
 
-    function adminChangesView(changed) {
+    function adminReviewBar(changed) {
+      if (!changed) return "";
+      return `
+        <section class="admin-review-bar" aria-label="Pending route changes">
+          <span class="admin-review-status"><span class="admin-review-dot" aria-hidden="true"></span>${changed} ${changed === 1 ? "change" : "changes"} pending</span>
+          <button class="primary-action" type="button" data-action="adminReviewChanges">Review</button>
+        </section>`;
+    }
+
+    function adminReviewView() {
+      const changed = adminChangedCount();
       const changes = adminChangeList();
       return `
-        <section class="admin-change-list" aria-label="Unpublished changes">
-          ${changes.length ? changes.map(adminChangeCard).join("") : `<section class="empty-card"><p>No unpublished changes.</p></section>`}
-        </section>
-        ${adminPublishButton(changed)}`;
+        <div class="stack">
+          <section class="intro-block compact">
+            <div class="admin-top-row">
+              <div>
+                <p class="eyebrow">Review</p>
+                <h1>Review Changes</h1>
+                <p>${changed ? `${changed} ${changed === 1 ? "change" : "changes"} waiting to publish` : "No unpublished changes"}</p>
+              </div>
+              <button class="admin-icon-button" type="button" data-action="adminBack" aria-label="Back to admin">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+          ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+          <section class="admin-change-list" aria-label="Unpublished changes">
+            ${changes.length ? changes.map(adminChangeCard).join("") : `<section class="empty-card"><p>No unpublished changes.</p></section>`}
+          </section>
+          ${adminPublishButton(changed)}
+        </div>`;
     }
 
     function adminResetDriverOption(driver) {
@@ -2827,14 +2886,8 @@
 
       const drivers = adminDrivers();
       const changed = adminChangedCount();
-      const activeTab = ["routes", "riders", "data", "changes"].includes(state.adminActiveTab) ? state.adminActiveTab : "routes";
-      const activeView = activeTab === "riders"
-        ? adminRidersView()
-        : activeTab === "changes"
-          ? adminChangesView(changed)
-          : activeTab === "data"
-            ? adminDataView()
-            : adminRoutesView(drivers);
+      const activeTab = ["routes", "people"].includes(state.adminActiveTab) ? state.adminActiveTab : "routes";
+      const activeView = activeTab === "people" ? adminPeopleView() : adminRoutesView(drivers);
 
       return `
         <div class="stack">
@@ -2853,9 +2906,7 @@
 
           <section class="admin-tabs" aria-label="Admin sections">
             ${adminTabButton("routes", "Routes")}
-            ${adminTabButton("riders", "Riders")}
-            ${adminTabButton("data", "Data")}
-            ${adminTabButton("changes", "Changes")}
+            ${adminTabButton("people", "People")}
           </section>
 
           <section class="admin-stats" aria-label="Ride control stats">
@@ -2869,7 +2920,7 @@
 
           <button class="secondary-action" type="button" data-action="adminReset">Start New Sunday</button>
           ${activeView}
-          ${activeTab === "changes" ? "" : adminPublishButton(changed)}
+          ${adminReviewBar(changed)}
         </div>`;
     }
 
@@ -3157,6 +3208,7 @@
       else if (state.view === "rides" && state.route) screen.innerHTML = ridesView();
       else if (state.view === "detail" && state.selectedRider) screen.innerHTML = detailView();
       else if (state.view === "admin") screen.innerHTML = adminView();
+      else if (state.view === "adminReview") screen.innerHTML = adminReviewView();
       else if (state.view === "adminEdit") screen.innerHTML = adminEditView();
       else if (state.view === "adminReset") screen.innerHTML = adminResetView();
       else screen.innerHTML = homeView();
@@ -3265,6 +3317,10 @@
         render();
       }
       if (action === "adminReset") openAdminReset();
+      if (action === "adminReviewChanges") {
+        state.view = "adminReview";
+        render();
+      }
       if (action === "adminResetBack") {
         state.adminError = "";
         state.adminResetDate = "";
@@ -3332,8 +3388,8 @@
         state.adminPeopleSearch = peopleSearchInput.value;
         const results = screen.querySelector("[data-admin-people-results]");
         if (results) results.innerHTML = adminPeopleResultsHtml({
-          showData: state.adminActiveTab === "data",
-          showSource: state.adminActiveTab === "data",
+          showData: state.adminActiveTab === "people",
+          showSource: state.adminActiveTab === "people",
         });
         return;
       }
@@ -3343,7 +3399,7 @@
 
       state.adminSearch = searchInput.value;
       const results = screen.querySelector("[data-admin-riders-results]");
-      if (results) results.innerHTML = adminRidersResultsHtml();
+      if (results) results.innerHTML = adminFilteredStops().map((stop) => adminRiderCard(stop, { showDriver: true })).join("");
     });
 
     screen.addEventListener("submit", (event) => {

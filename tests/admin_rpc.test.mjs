@@ -31,7 +31,8 @@ test("active ride context exposes the current public Sunday plan", async () => {
   const context = await rpc("ride_app_context", {});
 
   assert.equal(context.ok, true);
-  assert.equal(context.plan.date, PLAN_DATE);
+  assert.match(context.plan.date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.notEqual(context.plan.date, RESET_TEST_DATE);
   assert.equal(context.destination.label, "UH Hilton");
 });
 

@@ -60,6 +60,8 @@ async function loadApp() {
       adminReviewView: typeof adminReviewView === "function" ? adminReviewView : undefined,
       adminResetView: typeof adminResetView === "function" ? adminResetView : undefined,
       adminEditView,
+      adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
+      adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
       driverProfileCard,
       driverRouteSummary,
       adminChangedCount,
@@ -313,6 +315,101 @@ test("people tab uses the PeopleData bank with full rider details", async () => 
   assert.match(nicholasHtml, /PeopleData/);
   assert.match(nicholasHtml, /Nicholas/);
   assert.match(nicholasHtml, /11525 Burdine St/);
+});
+
+test("add rider form searches PeopleData and offers add-new fallback", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "dq", displayName: "DQ", initials: "DQ" }],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "A'lena",
+        campusAddress: "",
+        homeAddress: "9425 Asheville Rd, Houston, TX",
+        phone: "7139022393",
+        preferredAddress: "9425 Asheville Rd, Houston, TX",
+      },
+      {
+        id: "person-2",
+        name: "Amanda",
+        campusAddress: "",
+        homeAddress: "9700 Leawood Blvd, Houston, TX",
+        phone: "",
+        preferredAddress: "9700 Leawood Blvd, Houston, TX",
+      },
+      {
+        id: "person-3",
+        name: "Siah",
+        campusAddress: "",
+        homeAddress: "2304 Sam Houston Ave, Huntsville, TX",
+        phone: "",
+        preferredAddress: "2304 Sam Houston Ave, Huntsville, TX",
+      },
+    ],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminSelectedStopId = "new";
+  app.state.adminPersonSeed = null;
+  app.state.adminRiderQuery = "A";
+
+  assert.equal(typeof app.adminRiderNameSuggestions, "function");
+  const suggestions = app.adminRiderNameSuggestions();
+  assert.deepEqual(suggestions.map((person) => person.name), ["A'lena", "Amanda"]);
+
+  const html = app.adminEditView();
+  assert.match(html, /data-admin-rider-name/);
+  assert.match(html, /data-admin-person-suggestions/);
+  assert.match(html, /data-admin-person-select="person-1"/);
+  assert.match(html, /A&#39;lena/);
+  assert.match(html, /Amanda/);
+  assert.doesNotMatch(html, /Siah/);
+
+  app.state.adminRiderQuery = "Zyx";
+  const noMatchHtml = app.adminEditView();
+  assert.match(noMatchHtml, /data-admin-new-rider/);
+  assert.match(noMatchHtml, /Add new rider/);
+  assert.match(noMatchHtml, /Zyx/);
+});
+
+test("selected PeopleData rider auto-fills phone and selectable pickup addresses", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JP" }],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Nora",
+        campusAddress: "Guinan Hall, University of St. Thomas, Houston, TX",
+        homeAddress: "10819 Tryon Dr, Houston, TX 77065",
+        phone: "(281) 704-1697",
+        preferredAddressType: "campus",
+        preferredAddress: "Guinan Hall, University of St. Thomas, Houston, TX",
+      },
+    ],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminSelectedStopId = "new";
+  app.state.adminPersonSeed = app.state.admin.people[0];
+  app.state.adminSelectedAddressType = "home";
+
+  assert.equal(typeof app.adminAddressOptionsForPerson, "function");
+  assert.deepEqual(Array.from(app.adminAddressOptionsForPerson(app.state.admin.people[0]).map((option) => option.type)), ["campus", "home"]);
+
+  const html = app.adminEditView();
+  assert.match(html, /name="personId" value="person-1"/);
+  assert.match(html, /value="Nora"/);
+  assert.match(html, /value="\(281\) 704-1697"/);
+  assert.match(html, /Campus address/);
+  assert.match(html, /Guinan Hall/);
+  assert.match(html, /Home address/);
+  assert.match(html, /10819 Tryon Dr/);
+  assert.match(html, /name="addressChoice"/);
+  assert.match(html, /value="10819 Tryon Dr, Houston, TX 77065" checked/);
 });
 
 test("edit screen contains the red remove control above form actions", async () => {

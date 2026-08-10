@@ -1460,7 +1460,8 @@
       gap: 12px;
     }
 
-    .admin-form-card label {
+    .admin-form-card label,
+    .admin-field-group {
       display: grid;
       gap: 6px;
       color: #050505;
@@ -1485,6 +1486,103 @@
     .admin-form-card textarea {
       min-height: 82px;
       resize: vertical;
+    }
+
+    .admin-person-suggestions {
+      display: grid;
+      gap: 8px;
+      margin-top: -4px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.12);
+    }
+
+    .admin-person-suggestions[hidden] {
+      display: none;
+    }
+
+    .admin-person-option,
+    .admin-new-rider-option {
+      width: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 52px;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px;
+      color: #050505;
+      background: #f7f7f8;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .admin-person-option strong,
+    .admin-new-rider-option strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.2;
+      font-weight: 850;
+    }
+
+    .admin-person-option span,
+    .admin-new-rider-option span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .admin-address-options {
+      display: grid;
+      gap: 8px;
+    }
+
+    .admin-address-option {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #ffffff;
+      cursor: pointer;
+    }
+
+    .admin-address-option:has(input:checked) {
+      border-color: #050505;
+      box-shadow: inset 0 0 0 1px #050505;
+    }
+
+    .admin-address-option input {
+      width: auto;
+      min-height: auto;
+      margin-top: 2px;
+      accent-color: #050505;
+    }
+
+    .admin-address-option strong {
+      display: block;
+      color: #050505;
+      font-size: 14px;
+      line-height: 1.2;
+      font-weight: 850;
+    }
+
+    .admin-address-option span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
     }
 
     .admin-form-actions {
@@ -1908,6 +2006,8 @@
       adminDeletedStopIds: [],
       adminSelectedStopId: null,
       adminPersonSeed: null,
+      adminRiderQuery: "",
+      adminSelectedAddressType: "",
       adminEditMode: "edit",
       adminActiveTab: "routes",
       adminSearch: "",
@@ -2251,6 +2351,40 @@
       return person.preferredAddress || person.homeAddress || person.campusAddress || "";
     }
 
+    function adminAddressOptionsForPerson(person) {
+      if (!person) return [];
+      const seen = new Set();
+      return [
+        { type: "campus", label: "Campus address", address: person.campusAddress || "" },
+        { type: "home", label: "Home address", address: person.homeAddress || "" },
+      ].filter((option) => {
+        const key = option.address.trim().toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    function adminSelectedPersonAddress(person) {
+      const options = adminAddressOptionsForPerson(person);
+      if (!options.length) return preferredPersonAddress(person);
+      const selectedType = state.adminSelectedAddressType || person.preferredAddressType || options[0].type;
+      return (options.find((option) => option.type === selectedType) || options[0]).address;
+    }
+
+    function adminRiderNameSuggestions() {
+      const query = String(state.adminRiderQuery || "").trim().toLowerCase();
+      if (!query) return [];
+      return adminPeople()
+        .filter((person) => String(person.name || "").toLowerCase().startsWith(query))
+        .sort((a, b) => {
+          const aName = String(a.name || "").toLowerCase();
+          const bName = String(b.name || "").toLowerCase();
+          return aName.localeCompare(bName);
+        })
+        .slice(0, 8);
+    }
+
     function adminStopsForDriver(slug) {
       return adminStops()
         .filter((stop) => stop.driverSlug === slug)
@@ -2418,6 +2552,8 @@
     function openAdminEditor(stopId = "new", mode = "edit") {
       state.adminSelectedStopId = stopId;
       state.adminPersonSeed = null;
+      state.adminRiderQuery = "";
+      state.adminSelectedAddressType = "";
       state.adminEditMode = mode;
       state.adminError = "";
       state.adminMessage = "";
@@ -2431,6 +2567,8 @@
 
       state.adminSelectedStopId = "new";
       state.adminPersonSeed = person;
+      state.adminRiderQuery = person.name || "";
+      state.adminSelectedAddressType = person.preferredAddressType || adminAddressOptionsForPerson(person)[0]?.type || "";
       state.adminEditMode = "add";
       state.adminError = "";
       state.adminMessage = "";
@@ -2441,15 +2579,15 @@
     function adminSelectedStop() {
       if (state.adminSelectedStopId === "new") {
         const seed = state.adminPersonSeed;
-        const preferredAddress = preferredPersonAddress(seed);
+        const preferredAddress = adminSelectedPersonAddress(seed);
         return {
           id: "",
           driverSlug: adminDrivers()[0]?.slug || "",
           stopOrder: 1,
-          name: seed?.name || "",
+          name: seed?.name || state.adminRiderQuery || "",
           phone: seed?.phone || "",
           address: preferredAddress,
-          area: seed ? (seed.preferredAddressType === "campus" ? "Campus" : "Home") : "",
+          area: seed ? (state.adminSelectedAddressType === "campus" ? "Campus" : "Home") : "",
           pickupTime: "",
           readyBy: "",
           routeLabel: "",
@@ -2468,7 +2606,7 @@
         stopOrder: Number(formData.get("stopOrder") || 1),
         name: String(formData.get("name") || "").trim(),
         phone: String(formData.get("phone") || "").trim(),
-        address: String(formData.get("address") || "").trim(),
+        address: String(formData.get("addressChoice") || formData.get("address") || "").trim(),
         area: String(formData.get("area") || "").trim(),
         pickupTime: String(formData.get("pickupTime") || "").trim(),
         readyBy: String(formData.get("readyBy") || "").trim(),
@@ -2489,6 +2627,8 @@
       normalizeAdminDraftStops();
       state.adminSelectedStopId = null;
       state.adminPersonSeed = null;
+      state.adminRiderQuery = "";
+      state.adminSelectedAddressType = "";
       state.adminEditMode = "edit";
       state.adminMessage = `${stop.name} is ready to publish.`;
       state.adminError = "";
@@ -2508,6 +2648,8 @@
       normalizeAdminDraftStops();
       state.adminSelectedStopId = null;
       state.adminPersonSeed = null;
+      state.adminRiderQuery = "";
+      state.adminSelectedAddressType = "";
       state.adminEditMode = "edit";
       state.adminMessage = `${stop.name} will be removed when you publish.`;
       state.adminError = "";
@@ -2542,6 +2684,8 @@
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
         state.adminPersonSeed = null;
+        state.adminRiderQuery = "";
+        state.adminSelectedAddressType = "";
         state.adminEditMode = "edit";
         state.adminActiveTab = "routes";
         state.adminSearch = "";
@@ -2594,6 +2738,8 @@
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
         state.adminPersonSeed = null;
+        state.adminRiderQuery = "";
+        state.adminSelectedAddressType = "";
         state.adminEditMode = "edit";
         state.adminActiveTab = "routes";
         state.adminSearch = "";
@@ -2665,6 +2811,8 @@
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
         state.adminPersonSeed = null;
+        state.adminRiderQuery = "";
+        state.adminSelectedAddressType = "";
         state.adminEditMode = "edit";
         state.adminActiveTab = "routes";
         state.adminSearch = "";
@@ -3086,6 +3234,69 @@
         </div>`;
     }
 
+    function adminRiderSuggestionItemsHtml() {
+      const query = String(state.adminRiderQuery || "").trim();
+      if (!query || state.adminPersonSeed) return "";
+      const suggestions = adminRiderNameSuggestions();
+
+      if (!suggestions.length) {
+        return `
+          <button class="admin-new-rider-option" type="button" data-admin-new-rider="${escapeHtml(query)}">
+            <span>
+              <strong>+ Add new rider</strong>
+              <span>${escapeHtml(query)}</span>
+            </span>
+            <span aria-hidden="true">&rsaquo;</span>
+          </button>`;
+      }
+
+      return suggestions.map((person) => {
+        const address = preferredPersonAddress(person);
+        return `
+          <button class="admin-person-option" type="button" data-admin-person-select="${escapeHtml(person.id)}">
+            <span>
+              <strong>${escapeHtml(person.name)}</strong>
+              <span>${escapeHtml([person.phone, address].filter(Boolean).join(" · ") || "No phone or address saved")}</span>
+            </span>
+            <span aria-hidden="true">&rsaquo;</span>
+          </button>`;
+      }).join("");
+    }
+
+    function adminRiderSuggestionsHtml() {
+      const items = adminRiderSuggestionItemsHtml();
+      return `<section class="admin-person-suggestions" data-admin-person-suggestions ${items ? "" : "hidden"}>${items}</section>`;
+    }
+
+    function adminAddressFieldHtml(stop) {
+      const person = state.adminPersonSeed;
+      const options = adminAddressOptionsForPerson(person);
+      if (!person || !options.length) {
+        return `
+          <label>
+            <span>Pickup address</span>
+            <input name="address" value="${escapeHtml(stop.address || "")}" required>
+          </label>`;
+      }
+
+      const selectedType = state.adminSelectedAddressType || person.preferredAddressType || options[0].type;
+      return `
+        <section class="admin-field-group">
+          <span class="admin-field-label">Pickup address</span>
+          <div class="admin-address-options">
+            ${options.map((option) => `
+              <label class="admin-address-option">
+                <input type="radio" name="addressChoice" value="${escapeHtml(option.address)}" ${option.type === selectedType ? "checked" : ""} data-admin-address-type="${escapeHtml(option.type)}">
+                <span>
+                  <strong>${escapeHtml(option.label)}</strong>
+                  <span>${escapeHtml(option.address)}</span>
+                </span>
+              </label>
+            `).join("")}
+          </div>
+        </section>`;
+    }
+
     function adminEditView() {
       const stop = adminSelectedStop();
       if (!stop) {
@@ -3115,6 +3326,7 @@
 
           <section class="admin-form-card">
             <input type="hidden" name="id" value="${escapeHtml(stop.id || "")}">
+            <input type="hidden" name="personId" value="${escapeHtml(state.adminPersonSeed?.id || "")}">
             <label>
               <span>Driver</span>
               <select name="driverSlug" required>${adminDriverOptionList(stop.driverSlug)}</select>
@@ -3125,16 +3337,14 @@
             </label>
             <label>
               <span>Rider name</span>
-              <input name="name" value="${escapeHtml(stop.name || "")}" required>
+              <input name="name" value="${escapeHtml(stop.name || "")}" data-admin-rider-name autocomplete="off" required>
             </label>
+            ${adminRiderSuggestionsHtml()}
             <label>
               <span>Phone</span>
               <input name="phone" value="${escapeHtml(stop.phone || "")}" inputmode="tel">
             </label>
-            <label>
-              <span>Pickup address</span>
-              <input name="address" value="${escapeHtml(stop.address || "")}" required>
-            </label>
+            ${adminAddressFieldHtml(stop)}
             <label>
               <span>Area</span>
               <input name="area" value="${escapeHtml(stop.area || "")}">
@@ -3540,6 +3750,34 @@
       const adminAddPersonButton = event.target.closest("[data-admin-add-person]");
       if (adminAddPersonButton) openAdminPersonEditor(adminAddPersonButton.dataset.adminAddPerson);
 
+      const adminPersonSelectButton = event.target.closest("[data-admin-person-select]");
+      if (adminPersonSelectButton) {
+        const person = adminPersonById(adminPersonSelectButton.dataset.adminPersonSelect);
+        if (person) {
+          state.adminPersonSeed = person;
+          state.adminRiderQuery = person.name || "";
+          state.adminSelectedAddressType = person.preferredAddressType || adminAddressOptionsForPerson(person)[0]?.type || "";
+          render();
+        }
+      }
+
+      const adminNewRiderButton = event.target.closest("[data-admin-new-rider]");
+      if (adminNewRiderButton) {
+        state.adminPersonSeed = null;
+        state.adminRiderQuery = adminNewRiderButton.dataset.adminNewRider || state.adminRiderQuery || "";
+        state.adminSelectedAddressType = "";
+        render();
+      }
+
+      const adminAddressOption = event.target.closest(".admin-address-option");
+      if (adminAddressOption) {
+        const input = adminAddressOption.querySelector("[data-admin-address-type]");
+        if (input) {
+          input.checked = true;
+          state.adminSelectedAddressType = input.dataset.adminAddressType || "";
+        }
+      }
+
       const adminDeleteButton = event.target.closest("[data-admin-delete]");
       if (adminDeleteButton) {
         const stopId = adminDeleteButton.dataset.adminDelete;
@@ -3579,6 +3817,20 @@
           const checked = [...resetForm.querySelectorAll("input[name='driverSlug']:checked")].map((input) => input.value);
           state.adminResetDriverSlugs = checked;
           render();
+        }
+        return;
+      }
+
+      const riderNameInput = event.target.closest("[data-admin-rider-name]");
+      if (riderNameInput && state.adminSelectedStopId === "new") {
+        state.adminRiderQuery = riderNameInput.value;
+        state.adminPersonSeed = null;
+        state.adminSelectedAddressType = "";
+        const suggestions = screen.querySelector("[data-admin-person-suggestions]");
+        if (suggestions) {
+          const items = adminRiderSuggestionItemsHtml();
+          suggestions.innerHTML = items;
+          suggestions.hidden = !items;
         }
         return;
       }

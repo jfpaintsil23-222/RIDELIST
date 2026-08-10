@@ -75,8 +75,15 @@ test("app contains admin ride control entry points", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 
   assert.match(html, /data-action="admin"/);
+  assert.match(html, /adminAuthFields/);
+  assert.match(html, /adminEmail/);
+  assert.match(html, /adminPassword/);
+  assert.match(html, /adminCodeFallback/);
+  assert.match(html, /signInAdminWithPassword/);
   assert.match(html, /ride_app_context/);
   assert.match(html, /ride_admin_snapshot/);
+  assert.match(html, /ride_admin_security_context/);
+  assert.match(html, /ride_admin_activity/);
   assert.match(html, /ride_admin_publish_plan/);
   assert.match(html, /ride_admin_start_new_sunday/);
   assert.match(html, /const FALLBACK_PLAN_DATE = "2026-08-09"/);

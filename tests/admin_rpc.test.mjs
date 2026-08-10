@@ -59,6 +59,32 @@ test("admin snapshot rejects wrong passcodes and accepts the admin passcode", as
   assert.equal(snapshot.stops.length, 19);
 });
 
+test("admin security context exposes code fallback status and protects audit history", async () => {
+  const rejectedContext = await rpc("ride_admin_security_context", {
+    p_admin_code: "wrong-code",
+  });
+
+  assert.equal(rejectedContext.ok, false);
+  assert.equal(rejectedContext.error, "invalid_admin_code");
+
+  const context = await rpc("ride_admin_security_context", {
+    p_admin_code: ADMIN_CODE,
+  });
+
+  assert.equal(context.ok, true);
+  assert.equal(context.loginRequired, false);
+  assert.equal(context.codeFallbackEnabled, true);
+  assert.equal(context.actor.type, "code");
+
+  const rejectedActivity = await rpc("ride_admin_activity", {
+    p_admin_code: "wrong-code",
+    p_limit: 5,
+  });
+
+  assert.equal(rejectedActivity.ok, false);
+  assert.equal(rejectedActivity.error, "invalid_admin_code");
+});
+
 test("admin snapshot includes protected PeopleData", async () => {
   const snapshot = await rpc("ride_admin_snapshot", {
     p_admin_code: ADMIN_CODE,
@@ -225,4 +251,16 @@ test("admin can add, move, update, and delete a rider through publish", async ()
 
   assert.equal(deleted.ok, true);
   assert.equal(deleted.stops.some((stop) => stop.id === created.id), false);
+
+  const activity = await rpc("ride_admin_activity", {
+    p_admin_code: ADMIN_CODE,
+    p_limit: 20,
+  });
+
+  assert.equal(activity.ok, true);
+  assert.ok(Array.isArray(activity.events));
+  assert.ok(
+    activity.events.some((event) => event.action === "publish_plan" && event.planDate === PLAN_DATE),
+    "publish action should be captured in the admin audit history",
+  );
 });

@@ -643,6 +643,23 @@
       letter-spacing: 0;
     }
 
+    .admin-auth-fields {
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-text-button {
+      justify-self: start;
+      border: 0;
+      padding: 0;
+      color: #050505;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 850;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
     .modal-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1829,6 +1846,11 @@
             <h2 id="modalTitle">Passcode</h2>
             <p id="modalDriver"></p>
           </div>
+          <div id="adminAuthFields" class="admin-auth-fields" hidden>
+            <input id="adminEmail" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Admin email" aria-label="Admin email">
+            <input id="adminPassword" type="password" autocomplete="current-password" placeholder="Admin password" aria-label="Admin password">
+            <button class="admin-text-button" type="button" id="adminCodeFallback">Use admin passcode instead</button>
+          </div>
           <input id="driverCode" type="password" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" aria-label="Passcode">
           <p id="codeError" class="error" hidden></p>
           <div class="modal-actions">
@@ -1844,6 +1866,28 @@
     const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
     const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
     const FALLBACK_PLAN_DATE = "2026-08-09";
+    const ADMIN_SESSION_KEY = "ride-admin-session";
+
+    function readAdminSession() {
+      try {
+        const stored = localStorage.getItem(ADMIN_SESSION_KEY);
+        if (!stored) return null;
+        const session = JSON.parse(stored);
+        if (!session?.access_token) return null;
+        return session;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function saveAdminSession(session) {
+      if (!session?.access_token) return;
+      localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+    }
+
+    function clearAdminSession() {
+      localStorage.removeItem(ADMIN_SESSION_KEY);
+    }
 
     const state = {
       view: "home",
@@ -1855,8 +1899,11 @@
       route: null,
       selectedRider: null,
       codeMode: "driver",
+      adminLoginMode: "auth",
+      adminSession: readAdminSession(),
       adminCode: "",
       admin: null,
+      adminActivity: [],
       adminDraftStops: [],
       adminDeletedStopIds: [],
       adminSelectedStopId: null,
@@ -1882,6 +1929,10 @@
     const codeModal = document.querySelector("#codeModal");
     const codeForm = document.querySelector("#codeForm");
     const driverCode = document.querySelector("#driverCode");
+    const adminAuthFields = document.querySelector("#adminAuthFields");
+    const adminEmail = document.querySelector("#adminEmail");
+    const adminPassword = document.querySelector("#adminPassword");
+    const adminCodeFallback = document.querySelector("#adminCodeFallback");
     const modalDriver = document.querySelector("#modalDriver");
     const codeError = document.querySelector("#codeError");
     const codeSubmit = document.querySelector("#codeSubmit");
@@ -1902,12 +1953,17 @@
       return "tel:+" + (digits.length === 10 ? "1" + digits : digits);
     };
 
-    async function rpc(name, body) {
+    function adminRpcOptions() {
+      return state.adminSession?.access_token ? { accessToken: state.adminSession.access_token } : {};
+    }
+
+    async function rpc(name, body, options = {}) {
+      const accessToken = options.accessToken || SUPABASE_KEY;
       const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + name, {
         method: "POST",
         headers: {
           "apikey": SUPABASE_KEY,
-          "authorization": "Bearer " + SUPABASE_KEY,
+          "authorization": "Bearer " + accessToken,
           "content-type": "application/json",
         },
         body: JSON.stringify(body),
@@ -1919,6 +1975,68 @@
       }
 
       return response.json();
+    }
+
+    async function authRequest(path, body, accessToken = "") {
+      const headers = {
+        "apikey": SUPABASE_KEY,
+        "content-type": "application/json",
+      };
+      if (accessToken) headers.authorization = "Bearer " + accessToken;
+
+      const response = await fetch(SUPABASE_URL + "/auth/v1/" + path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.msg || payload?.message || payload?.error_description || "Auth request failed");
+      }
+      return payload;
+    }
+
+    async function signInAdminWithPassword(email, password) {
+      const session = await authRequest("token?grant_type=password", { email, password });
+      saveAdminSession(session);
+      state.adminSession = session;
+      state.adminCode = "";
+      await loadAdminSnapshot("");
+    }
+
+    async function signOutAdmin() {
+      const token = state.adminSession?.access_token;
+      if (token) {
+        try {
+          await authRequest("logout", {}, token);
+        } catch (error) {
+          console.warn(error);
+        }
+      }
+      clearAdminSession();
+      state.adminSession = null;
+      state.admin = null;
+      state.adminCode = "";
+      state.adminMessage = "";
+      state.view = "home";
+      render();
+    }
+
+    async function loadAdminSecurityContext(adminCode = state.adminCode) {
+      return rpc("ride_admin_security_context", { p_admin_code: adminCode }, adminRpcOptions());
+    }
+
+    async function loadAdminActivity() {
+      try {
+        const activity = await rpc("ride_admin_activity", {
+          p_admin_code: state.adminCode,
+          p_limit: 8,
+        }, adminRpcOptions());
+        if (activity?.ok) state.adminActivity = activity.events || [];
+      } catch (error) {
+        console.warn(error);
+      }
     }
 
     function activePlanDate() {
@@ -2407,17 +2525,19 @@
         const snapshot = await rpc("ride_admin_snapshot", {
           p_admin_code: adminCode,
           p_plan_date: activePlanDate(),
-        });
+        }, adminRpcOptions());
 
         if (!snapshot?.ok) {
           throw new Error(snapshot?.error || "invalid_admin_code");
         }
 
+        const security = await loadAdminSecurityContext(adminCode);
         state.adminCode = adminCode;
         state.planDate = snapshot.plan?.date || activePlanDate();
         state.plan = snapshot.plan || state.plan;
         state.destination = snapshot.destination || state.destination;
-        state.admin = snapshot;
+        state.admin = { ...snapshot, security: snapshot.security || security };
+        await loadAdminActivity();
         state.adminDraftStops = cloneStops(snapshot.stops);
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
@@ -2431,7 +2551,9 @@
         state.view = "admin";
         closeCodeModal();
       } catch (error) {
-        state.adminError = error.message === "invalid_admin_code" ? "Admin code did not match." : "Admin could not open.";
+        state.adminError = error.message === "invalid_admin_code"
+          ? (state.adminSession?.access_token && !adminCode ? "This login is not approved for ride admin." : "Admin code did not match.")
+          : "Admin could not open.";
         if (state.codeMode === "admin" && codeModal.classList.contains("open")) {
           codeError.textContent = state.adminError;
           codeError.hidden = false;
@@ -2444,7 +2566,7 @@
     }
 
     async function publishAdminDraft() {
-      if (!state.adminCode) return;
+      if (!state.adminCode && !state.adminSession?.access_token) return;
       state.adminLoading = true;
       state.adminError = "";
       render();
@@ -2458,7 +2580,7 @@
             id: String(stop.id || "").startsWith("temp-") ? null : stop.id,
           })),
           p_deleted_stop_ids: state.adminDeletedStopIds,
-        });
+        }, adminRpcOptions());
 
         if (!published?.ok) {
           throw new Error(published?.error || "publish_failed");
@@ -2478,6 +2600,7 @@
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
         state.adminMessage = "Route changes published.";
+        await loadAdminActivity();
         state.view = "admin";
         state.drivers = await rpc("ride_driver_directory", { p_plan_date: activePlanDate() });
       } catch (error) {
@@ -2499,7 +2622,7 @@
     }
 
     async function startNewSundayFromForm(form) {
-      if (!state.adminCode) return;
+      if (!state.adminCode && !state.adminSession?.access_token) return;
       const formData = new FormData(form);
       const planDate = String(formData.get("planDate") || "").trim();
       const driverSlugs = formData.getAll("driverSlug").map(String).filter(Boolean);
@@ -2527,7 +2650,7 @@
           p_driver_slugs: driverSlugs,
           p_source_plan_date: activePlanDate(),
           p_make_active: true,
-        });
+        }, adminRpcOptions());
 
         if (!created?.ok) {
           throw new Error(created?.error || "reset_failed");
@@ -2537,6 +2660,7 @@
         state.plan = created.plan || null;
         state.destination = created.destination || state.destination;
         state.admin = created;
+        await loadAdminActivity();
         state.adminDraftStops = cloneStops(created.stops);
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
@@ -2790,6 +2914,30 @@
         </section>`;
     }
 
+    function adminActivityCard(event) {
+      const created = event.createdAt ? new Date(event.createdAt) : null;
+      const timeLabel = created && !Number.isNaN(created.getTime())
+        ? created.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+        : "Recent";
+      return `
+        <article class="admin-change-card">
+          <span class="admin-change-badge">i</span>
+          <span class="admin-change-copy">
+            <strong>${escapeHtml(event.action || "admin_action")}</strong>
+            <span>${escapeHtml([event.actorLabel, timeLabel].filter(Boolean).join(" · "))}</span>
+          </span>
+        </article>`;
+    }
+
+    function adminActivityList() {
+      const events = state.adminActivity || [];
+      return `
+        <section class="admin-change-list" aria-label="Recent admin activity">
+          <section class="admin-message">Recent admin activity</section>
+          ${events.length ? events.map(adminActivityCard).join("") : `<section class="empty-card"><p>No admin activity yet.</p></section>`}
+        </section>`;
+    }
+
     function adminReviewView() {
       const changed = adminChangedCount();
       const changes = adminChangeList();
@@ -2815,7 +2963,19 @@
             ${changes.length ? changes.map(adminChangeCard).join("") : `<section class="empty-card"><p>No unpublished changes.</p></section>`}
           </section>
           ${adminPublishButton(changed)}
+          ${adminActivityList()}
         </div>`;
+    }
+
+    function adminSecurityStatus() {
+      const actor = state.admin?.security?.actor;
+      if (actor?.type === "user") {
+        return `Signed in as ${actor.label || actor.email || "Ride Admin"}`;
+      }
+      if (actor?.type === "code") {
+        return "Passcode fallback active · switch to admin login when ready";
+      }
+      return state.adminSession?.access_token ? "Signed-in admin session" : "Admin passcode mode";
     }
 
     function adminResetDriverOption(driver) {
@@ -2917,6 +3077,8 @@
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+          <section class="admin-message">${escapeHtml(adminSecurityStatus())}</section>
+          ${state.adminSession?.access_token ? `<button class="secondary-action" type="button" data-action="adminSignOut">Sign out admin</button>` : ""}
 
           <button class="secondary-action" type="button" data-action="adminReset">Start New Sunday</button>
           ${activeView}
@@ -3224,10 +3386,13 @@
 
     async function openCodeModal(slug) {
       state.codeMode = "driver";
+      state.adminLoginMode = "code";
       state.selectedDriver = state.drivers.find((driver) => driver.slug === slug);
       document.querySelector("#modalTitle").textContent = "Passcode";
       modalDriver.textContent = state.selectedDriver?.display_name || "";
       codeSubmit.textContent = "Open route";
+      adminAuthFields.hidden = true;
+      driverCode.hidden = false;
       codeError.hidden = true;
       codeError.textContent = "";
       driverCode.value = "";
@@ -3235,15 +3400,39 @@
     }
 
     function openAdminCodeModal() {
+      if (state.adminSession?.access_token) {
+        state.codeMode = "admin";
+        loadAdminSnapshot("");
+        return;
+      }
       state.codeMode = "admin";
       state.selectedDriver = null;
+      state.adminLoginMode = "auth";
+      document.querySelector("#modalTitle").textContent = "Admin sign in";
+      modalDriver.textContent = "Ride Control";
+      codeSubmit.textContent = "Sign in";
+      adminAuthFields.hidden = false;
+      driverCode.hidden = true;
+      codeError.hidden = true;
+      codeError.textContent = "";
+      adminEmail.value = "";
+      adminPassword.value = "";
+      driverCode.value = "";
+      codeModal.classList.add("open");
+    }
+
+    function setAdminCodeFallbackMode() {
+      state.codeMode = "admin";
+      state.adminLoginMode = "code";
       document.querySelector("#modalTitle").textContent = "Admin passcode";
       modalDriver.textContent = "Ride Control";
       codeSubmit.textContent = "Open admin";
+      adminAuthFields.hidden = true;
+      driverCode.hidden = false;
       codeError.hidden = true;
       codeError.textContent = "";
       driverCode.value = "";
-      codeModal.classList.add("open");
+      driverCode.focus();
     }
 
     function closeCodeModal() {
@@ -3255,7 +3444,17 @@
     async function submitCode(event) {
       event.preventDefault();
       if (state.codeMode === "admin") {
-        await loadAdminSnapshot(driverCode.value);
+        try {
+          if (state.adminLoginMode === "auth") {
+            await signInAdminWithPassword(adminEmail.value.trim(), adminPassword.value);
+          } else {
+            await loadAdminSnapshot(driverCode.value);
+          }
+        } catch (error) {
+          codeError.textContent = state.adminLoginMode === "auth" ? "Admin login could not open Ride Control." : "Admin could not open.";
+          codeError.hidden = false;
+          console.error(error);
+        }
         return;
       }
 
@@ -3308,6 +3507,7 @@
       if (action === "driverHome") setDriverHome();
       if (action === "rides") setRidesView();
       if (action === "admin") openAdminCodeModal();
+      if (action === "adminSignOut") signOutAdmin();
       if (action === "adminBack") {
         state.adminError = "";
         state.adminSelectedStopId = null;
@@ -3421,6 +3621,7 @@
       else openHome();
     });
     profileNav.addEventListener("click", openProfile);
+    adminCodeFallback.addEventListener("click", setAdminCodeFallbackMode);
     codeForm.addEventListener("submit", submitCode);
     document.querySelector("#cancelCode").addEventListener("click", closeCodeModal);
     codeModal.addEventListener("click", (event) => {

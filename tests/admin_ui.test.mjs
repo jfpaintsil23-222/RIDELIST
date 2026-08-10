@@ -68,6 +68,7 @@ async function loadApp(fetchImpl) {
       driverProfileCard,
       driverHomeView,
       ridesView,
+      detailView,
       driverRouteSummary,
       routeTimingForDriver: typeof routeTimingForDriver === "function" ? routeTimingForDriver : undefined,
       secureRouteTimingRequest: typeof secureRouteTimingRequest === "function" ? secureRouteTimingRequest : undefined,
@@ -435,9 +436,26 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
 
   const pendingHtml = app.ridesView();
   assert.match(pendingHtml, /Start route to Nora/);
+  assert.match(pendingHtml, /Ready by 10:55 AM/);
+  assert.match(pendingHtml, /Details/);
+  assert.match(pendingHtml, /aria-label="Open Nora pickup details"/);
+  assert.doesNotMatch(pendingHtml, /10819 Tryon Dr/);
   assert.doesNotMatch(pendingHtml, /All pickups complete/);
 
+  app.state.selectedRider = app.state.route.riders[0];
+  const detailHtml = app.detailView();
+  assert.match(detailHtml, /class="contact-actions"/);
+  assert.match(detailHtml, /href="sms:\+12817041697"/);
+  assert.match(detailHtml, />Message</);
+  assert.match(detailHtml, />Call</);
+  assert.doesNotMatch(detailHtml, /Call rider/);
+
   app.__storage.setItem("ride-picked-2026-08-09-joojo-1", "1");
+  const partialHtml = app.ridesView();
+  assert.match(partialHtml, /class="route-stop is-picked"[\s\S]*<span class="stop-number">✓<\/span>[\s\S]*<strong>Nora<\/strong>/);
+  assert.doesNotMatch(partialHtml, /<span class="stop-number">1<\/span>[\s\S]*<strong>Nora<\/strong>/);
+  assert.match(partialHtml, /<span class="stop-number">2<\/span>[\s\S]*<strong>Simi<\/strong>/);
+
   app.__storage.setItem("ride-picked-2026-08-09-joojo-2", "1");
 
   const completeHtml = app.ridesView();
@@ -528,11 +546,11 @@ test("admin route cards show route warnings and timing status", async () => {
   const warnings = app.adminRouteWarnings(app.state.admin.drivers[0], app.state.adminDraftStops, null);
   assert.equal(
     JSON.stringify(warnings.map((warning) => warning.label)),
-    JSON.stringify(["Missing phone", "Missing pickup time", "Missing address", "Route time unavailable"]),
+    JSON.stringify(["Missing number", "Missing pickup time", "Missing address", "Route time unavailable"]),
   );
 
   const html = app.adminView();
-  assert.match(html, /Missing phone/);
+  assert.match(html, /Missing number/);
   assert.match(html, /Missing pickup time/);
   assert.match(html, /Missing address/);
   assert.match(html, /Route time unavailable/);

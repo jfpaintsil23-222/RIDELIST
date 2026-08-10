@@ -104,7 +104,7 @@ export function buildRouteWarnings(stops = [], timing = null) {
   if (!stops.length) add("no-riders", "No riders assigned");
 
   stops.forEach((stop) => {
-    if (!String(stop.phone || "").trim()) add("missing-phone", "Missing phone", "urgent");
+    if (!String(stop.phone || "").trim()) add("missing-phone", "Missing number", "urgent");
     if (!String(stop.pickupTime || "").trim()) add("missing-pickup-time", "Missing pickup time", "urgent");
     if (!String(stop.address || "").trim()) add("missing-address", "Missing address", "urgent");
   });

@@ -90,7 +90,7 @@ test("buildRouteWarnings deduplicates missing route data", () => {
   ], { status: "error" });
 
   assert.deepEqual(warnings, [
-    { key: "missing-phone", label: "Missing phone", level: "urgent" },
+    { key: "missing-phone", label: "Missing number", level: "urgent" },
     { key: "missing-pickup-time", label: "Missing pickup time", level: "urgent" },
     { key: "missing-address", label: "Missing address", level: "urgent" },
     { key: "route-time-unavailable", label: "Route time unavailable", level: "normal" },

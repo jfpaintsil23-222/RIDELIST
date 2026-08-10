@@ -1810,7 +1810,8 @@
     }
 
     .route-stop.is-picked .stop-number {
-      background: #000000;
+      color: #ffffff;
+      background: var(--green);
     }
 
     .stop-number {
@@ -1837,12 +1838,33 @@
       overflow-wrap: anywhere;
     }
 
+    .stop-details-cue {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      width: fit-content;
+      color: #050505;
+      font-size: 12px;
+      line-height: 1.2;
+      font-weight: 850;
+    }
+
     .stop-time {
       padding-top: 2px;
       color: #050505;
       font-size: 12px;
       font-weight: 750;
       white-space: nowrap;
+    }
+
+    .contact-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .contact-actions .secondary-action {
+      min-height: 52px;
     }
 
     .route-start {
@@ -2192,6 +2214,11 @@
       const digits = String(phone || "").replace(/\D/g, "");
       if (!digits) return "";
       return "tel:+" + (digits.length === 10 ? "1" + digits : digits);
+    };
+    const smsHref = (phone) => {
+      const digits = String(phone || "").replace(/\D/g, "");
+      if (!digits) return "";
+      return "sms:+" + (digits.length === 10 ? "1" + digits : digits);
     };
 
     function adminRpcOptions() {
@@ -2804,7 +2831,7 @@
       if (!stops.length) add("no-riders", "No riders assigned");
 
       stops.forEach((stop) => {
-        if (!String(stop.phone || "").trim()) add("missing-phone", "Missing phone", "urgent");
+        if (!String(stop.phone || "").trim()) add("missing-phone", "Missing number", "urgent");
         if (!String(stop.pickupTime || "").trim()) add("missing-pickup-time", "Missing pickup time", "urgent");
         if (!String(stop.address || "").trim()) add("missing-address", "Missing address", "urgent");
       });
@@ -3894,13 +3921,14 @@
     }
 
     function routeStopRow(rider) {
+      const picked = getPicked(rider.stopOrder);
       return `
-        <button class="route-stop" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} pickup details">
-          <span class="stop-number">${Number(rider.stopOrder)}</span>
+        <button class="route-stop${picked ? " is-picked" : ""}" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} pickup details">
+          <span class="stop-number">${picked ? "✓" : Number(rider.stopOrder)}</span>
           <span class="stop-copy">
             <strong>${escapeHtml(rider.name)}</strong>
-            <span>${escapeHtml(rider.address)}</span>
             <small>${escapeHtml(readyText(rider))}</small>
+            <span class="stop-details-cue">Details <span aria-hidden="true">&rsaquo;</span></span>
           </span>
           <span class="stop-time">${escapeHtml(pickupTimeText(rider))}</span>
         </button>`;
@@ -3990,6 +4018,7 @@
       const driver = state.route?.driver;
       const picked = getPicked(rider.stopOrder);
       const phoneLink = telHref(rider.phone);
+      const messageLink = smsHref(rider.phone);
 
       return `
         <div class="stack">
@@ -4022,7 +4051,11 @@
           <a class="secondary-action" href="${appleMaps(rider.address)}" target="_blank" rel="noreferrer">
             <span>Open in Apple Maps</span>
           </a>
-          ${phoneLink ? `<a class="secondary-action" href="${phoneLink}">Call rider</a>` : ""}
+          ${phoneLink ? `
+          <section class="contact-actions" aria-label="Contact rider">
+            <a class="secondary-action" href="${messageLink}">Message</a>
+            <a class="secondary-action" href="${phoneLink}">Call</a>
+          </section>` : ""}
           <button class="mark-button ${picked ? "is-picked" : ""}" type="button" data-mark="${Number(rider.stopOrder)}">
             <span>✓</span>
             <span>${picked ? "Picked up" : "Mark picked up"}</span>

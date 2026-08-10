@@ -7,6 +7,7 @@ async function loadApp() {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
   assert.ok(script, "index.html should include the app script");
+  const storage = new Map();
 
   const element = () => ({
     hidden: false,
@@ -33,10 +34,12 @@ async function loadApp() {
     encodeURIComponent,
     FormData: class {},
     localStorage: {
-      getItem() {
-        return null;
+      getItem(key) {
+        return storage.get(key) || null;
       },
-      setItem() {},
+      setItem(key, value) {
+        storage.set(key, String(value));
+      },
     },
     document: {
       querySelector() {
@@ -63,10 +66,13 @@ async function loadApp() {
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
       driverProfileCard,
+      driverHomeView,
+      ridesView,
       driverRouteSummary,
       adminChangedCount,
       adminChangeList: typeof adminChangeList === "function" ? adminChangeList : undefined,
       nextSundayDate: typeof nextSundayDate === "function" ? nextSundayDate : undefined,
+      __storage: localStorage,
     };
   `, context);
 
@@ -303,6 +309,111 @@ test("admin routes collapse by driver and rider rows use move instead of remove"
   assert.match(expanded, /Tinnie/);
   assert.match(expanded, /data-admin-move="stop-1"/);
   assert.doesNotMatch(expanded, /data-admin-delete="stop-1"/);
+});
+
+test("admin route headers summarize route area and first pickup timing", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [
+      { slug: "joojo", displayName: "Joojo", initials: "JP" },
+      { slug: "dawson", displayName: "Dawson", initials: "DW" },
+    ],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "joojo",
+        stopOrder: 1,
+        name: "Nora",
+        phone: "(281) 704-1697",
+        address: "10819 Tryon Dr, Houston, TX",
+        area: "Cypress",
+        pickupTime: "11:00 AM",
+        readyBy: "10:55 AM",
+        routeLabel: "",
+        notes: "",
+      },
+      {
+        id: "stop-2",
+        driverSlug: "joojo",
+        stopOrder: 2,
+        name: "Simi",
+        phone: "",
+        address: "17254 Cricketbriar Ct, Houston, TX",
+        area: "Cypress",
+        pickupTime: "Follow after Nora",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+    people: [],
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminDeletedStopIds = [];
+  app.state.adminActiveTab = "routes";
+  app.state.adminExpandedDriverSlug = "joojo";
+
+  const html = app.adminView();
+  assert.match(html, /Cypress Route/);
+  assert.match(html, /Starts 11:00 AM/);
+  assert.match(html, /2 Pickups/);
+  assert.match(html, /data-admin-edit="stop-1"/);
+  assert.match(html, /data-admin-move="stop-1"/);
+  assert.match(html, /href="tel:\+12817041697"/);
+  assert.match(html, /target="_blank" rel="noreferrer">Map/);
+});
+
+test("driver dashboard summarizes route and unlocks UH route after all pickups", async () => {
+  const app = await loadApp();
+
+  app.state.planDate = "2026-08-09";
+  app.state.route = {
+    plan: { date: "2026-08-09" },
+    driver: { slug: "joojo", displayName: "Joojo", initials: "JP" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX 77204" },
+    riders: [
+      {
+        stopOrder: 1,
+        name: "Nora",
+        phone: "(281) 704-1697",
+        address: "10819 Tryon Dr, Houston, TX",
+        area: "Cypress",
+        pickupTime: "11:00 AM",
+        readyBy: "10:55 AM",
+        routeLabel: "",
+        notes: "",
+      },
+      {
+        stopOrder: 2,
+        name: "Simi",
+        phone: "",
+        address: "17254 Cricketbriar Ct, Houston, TX",
+        area: "Cypress",
+        pickupTime: "Follow after Nora",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+  };
+
+  const homeHtml = app.driverHomeView();
+  assert.match(homeHtml, /Route overview/);
+  assert.match(homeHtml, /Cypress Route/);
+  assert.match(homeHtml, /First pickup: 11:00 AM/);
+  assert.match(homeHtml, /Ends at UH Hilton/);
+
+  const pendingHtml = app.ridesView();
+  assert.match(pendingHtml, /Start route to Nora/);
+  assert.doesNotMatch(pendingHtml, /All pickups complete/);
+
+  app.__storage.setItem("ride-picked-2026-08-09-joojo-1", "1");
+  app.__storage.setItem("ride-picked-2026-08-09-joojo-2", "1");
+
+  const completeHtml = app.ridesView();
+  assert.match(completeHtml, /All pickups complete/);
+  assert.match(completeHtml, /Start route to UH Hilton/);
 });
 
 test("people tab uses the PeopleData bank with full rider details", async () => {

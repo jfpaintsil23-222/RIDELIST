@@ -920,6 +920,51 @@
       font-weight: 850;
     }
 
+    .driver-overview-card {
+      display: grid;
+      gap: 0;
+      padding: 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: none;
+    }
+
+    .driver-overview-card h2 {
+      margin: 0;
+      padding: 16px 0 10px;
+      color: #050505;
+      font-size: 17px;
+      font-weight: 850;
+    }
+
+    .driver-overview-row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 13px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .driver-overview-row strong,
+    .route-complete-card strong {
+      display: block;
+      color: #050505;
+      font-size: 16px;
+      line-height: 1.25;
+      font-weight: 850;
+    }
+
+    .driver-overview-row span:last-child,
+    .route-complete-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 650;
+    }
+
     .passcode-card {
       padding: 17px 20px;
       background: #f4f4f4;
@@ -1748,6 +1793,22 @@
       margin-top: 12px;
     }
 
+    .route-complete-card {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+      border: 1px solid #d8dedb;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .route-complete-card .stop-number {
+      color: #ffffff;
+      background: #000000;
+    }
+
     .person-banner {
       grid-template-columns: 44px 1fr auto;
       padding: 0;
@@ -2287,10 +2348,75 @@
       return summary.startLabel ? `${summary.startLabel} · ${summary.timeLabel}` : summary.timeLabel;
     }
 
+    function orderedStops(stops = []) {
+      return stops
+        .slice()
+        .sort((a, b) => Number(a.stopOrder || 0) - Number(b.stopOrder || 0) || String(a.name || "").localeCompare(String(b.name || "")));
+    }
+
+    function normalizeRouteArea(area) {
+      const label = String(area || "").trim();
+      if (!label) return "";
+      if (/route$/i.test(label)) return label;
+      if (/^(uh|uh campus|campus|campus area|neighborhood)$/i.test(label)) return "Neighborhood Route";
+      return `${label} Route`;
+    }
+
+    function routeAreaFromStops(stops = []) {
+      const labels = [];
+      const seen = new Set();
+      orderedStops(stops).forEach((stop) => {
+        const label = normalizeRouteArea(stop.area);
+        const key = label.toLowerCase();
+        if (label && !seen.has(key)) {
+          labels.push(label);
+          seen.add(key);
+        }
+      });
+
+      if (!labels.length) return "";
+      if (labels.length === 1) return labels[0];
+      return `${labels[0].replace(/\s+Route$/i, "")} + ${labels.length - 1} ${labels.length === 2 ? "area" : "areas"}`;
+    }
+
+    function firstPickupTime(stops = []) {
+      const sorted = orderedStops(stops);
+      const exactTime = sorted.find((stop) => stop.pickupTime && !/follow|after|next/i.test(stop.pickupTime));
+      return (exactTime || sorted[0] || {}).pickupTime || "";
+    }
+
     function driverRouteSummary(driver) {
       return DRIVER_ROUTE_SUMMARIES[driver.slug] || {
         routeLabel: driver.route_label || driver.routeLabel || "Assigned Route",
         timeLabel: driver.time_label || driver.timeLabel || "Route time pending",
+      };
+    }
+
+    function adminRouteHeaderSummary(driver, stops = []) {
+      if (!stops.length) {
+        return {
+          routeLabel: "No pickups assigned",
+          timingLabel: "",
+        };
+      }
+
+      const summary = driverRouteSummary({ slug: driver.slug, routeLabel: driver.routeLabel, timeLabel: driver.timeLabel });
+      const routeLabel = routeAreaFromStops(stops) || summary.routeLabel || "Assigned Route";
+      const pickupTime = firstPickupTime(stops);
+      return {
+        routeLabel,
+        timingLabel: pickupTime ? `Starts ${pickupTime}` : routeTimeLabel(summary),
+      };
+    }
+
+    function driverDashboardMeta(driver, riders = [], destination = destinationSummary()) {
+      const summary = driverRouteSummary(driver || {});
+      const pickupTime = firstPickupTime(riders);
+      return {
+        routeLabel: routeAreaFromStops(riders) || summary.routeLabel || "Assigned Route",
+        firstPickupLine: riders.length ? `First pickup: ${pickupTime || "coordinate directly"}` : "No pickups assigned",
+        timeLine: routeTimeLabel(summary),
+        destinationLine: `Ends at ${destination.label}`,
       };
     }
 
@@ -2397,9 +2523,7 @@
     }
 
     function adminStopsForDriver(slug) {
-      return adminStops()
-        .filter((stop) => stop.driverSlug === slug)
-        .sort((a, b) => Number(a.stopOrder || 0) - Number(b.stopOrder || 0) || a.name.localeCompare(b.name));
+      return orderedStops(adminStops().filter((stop) => stop.driverSlug === slug));
     }
 
     function adminDriverBySlug(slug) {
@@ -2936,7 +3060,7 @@
     }
 
     function adminRiderCard(stop, options = {}) {
-      const routePill = options.showDriver ? adminDriverName(stop.driverSlug) : stop.routeLabel || "Route";
+      const routePill = options.showDriver ? adminDriverName(stop.driverSlug) : stop.routeLabel || stop.area || "Route";
       const detailLine = [
         options.showDriver ? stop.routeLabel : "",
         stop.pickupTime,
@@ -2976,13 +3100,15 @@
       const stops = adminStopsForDriver(driver.slug);
       const isOpen = state.adminExpandedDriverSlug === driver.slug;
       const avatarClass = String(driver.initials || "").length > 2 ? "avatar small three-letter" : "avatar small";
+      const header = adminRouteHeaderSummary(driver, stops);
       return `
         <section class="admin-route-card ${isOpen ? "is-open" : ""}">
           <button class="admin-driver-toggle" type="button" data-admin-driver-toggle="${escapeHtml(driver.slug)}" aria-expanded="${isOpen ? "true" : "false"}">
             <span class="${avatarClass}">${escapeHtml(driver.initials)}</span>
             <span class="admin-route-copy">
               <strong>${escapeHtml(driver.displayName)}</strong>
-              <span>${escapeHtml(stops.length ? "Tap to view pickups" : "No pickups assigned")}</span>
+              <span>${escapeHtml(header.routeLabel)}</span>
+              ${header.timingLabel ? `<span>${escapeHtml(header.timingLabel)}</span>` : ""}
             </span>
             <span class="admin-route-toggle-copy">
               <span class="pill">${escapeHtml(pickupCountLabel(stops.length))}</span>
@@ -3400,6 +3526,7 @@
       const riders = state.route?.riders || [];
       const destination = state.route?.destination;
       const riderNames = riderNameList(riders);
+      const meta = driverDashboardMeta(driver, riders, destination);
 
       return `
         <div class="stack">
@@ -3415,6 +3542,32 @@
               <strong class="count">${riders.length}</strong>
               <p>${escapeHtml(riderNames)}</p>
             </div>
+          </section>
+
+          <section class="driver-overview-card" aria-label="Route overview">
+            <h2>Route overview</h2>
+            <div class="driver-overview-row">
+              ${iconSvg("pin")}
+              <span>
+                <strong>${escapeHtml(meta.routeLabel)}</strong>
+                <span>${escapeHtml(meta.firstPickupLine)}</span>
+              </span>
+            </div>
+            ${meta.timeLine ? `
+            <div class="driver-overview-row">
+              ${iconSvg("clock")}
+              <span>
+                <strong>${escapeHtml(meta.timeLine)}</strong>
+                <span>${escapeHtml(meta.destinationLine)}</span>
+              </span>
+            </div>` : `
+            <div class="driver-overview-row">
+              ${iconSvg("car")}
+              <span>
+                <strong>${escapeHtml(meta.destinationLine)}</strong>
+                <span>${escapeHtml(destination.address)}</span>
+              </span>
+            </div>`}
           </section>
 
           <section class="destination-block">
@@ -3502,6 +3655,15 @@
               </span>
             </div>
           </section>
+
+          ${target.allPicked ? `
+          <section class="route-complete-card" aria-label="All pickups complete">
+            <span class="stop-number">✓</span>
+            <span>
+              <strong>All pickups complete</strong>
+              <span>Start the final route to ${escapeHtml(destination.label)}.</span>
+            </span>
+          </section>` : ""}
 
           <a class="primary-action route-start" href="${googleMaps(target.address)}" target="_blank" rel="noreferrer">${escapeHtml(target.label)} <span aria-hidden="true">&rarr;</span></a>
         </div>`;

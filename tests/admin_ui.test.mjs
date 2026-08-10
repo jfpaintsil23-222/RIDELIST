@@ -3,7 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-async function loadApp() {
+async function loadApp(fetchImpl) {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
   assert.ok(script, "index.html should include the app script");
@@ -49,10 +49,10 @@ async function loadApp() {
         return [];
       },
     },
-    fetch: async () => ({
+    fetch: fetchImpl || (async () => ({
       ok: true,
       json: async () => [],
-    }),
+    })),
   };
 
   vm.createContext(context);
@@ -69,6 +69,9 @@ async function loadApp() {
       driverHomeView,
       ridesView,
       driverRouteSummary,
+      routeTimingForDriver: typeof routeTimingForDriver === "function" ? routeTimingForDriver : undefined,
+      secureRouteTimingRequest: typeof secureRouteTimingRequest === "function" ? secureRouteTimingRequest : undefined,
+      adminRouteWarnings: typeof adminRouteWarnings === "function" ? adminRouteWarnings : undefined,
       weatherSummaryText: typeof weatherSummaryText === "function" ? weatherSummaryText : undefined,
       adminChangedCount,
       adminChangeList: typeof adminChangeList === "function" ? adminChangeList : undefined,
@@ -440,6 +443,133 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   const completeHtml = app.ridesView();
   assert.match(completeHtml, /All pickups complete/);
   assert.match(completeHtml, /Start route to UH Hilton/);
+});
+
+test("driver dashboard prefers secure route timing when available", async () => {
+  const app = await loadApp();
+
+  app.state.planDate = "2026-08-09";
+  app.state.route = {
+    plan: { date: "2026-08-09" },
+    driver: { slug: "joojo", displayName: "Joojo", initials: "JP" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX 77204" },
+    riders: [
+      {
+        stopOrder: 1,
+        name: "Nora",
+        phone: "(281) 704-1697",
+        address: "10819 Tryon Dr, Houston, TX",
+        area: "Cypress",
+        pickupTime: "11:00 AM",
+        readyBy: "10:55 AM",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+  };
+  app.state.routeTimings = {
+    joojo: {
+      status: "ready",
+      durationText: "42 min",
+      etaText: "11:42 AM",
+      distanceText: "22 mi",
+    },
+  };
+
+  const html = app.driverHomeView();
+  assert.match(html, /Total route: 42 min/);
+  assert.match(html, /Estimated UH arrival: 11:42 AM/);
+  assert.doesNotMatch(html, /1 hr 22 min to UH Hilton/);
+});
+
+test("admin route cards show route warnings and timing status", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "dq", displayName: "DQ", initials: "DQ" }],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "dq",
+        stopOrder: 1,
+        name: "A'lena",
+        phone: "",
+        address: "9425 Asheville Rd, Houston, TX",
+        area: "South Houston",
+        pickupTime: "",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+      {
+        id: "stop-2",
+        driverSlug: "dq",
+        stopOrder: 2,
+        name: "Christopher L",
+        phone: "832-942-1381",
+        address: "",
+        area: "South Houston",
+        pickupTime: "11:30 AM",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+    people: [],
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminDeletedStopIds = [];
+  app.state.adminActiveTab = "routes";
+  app.state.adminExpandedDriverSlug = "dq";
+  app.state.routeTimingStatus = "error";
+  app.state.routeTimings = {};
+
+  assert.equal(typeof app.adminRouteWarnings, "function");
+  const warnings = app.adminRouteWarnings(app.state.admin.drivers[0], app.state.adminDraftStops, null);
+  assert.equal(
+    JSON.stringify(warnings.map((warning) => warning.label)),
+    JSON.stringify(["Missing phone", "Missing pickup time", "Missing address", "Route time unavailable"]),
+  );
+
+  const html = app.adminView();
+  assert.match(html, /Missing phone/);
+  assert.match(html, /Missing pickup time/);
+  assert.match(html, /Missing address/);
+  assert.match(html, /Route time unavailable/);
+});
+
+test("secure route timing request calls Supabase Edge Function without Google keys", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (!String(url).includes("/functions/v1/ride-route-timing")) {
+      return {
+        ok: true,
+        json: async () => String(url).includes("ride_app_context")
+          ? { ok: true, plan: { date: "2026-08-09" }, destination: { label: "UH Hilton", address: "4800 Calhoun Rd" } }
+          : [],
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, timings: { joojo: { status: "ready", durationText: "40 min" } } }),
+    };
+  });
+
+  assert.equal(typeof app.secureRouteTimingRequest, "function");
+  const payload = await app.secureRouteTimingRequest("driver", {
+    planDate: "2026-08-09",
+    driverSlug: "joojo",
+    accessCode: "rides123",
+  });
+
+  assert.equal(payload.ok, true);
+  const timingCall = calls.find((call) => String(call.url).includes("/functions/v1/ride-route-timing"));
+  assert.ok(timingCall, "route timing should call the Edge Function");
+  assert.match(timingCall.url, /\/functions\/v1\/ride-route-timing$/);
+  assert.equal(timingCall.options.method, "POST");
+  assert.match(timingCall.options.headers.apikey, /^sb_publishable_/);
+  assert.doesNotMatch(JSON.stringify(timingCall), /GOOGLE|AIza|Routes API/i);
 });
 
 test("people tab uses the PeopleData bank with full rider details", async () => {

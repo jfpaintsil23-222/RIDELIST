@@ -1330,6 +1330,30 @@
       gap: 12px;
     }
 
+    .admin-warning-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .admin-warning-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      color: #050505;
+      background: #f1f1f1;
+      font-size: 11px;
+      line-height: 1;
+      font-weight: 800;
+    }
+
+    .admin-warning-chip.urgent {
+      color: #8a1f1f;
+      background: #fff0f0;
+    }
+
     .admin-driver-toggle {
       width: 100%;
       display: grid;
@@ -2131,6 +2155,10 @@
       weatherStatus: "idle",
       weatherForecast: null,
       weatherDate: "",
+      routeTimingStatus: "idle",
+      routeTimingError: "",
+      routeTimingPlanDate: "",
+      routeTimings: {},
       loading: true,
       error: "",
     };
@@ -2188,6 +2216,28 @@
       }
 
       return response.json();
+    }
+
+    async function secureRouteTimingRequest(mode, payload = {}) {
+      const headers = {
+        "apikey": SUPABASE_KEY,
+        "content-type": "application/json",
+      };
+      if (mode === "admin" && state.adminSession?.access_token) {
+        headers.authorization = "Bearer " + state.adminSession.access_token;
+      }
+
+      const response = await fetch(SUPABASE_URL + "/functions/v1/ride-route-timing", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ mode, ...payload }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "route_timing_failed");
+      }
+      return data;
     }
 
     async function authRequest(path, body, accessToken = "") {
@@ -2395,6 +2445,11 @@
       return `Total route: ${label}`;
     }
 
+    function routeTimingForDriver(slug) {
+      if (!slug) return null;
+      return state.routeTimings?.[slug] || null;
+    }
+
     function orderedStops(stops = []) {
       return stops
         .slice()
@@ -2460,11 +2515,14 @@
     function driverDashboardMeta(driver, riders = [], destination = destinationSummary()) {
       const summary = driverRouteSummary(driver || {});
       const pickupTime = firstPickupTime(riders);
+      const timing = routeTimingForDriver(driver?.slug);
+      const hasLiveTiming = timing?.status === "ready" && timing.durationText;
+      const isLoadingTiming = timing?.status === "loading";
       return {
         routeLabel: routeAreaFromStops(riders) || summary.routeLabel || "Assigned Route",
         firstPickupLine: riders.length ? `First pickup: ${pickupTime || "coordinate directly"}` : "No pickups assigned",
-        timeLine: totalRouteTimeLabel(summary),
-        destinationLine: `Ends at ${destination.label}`,
+        timeLine: hasLiveTiming ? `Total route: ${timing.durationText}` : isLoadingTiming ? "Checking route time..." : totalRouteTimeLabel(summary),
+        destinationLine: hasLiveTiming && timing.etaText ? `Estimated UH arrival: ${timing.etaText}` : timing?.status === "error" ? "Live timing unavailable" : `Ends at ${destination.label}`,
       };
     }
 
@@ -2557,6 +2615,73 @@
       } catch (error) {
         state.weatherStatus = "error";
         state.weatherForecast = null;
+        console.warn(error);
+      } finally {
+        render();
+      }
+    }
+
+    async function loadDriverRouteTiming(accessCode) {
+      const driverSlug = state.route?.driver?.slug;
+      if (!driverSlug || !accessCode) return;
+
+      state.routeTimingStatus = "loading";
+      state.routeTimingError = "";
+      state.routeTimingPlanDate = activePlanDate();
+      state.routeTimings = {
+        ...(state.routeTimings || {}),
+        [driverSlug]: { status: "loading" },
+      };
+      render();
+
+      try {
+        const timing = await secureRouteTimingRequest("driver", {
+          planDate: activePlanDate(),
+          driverSlug,
+          accessCode,
+        });
+
+        if (!timing?.ok) throw new Error(timing?.error || "route_timing_failed");
+        state.routeTimings = { ...(state.routeTimings || {}), ...(timing.timings || {}) };
+        state.routeTimingStatus = "ready";
+      } catch (error) {
+        state.routeTimings = {
+          ...(state.routeTimings || {}),
+          [driverSlug]: { status: "error" },
+        };
+        state.routeTimingStatus = "error";
+        state.routeTimingError = error.message;
+        console.warn(error);
+      } finally {
+        render();
+      }
+    }
+
+    async function loadAdminRouteTiming() {
+      if (!state.admin) return;
+
+      state.routeTimingStatus = "loading";
+      state.routeTimingError = "";
+      state.routeTimingPlanDate = activePlanDate();
+      state.routeTimings = Object.fromEntries(adminDrivers().map((driver) => [driver.slug, { status: "loading" }]));
+      render();
+
+      try {
+        const timing = await secureRouteTimingRequest("admin", {
+          planDate: activePlanDate(),
+          adminCode: state.adminCode,
+          drivers: adminDrivers(),
+          stops: adminStops(),
+          destination: destinationSummary(),
+        });
+
+        if (!timing?.ok) throw new Error(timing?.error || "route_timing_failed");
+        state.routeTimings = timing.timings || {};
+        state.routeTimingStatus = "ready";
+      } catch (error) {
+        state.routeTimings = Object.fromEntries(adminDrivers().map((driver) => [driver.slug, { status: "error" }]));
+        state.routeTimingStatus = "error";
+        state.routeTimingError = error.message;
         console.warn(error);
       } finally {
         render();
@@ -2668,6 +2793,41 @@
 
     function adminStopsForDriver(slug) {
       return orderedStops(adminStops().filter((stop) => stop.driverSlug === slug));
+    }
+
+    function adminRouteWarnings(driver, stops = [], timing = null) {
+      const warnings = [];
+      const add = (key, label, level = "normal") => {
+        if (!warnings.some((warning) => warning.key === key || warning.label === label)) warnings.push({ key, label, level });
+      };
+
+      if (!stops.length) add("no-riders", "No riders assigned");
+
+      stops.forEach((stop) => {
+        if (!String(stop.phone || "").trim()) add("missing-phone", "Missing phone", "urgent");
+        if (!String(stop.pickupTime || "").trim()) add("missing-pickup-time", "Missing pickup time", "urgent");
+        if (!String(stop.address || "").trim()) add("missing-address", "Missing address", "urgent");
+      });
+
+      const timingStatus = timing?.status || "";
+      if (timingStatus === "error" || (!timing && state.routeTimingStatus === "error")) {
+        add("route-time-unavailable", "Route time unavailable");
+      }
+      if (timingStatus === "loading" || (!timing && state.routeTimingStatus === "loading")) {
+        add("route-time-loading", "Checking route time");
+      }
+      if (timing?.warning) add("route-warning", timing.warning, "urgent");
+
+      return warnings;
+    }
+
+    function adminRouteWarningsHtml(driver, stops) {
+      const warnings = adminRouteWarnings(driver, stops, routeTimingForDriver(driver.slug));
+      if (!warnings.length) return "";
+      return `
+        <div class="admin-warning-list" aria-label="${escapeHtml(driver.displayName)} route warnings">
+          ${warnings.map((warning) => `<span class="admin-warning-chip ${warning.level === "urgent" ? "urgent" : ""}">${escapeHtml(warning.label)}</span>`).join("")}
+        </div>`;
     }
 
     function adminDriverBySlug(slug) {
@@ -2914,6 +3074,7 @@
       state.adminActiveTab = "routes";
       state.view = "admin";
       render();
+      loadAdminRouteTiming();
     }
 
     function deleteAdminDraftStop(stopId) {
@@ -2935,6 +3096,7 @@
       state.adminActiveTab = "routes";
       state.view = "admin";
       render();
+      loadAdminRouteTiming();
     }
 
     async function loadAdminSnapshot(adminCode = state.adminCode) {
@@ -2973,6 +3135,7 @@
         state.adminMessage = "";
         state.view = "admin";
         closeCodeModal();
+        loadAdminRouteTiming();
       } catch (error) {
         state.adminError = error.message === "invalid_admin_code"
           ? (state.adminSession?.access_token && !adminCode ? "This login is not approved for ride admin." : "Admin code did not match.")
@@ -3028,6 +3191,7 @@
         await loadAdminActivity();
         state.view = "admin";
         state.drivers = await rpc("ride_driver_directory", { p_plan_date: activePlanDate() });
+        loadAdminRouteTiming();
       } catch (error) {
         state.adminError = "Could not publish changes.";
         console.error(error);
@@ -3102,6 +3266,7 @@
         state.adminMessage = `New Sunday created for ${planDateLabel(state.planDate)}. Routes are blank.`;
         state.view = "admin";
         state.drivers = await rpc("ride_driver_directory", { p_plan_date: activePlanDate() });
+        loadAdminRouteTiming();
       } catch (error) {
         state.adminError = error.message === "sunday_date_required"
           ? "Choose a Sunday date."
@@ -3259,6 +3424,7 @@
               <span class="admin-route-arrow" aria-hidden="true">&rsaquo;</span>
             </span>
           </button>
+          ${adminRouteWarningsHtml(driver, stops)}
           ${isOpen ? `
           <div class="admin-rider-list">
             ${stops.length ? stops.map((stop) => adminRiderCard(stop, { routeActions: true })).join("") : `<section class="empty-card"><p>No riders assigned.</p></section>`}
@@ -4004,8 +4170,13 @@
         state.weatherStatus = "idle";
         state.weatherForecast = null;
         state.weatherDate = "";
+        state.routeTimingStatus = "idle";
+        state.routeTimingError = "";
+        state.routeTimingPlanDate = "";
+        state.routeTimings = {};
         closeCodeModal();
         setDriverHome();
+        loadDriverRouteTiming(driverCode.value);
         loadWeatherForecast();
       } catch (error) {
         codeError.textContent = "Route could not open.";

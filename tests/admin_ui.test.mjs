@@ -57,11 +57,13 @@ async function loadApp() {
     globalThis.__app = {
       state,
       adminView,
+      adminResetView: typeof adminResetView === "function" ? adminResetView : undefined,
       adminEditView,
       driverProfileCard,
       driverRouteSummary,
       adminChangedCount,
       adminChangeList: typeof adminChangeList === "function" ? adminChangeList : undefined,
+      nextSundayDate: typeof nextSundayDate === "function" ? nextSundayDate : undefined,
     };
   `, context);
 
@@ -72,10 +74,13 @@ test("app contains admin ride control entry points", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 
   assert.match(html, /data-action="admin"/);
+  assert.match(html, /ride_app_context/);
   assert.match(html, /ride_admin_snapshot/);
   assert.match(html, /ride_admin_publish_plan/);
-  assert.match(html, /const PLAN_DATE = "2026-08-09"/);
+  assert.match(html, /ride_admin_start_new_sunday/);
+  assert.match(html, /const FALLBACK_PLAN_DATE = "2026-08-09"/);
   assert.match(html, /function adminView/);
+  assert.match(html, /function adminResetView/);
   assert.match(html, /function adminEditView/);
 });
 
@@ -320,4 +325,51 @@ test("edit screen contains the red remove control above form actions", async () 
   assert.match(html, /Remove rider/);
   assert.match(html, /data-admin-delete="stop-1"/);
   assert.ok(html.indexOf("Remove rider") < html.indexOf("Cancel"), "remove should appear above Cancel");
+});
+
+test("admin Sunday reset screen keeps PeopleData and starts with selected blank drivers", async () => {
+  const app = await loadApp();
+
+  assert.equal(typeof app.adminResetView, "function");
+  assert.equal(app.nextSundayDate("2026-08-09"), "2026-08-16");
+
+  app.state.planDate = "2026-08-09";
+  app.state.admin = {
+    plan: { date: "2026-08-09", title: "Sunday Ride Plan" },
+    drivers: [
+      { slug: "joojo", displayName: "Joojo", initials: "JP", pickupCount: 5 },
+      { slug: "annie", displayName: "Annie", initials: "AK", pickupCount: 4 },
+      { slug: "dawson", displayName: "Dawson", initials: "DW", pickupCount: 1 },
+    ],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "joojo",
+        stopOrder: 1,
+        name: "Faith",
+        phone: "",
+        address: "7539 Keystone Blossom Trl, Richmond, TX",
+        area: "Richmond",
+        pickupTime: "8:45 AM",
+        readyBy: "8:40 AM",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+    people: [{ id: "person-1", name: "Faith", preferredAddress: "7539 Keystone Blossom Trl, Richmond, TX" }],
+  };
+  app.state.adminResetDate = "2026-08-16";
+  app.state.adminResetDriverSlugs = ["joojo", "annie"];
+
+  const html = app.adminResetView();
+  assert.match(html, /Create New Sunday/);
+  assert.match(html, /2026-08-16/);
+  assert.match(html, /Joojo/);
+  assert.match(html, /Annie/);
+  assert.match(html, /Dawson/);
+  assert.match(html, /PeopleData stays saved/);
+  assert.match(html, /0 pickups copied/);
+  assert.match(html, /name="driverSlug" value="joojo" checked/);
+  assert.match(html, /name="driverSlug" value="annie" checked/);
+  assert.doesNotMatch(html, /Faith<\/strong>/);
 });

@@ -1438,6 +1438,47 @@
       min-height: 52px;
     }
 
+    .admin-reset-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-reset-option {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+      border: 1px solid #e3ebe8;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 18px rgba(11, 23, 42, 0.05);
+    }
+
+    .admin-reset-option input {
+      width: 20px;
+      height: 20px;
+      accent-color: #111;
+    }
+
+    .admin-reset-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .admin-reset-copy strong {
+      color: #111827;
+      font-size: 15px;
+      line-height: 1.15;
+    }
+
+    .admin-reset-copy span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
     .primary-action:disabled,
     .secondary-action:disabled {
       opacity: 0.5;
@@ -1760,10 +1801,13 @@
   <script>
     const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
     const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
-    const PLAN_DATE = "2026-08-09";
+    const FALLBACK_PLAN_DATE = "2026-08-09";
 
     const state = {
       view: "home",
+      planDate: FALLBACK_PLAN_DATE,
+      plan: null,
+      destination: null,
       drivers: [],
       selectedDriver: null,
       route: null,
@@ -1780,6 +1824,8 @@
       adminSearch: "",
       adminPeopleSearch: "",
       adminExpandedDriverSlug: "",
+      adminResetDate: "",
+      adminResetDriverSlugs: [],
       adminMessage: "",
       adminError: "",
       adminLoading: false,
@@ -1833,13 +1879,41 @@
       return response.json();
     }
 
+    function activePlanDate() {
+      return state.planDate || FALLBACK_PLAN_DATE;
+    }
+
+    function nextSundayDate(fromDate = activePlanDate()) {
+      const base = new Date(`${fromDate || FALLBACK_PLAN_DATE}T12:00:00`);
+      if (Number.isNaN(base.getTime())) return "";
+      const daysUntilSunday = (7 - base.getDay()) || 7;
+      base.setDate(base.getDate() + daysUntilSunday);
+      return base.toISOString().slice(0, 10);
+    }
+
+    function planDateLabel(dateValue = activePlanDate()) {
+      if (!dateValue) return "Sunday";
+      const date = new Date(`${dateValue}T12:00:00`);
+      if (Number.isNaN(date.getTime())) return "Sunday";
+      return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    }
+
+    async function loadAppContext() {
+      const context = await rpc("ride_app_context", {});
+      if (!context?.ok) return;
+      state.planDate = context.plan?.date || FALLBACK_PLAN_DATE;
+      state.plan = context.plan || null;
+      state.destination = context.destination || null;
+    }
+
     async function loadDrivers() {
       state.loading = true;
       state.error = "";
       render();
 
       try {
-        state.drivers = await rpc("ride_driver_directory", { p_plan_date: PLAN_DATE });
+        await loadAppContext();
+        state.drivers = await rpc("ride_driver_directory", { p_plan_date: activePlanDate() });
       } catch (error) {
         state.error = "Could not load drivers.";
         console.error(error);
@@ -1866,6 +1940,10 @@
       label: "University of Houston Hilton Hotel",
       address: "4450 University Drive, Houston, TX 77204",
     };
+
+    function destinationSummary() {
+      return state.destination || DESTINATION_SUMMARY;
+    }
 
     const DRIVER_ROUTE_SUMMARIES = {
       "joojo": {
@@ -1976,12 +2054,13 @@
     }
 
     function profileDestinationCard() {
+      const destination = destinationSummary();
       return `
-        <a class="profile-destination-card" href="${googleMaps(DESTINATION_SUMMARY.address)}" target="_blank" rel="noreferrer">
+        <a class="profile-destination-card" href="${googleMaps(destination.address)}" target="_blank" rel="noreferrer">
           <span class="destination-icon">${iconSvg("pin")}</span>
           <span class="destination-copy">
-            <strong>All routes end at<br>${escapeHtml(DESTINATION_SUMMARY.label)}</strong>
-            <p>${escapeHtml(DESTINATION_SUMMARY.address)}</p>
+            <strong>All routes end at<br>${escapeHtml(destination.label)}</strong>
+            <p>${escapeHtml(destination.address)}</p>
           </span>
           <span class="destination-map-icon">${iconSvg("map")}</span>
         </a>`;
@@ -2024,6 +2103,10 @@
 
     function adminDriverName(slug) {
       return adminDriverBySlug(slug)?.displayName || slug || "Unassigned";
+    }
+
+    function adminDriverPickupCount(driver) {
+      return Number(driver?.pickupCount ?? driver?.pickup_count ?? 0);
     }
 
     function adminOriginalStopMap() {
@@ -2281,7 +2364,7 @@
       try {
         const snapshot = await rpc("ride_admin_snapshot", {
           p_admin_code: adminCode,
-          p_plan_date: PLAN_DATE,
+          p_plan_date: activePlanDate(),
         });
 
         if (!snapshot?.ok) {
@@ -2289,6 +2372,9 @@
         }
 
         state.adminCode = adminCode;
+        state.planDate = snapshot.plan?.date || activePlanDate();
+        state.plan = snapshot.plan || state.plan;
+        state.destination = snapshot.destination || state.destination;
         state.admin = snapshot;
         state.adminDraftStops = cloneStops(snapshot.stops);
         state.adminDeletedStopIds = [];
@@ -2324,7 +2410,7 @@
       try {
         const published = await rpc("ride_admin_publish_plan", {
           p_admin_code: state.adminCode,
-          p_plan_date: PLAN_DATE,
+          p_plan_date: activePlanDate(),
           p_stops: adminStops().map((stop) => ({
             ...stop,
             id: String(stop.id || "").startsWith("temp-") ? null : stop.id,
@@ -2337,6 +2423,9 @@
         }
 
         state.admin = published;
+        state.planDate = published.plan?.date || activePlanDate();
+        state.plan = published.plan || state.plan;
+        state.destination = published.destination || state.destination;
         state.adminDraftStops = cloneStops(published.stops);
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
@@ -2347,9 +2436,82 @@
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
         state.adminMessage = "Route changes published.";
-        state.drivers = await rpc("ride_driver_directory", { p_plan_date: PLAN_DATE });
+        state.drivers = await rpc("ride_driver_directory", { p_plan_date: activePlanDate() });
       } catch (error) {
         state.adminError = "Could not publish changes.";
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
+    function openAdminReset() {
+      state.adminResetDate = nextSundayDate();
+      state.adminResetDriverSlugs = adminDrivers().map((driver) => driver.slug);
+      state.adminMessage = "";
+      state.adminError = "";
+      state.view = "adminReset";
+      render();
+    }
+
+    async function startNewSundayFromForm(form) {
+      if (!state.adminCode) return;
+      const formData = new FormData(form);
+      const planDate = String(formData.get("planDate") || "").trim();
+      const driverSlugs = formData.getAll("driverSlug").map(String).filter(Boolean);
+
+      if (!planDate) {
+        state.adminError = "Choose the new Sunday date.";
+        render();
+        return;
+      }
+
+      if (!driverSlugs.length) {
+        state.adminError = "Choose at least one driver.";
+        render();
+        return;
+      }
+
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const created = await rpc("ride_admin_start_new_sunday", {
+          p_admin_code: state.adminCode,
+          p_plan_date: planDate,
+          p_driver_slugs: driverSlugs,
+          p_source_plan_date: activePlanDate(),
+          p_make_active: true,
+        });
+
+        if (!created?.ok) {
+          throw new Error(created?.error || "reset_failed");
+        }
+
+        state.planDate = created.plan?.date || planDate;
+        state.plan = created.plan || null;
+        state.destination = created.destination || state.destination;
+        state.admin = created;
+        state.adminDraftStops = cloneStops(created.stops);
+        state.adminDeletedStopIds = [];
+        state.adminSelectedStopId = null;
+        state.adminPersonSeed = null;
+        state.adminEditMode = "edit";
+        state.adminActiveTab = "routes";
+        state.adminSearch = "";
+        state.adminPeopleSearch = "";
+        state.adminExpandedDriverSlug = "";
+        state.adminResetDate = "";
+        state.adminResetDriverSlugs = [];
+        state.adminMessage = `New Sunday created for ${planDateLabel(state.planDate)}. Routes are blank.`;
+        state.view = "admin";
+        state.drivers = await rpc("ride_driver_directory", { p_plan_date: activePlanDate() });
+      } catch (error) {
+        state.adminError = error.message === "sunday_date_required"
+          ? "Choose a Sunday date."
+          : "Could not start the new Sunday.";
         console.error(error);
       } finally {
         state.adminLoading = false;
@@ -2385,7 +2547,7 @@
 
     function setActiveNav() {
       const routeScreen = state.view === "rides" || state.view === "detail";
-      const adminScreen = state.view === "admin" || state.view === "adminEdit";
+      const adminScreen = state.view === "admin" || state.view === "adminEdit" || state.view === "adminReset";
       bottomNav.hidden = routeScreen || adminScreen;
       screen.classList.toggle("full-bottom", routeScreen || adminScreen);
       homeNav.classList.toggle("active", state.view === "home" || state.view === "driverHome" || routeScreen);
@@ -2398,7 +2560,7 @@
           <section class="intro-block" aria-label="Sunday ride dashboard">
             <div class="home-header-row">
               <div>
-                <p class="eyebrow">Today</p>
+                <p class="eyebrow">${escapeHtml(planDateLabel())}</p>
                 <h1>Sunday Ride Plan</h1>
                 <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
               </div>
@@ -2418,7 +2580,7 @@
             <div>
               <p>Total pickups</p>
               <strong class="count">${state.loading ? "..." : countRiders()}</strong>
-              <p>Sunday · UH Hilton</p>
+              <p>Sunday · ${escapeHtml(destinationSummary().label)}</p>
             </div>
           </section>
 
@@ -2435,7 +2597,7 @@
       return `
         <div class="stack">
           <section class="intro-block compact profile-header">
-            <p class="eyebrow">Today</p>
+            <p class="eyebrow">${escapeHtml(planDateLabel())}</p>
             <h1>Sunday Ride Plan</h1>
             <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
           </section>
@@ -2597,6 +2759,67 @@
         ${adminPublishButton(changed)}`;
     }
 
+    function adminResetDriverOption(driver) {
+      const selected = state.adminResetDriverSlugs.includes(driver.slug);
+      return `
+        <label class="admin-reset-option">
+          <input type="checkbox" name="driverSlug" value="${escapeHtml(driver.slug)}" ${selected ? "checked" : ""}>
+          <span class="admin-reset-copy">
+            <strong>${escapeHtml(driver.displayName)}</strong>
+            <span>Current route has ${escapeHtml(pickupCountLabel(adminDriverPickupCount(driver)).toLowerCase())}</span>
+          </span>
+          <span class="avatar small">${escapeHtml(driver.initials)}</span>
+        </label>`;
+    }
+
+    function adminResetView() {
+      const drivers = adminDrivers();
+      const selectedCount = state.adminResetDriverSlugs.length;
+      return `
+        <form class="stack" data-admin-form="reset">
+          <section class="intro-block compact">
+            <div class="admin-top-row">
+              <div>
+                <p class="eyebrow">Reset</p>
+                <h1>Create New Sunday</h1>
+                <p>Current plan: ${escapeHtml(planDateLabel())}</p>
+              </div>
+              <button class="admin-icon-button" type="button" data-action="adminResetBack" aria-label="Back to admin">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+          <section class="admin-message">
+            PeopleData stays saved · 0 pickups copied · Picked-up checkmarks start fresh
+          </section>
+
+          <section class="admin-form-card">
+            <label>
+              <span>Sunday date</span>
+              <input name="planDate" type="date" value="${escapeHtml(state.adminResetDate || nextSundayDate())}" required>
+            </label>
+          </section>
+
+          <section class="admin-stats" aria-label="New Sunday reset stats">
+            <div class="admin-stat"><strong>${drivers.length}</strong><span>available</span></div>
+            <div class="admin-stat"><strong>${selectedCount}</strong><span>selected</span></div>
+            <div class="admin-stat"><strong>0</strong><span>assigned</span></div>
+          </section>
+
+          <section class="admin-reset-grid" aria-label="Choose drivers">
+            ${drivers.length ? drivers.map(adminResetDriverOption).join("") : `<section class="empty-card"><p>No drivers available to copy.</p></section>`}
+          </section>
+
+          <div class="admin-form-actions">
+            <button class="secondary-action" type="button" data-action="adminResetBack">Cancel</button>
+            <button class="primary-action" type="submit" ${selectedCount ? "" : "disabled"}>${state.adminLoading ? "Creating..." : "Create New Sunday"}</button>
+          </div>
+        </form>`;
+    }
+
     function adminView() {
       if (state.adminLoading && !state.admin) {
         return `<div class="stack"><section class="empty-card"><p>Loading admin...</p></section></div>`;
@@ -2644,6 +2867,7 @@
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
 
+          <button class="secondary-action" type="button" data-action="adminReset">Start New Sunday</button>
           ${activeView}
           ${activeTab === "changes" ? "" : adminPublishButton(changed)}
         </div>`;
@@ -2907,7 +3131,7 @@
 
     function getStorageKey(stopOrder) {
       const driver = state.route?.driver?.slug || "driver";
-      return "ride-picked-" + PLAN_DATE + "-" + driver + "-" + stopOrder;
+      return "ride-picked-" + activePlanDate() + "-" + driver + "-" + stopOrder;
     }
 
     function getPicked(stopOrder) {
@@ -2934,6 +3158,7 @@
       else if (state.view === "detail" && state.selectedRider) screen.innerHTML = detailView();
       else if (state.view === "admin") screen.innerHTML = adminView();
       else if (state.view === "adminEdit") screen.innerHTML = adminEditView();
+      else if (state.view === "adminReset") screen.innerHTML = adminResetView();
       else screen.innerHTML = homeView();
       syncPickedChips();
     }
@@ -2990,7 +3215,7 @@
         const route = await rpc("ride_driver_route", {
           p_driver_slug: state.selectedDriver.slug,
           p_access_code: driverCode.value,
-          p_plan_date: PLAN_DATE,
+          p_plan_date: activePlanDate(),
         });
 
         if (!route?.ok) {
@@ -3039,6 +3264,14 @@
         state.view = "admin";
         render();
       }
+      if (action === "adminReset") openAdminReset();
+      if (action === "adminResetBack") {
+        state.adminError = "";
+        state.adminResetDate = "";
+        state.adminResetDriverSlugs = [];
+        state.view = "admin";
+        render();
+      }
       if (action === "adminNew") openAdminEditor("new");
       if (action === "adminPublish") publishAdminDraft();
 
@@ -3081,6 +3314,19 @@
     });
 
     screen.addEventListener("input", (event) => {
+      const resetForm = event.target.closest("[data-admin-form='reset']");
+      if (resetForm) {
+        if (event.target.name === "planDate") {
+          state.adminResetDate = event.target.value;
+        }
+        if (event.target.name === "driverSlug") {
+          const checked = [...resetForm.querySelectorAll("input[name='driverSlug']:checked")].map((input) => input.value);
+          state.adminResetDriverSlugs = checked;
+          render();
+        }
+        return;
+      }
+
       const peopleSearchInput = event.target.closest("[data-admin-people-search]");
       if (peopleSearchInput) {
         state.adminPeopleSearch = peopleSearchInput.value;
@@ -3101,6 +3347,13 @@
     });
 
     screen.addEventListener("submit", (event) => {
+      const resetForm = event.target.closest("[data-admin-form='reset']");
+      if (resetForm) {
+        event.preventDefault();
+        startNewSundayFromForm(resetForm);
+        return;
+      }
+
       const adminForm = event.target.closest("[data-admin-form='rider']");
       if (!adminForm) return;
       event.preventDefault();

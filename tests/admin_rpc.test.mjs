@@ -4,6 +4,7 @@ import test from "node:test";
 const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
 const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
 const PLAN_DATE = "2026-08-09";
+const RESET_TEST_DATE = "2099-01-04";
 const ADMIN_CODE = process.env.RIDES_ADMIN_CODE;
 
 if (!ADMIN_CODE) {
@@ -25,6 +26,14 @@ async function rpc(name, body) {
   assert.equal(response.ok, true, `${name} failed: ${response.status} ${text}`);
   return JSON.parse(text);
 }
+
+test("active ride context exposes the current public Sunday plan", async () => {
+  const context = await rpc("ride_app_context", {});
+
+  assert.equal(context.ok, true);
+  assert.equal(context.plan.date, PLAN_DATE);
+  assert.equal(context.destination.label, "UH Hilton");
+});
 
 test("admin snapshot rejects wrong passcodes and accepts the admin passcode", async () => {
   const rejected = await rpc("ride_admin_snapshot", {
@@ -119,6 +128,43 @@ test("August 9 route assignments match the approved Sunday plan", async () => {
       ["Vicky", "+1 (934) 233-4260", "2111 Holly Hall St, Houston, TX 77054"],
     ],
   );
+});
+
+test("admin can start a new blank Sunday from selected drivers without deleting PeopleData", async () => {
+  const beforeContext = await rpc("ride_app_context", {});
+
+  const rejected = await rpc("ride_admin_start_new_sunday", {
+    p_admin_code: "wrong-code",
+    p_plan_date: RESET_TEST_DATE,
+    p_driver_slugs: ["joojo", "annie"],
+    p_source_plan_date: PLAN_DATE,
+    p_make_active: false,
+  });
+
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.error, "invalid_admin_code");
+
+  const created = await rpc("ride_admin_start_new_sunday", {
+    p_admin_code: ADMIN_CODE,
+    p_plan_date: RESET_TEST_DATE,
+    p_driver_slugs: ["joojo", "annie"],
+    p_source_plan_date: PLAN_DATE,
+    p_make_active: false,
+  });
+
+  assert.equal(created.ok, true);
+  assert.equal(created.plan.date, RESET_TEST_DATE);
+  assert.equal(created.drivers.length, 2);
+  assert.deepEqual(
+    created.drivers.map((driver) => driver.slug),
+    ["joojo", "annie"],
+  );
+  assert.equal(created.stops.length, 0);
+  assert.ok(created.people.length >= 80, "PeopleData should remain available after reset");
+  assert.ok(created.people.some((person) => person.name === "Faith"));
+
+  const afterContext = await rpc("ride_app_context", {});
+  assert.equal(afterContext.plan.date, beforeContext.plan.date);
 });
 
 test("admin can add, move, update, and delete a rider through publish", async () => {

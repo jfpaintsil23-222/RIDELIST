@@ -158,6 +158,13 @@ test("driver profile cards show route areas instead of rider names", async () =>
     slug: "dq",
     subtitle: "A'lena and Christopher L",
   });
+  const homeAreaHtml = app.driverProfileCard({
+    slug: "unknown-driver",
+    display_name: "Test Driver",
+    initials: "TD",
+    pickup_count: 1,
+    route_label: "Home",
+  });
 
   assert.match(dannyHtml, /Richmond Route/);
   assert.doesNotMatch(dannyHtml, /Faith and Precious/);
@@ -165,6 +172,7 @@ test("driver profile cards show route areas instead of rider names", async () =>
   assert.doesNotMatch(preciousHtml, /DaSilva, Emmanuel Mitch, and Christopher R/);
   assert.equal(dawsonSummary.routeLabel, "West Houston Route");
   assert.equal(dqSummary.routeLabel, "South Houston Route");
+  assert.doesNotMatch(homeAreaHtml, /Home Route/);
 });
 
 test("admin uses routes and people tabs with a review action for pending changes", async () => {

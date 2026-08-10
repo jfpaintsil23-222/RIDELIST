@@ -2405,7 +2405,7 @@
       const label = String(area || "").trim();
       if (!label) return "";
       if (/route$/i.test(label)) return label;
-      if (/^(uh|uh campus|campus|campus area|neighborhood)$/i.test(label)) return "Neighborhood Route";
+      if (/^(uh|uh campus|campus|campus area|home|neighborhood)$/i.test(label)) return "Neighborhood Route";
       return `${label} Route`;
     }
 
@@ -2433,8 +2433,9 @@
     }
 
     function driverRouteSummary(driver) {
+      const directRouteLabel = normalizeRouteArea(driver.route_label || driver.routeLabel);
       return DRIVER_ROUTE_SUMMARIES[driver.slug] || {
-        routeLabel: driver.route_label || driver.routeLabel || "Assigned Route",
+        routeLabel: directRouteLabel || "Assigned Route",
         timeLabel: driver.time_label || driver.timeLabel || "Route time pending",
       };
     }

@@ -2163,6 +2163,12 @@
       adminPersonSeed: null,
       adminRiderQuery: "",
       adminSelectedAddressType: "",
+      adminSelectedPersonId: null,
+      adminPersonDraft: null,
+      adminPersonReviewMode: "",
+      adminMergePrimaryId: "",
+      adminMergeDuplicateId: "",
+      adminMergeDraft: null,
       adminEditMode: "edit",
       adminActiveTab: "routes",
       adminSearch: "",
@@ -2779,6 +2785,46 @@
       return adminPeople().find((person) => person.id === personId);
     }
 
+    function adminPersonNameKey(person) {
+      return String(person?.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    }
+
+    function adminPersonFirstName(person) {
+      return adminPersonNameKey(person).split(" ")[0] || "";
+    }
+
+    function adminPersonPhoneKey(person) {
+      return String(person?.phone || "").replace(/\D/g, "");
+    }
+
+    function adminDuplicateCandidates(person) {
+      if (!person) return [];
+      const nameKey = adminPersonNameKey(person);
+      const firstName = adminPersonFirstName(person);
+      const phoneKey = adminPersonPhoneKey(person);
+      const addressKey = preferredPersonAddress(person).trim().toLowerCase();
+
+      return adminPeople().filter((candidate) => {
+        if (!candidate || candidate.id === person.id) return false;
+        const candidateNameKey = adminPersonNameKey(candidate);
+        const candidateFirstName = adminPersonFirstName(candidate);
+        const candidatePhoneKey = adminPersonPhoneKey(candidate);
+        const candidateAddressKey = preferredPersonAddress(candidate).trim().toLowerCase();
+
+        return (
+          (nameKey && candidateNameKey && (nameKey === candidateNameKey || firstName === candidateFirstName)) ||
+          (phoneKey && candidatePhoneKey && phoneKey === candidatePhoneKey) ||
+          (addressKey && candidateAddressKey && addressKey === candidateAddressKey)
+        );
+      });
+    }
+
+    function adminPeopleStatus(person) {
+      if (adminDuplicateCandidates(person).length) return "Possible duplicate";
+      if (!String(person?.phone || "").trim() || !preferredPersonAddress(person)) return "Needs review";
+      return "Ready";
+    }
+
     function preferredPersonAddress(person) {
       if (!person) return "";
       return person.preferredAddress || person.homeAddress || person.campusAddress || "";
@@ -3039,6 +3085,22 @@
       state.adminError = "";
       state.adminMessage = "";
       state.view = "adminEdit";
+      render();
+    }
+
+    function openAdminPersonDetail(personId) {
+      const person = adminPersonById(personId);
+      if (!person) return;
+
+      state.adminSelectedPersonId = personId;
+      state.adminPersonDraft = null;
+      state.adminPersonReviewMode = "";
+      state.adminMergePrimaryId = "";
+      state.adminMergeDuplicateId = "";
+      state.adminMergeDraft = null;
+      state.adminError = "";
+      state.adminMessage = "";
+      state.view = "adminPersonDetail";
       render();
     }
 
@@ -3461,24 +3523,17 @@
 
     function adminPeopleResultCard(person, options = {}) {
       const preferredAddress = preferredPersonAddress(person);
-      const campusLine = person.campusAddress ? `Campus: ${person.campusAddress}` : "";
-      const homeLine = person.homeAddress ? `Home: ${person.homeAddress}` : "";
-      const mapAddress = preferredAddress || person.campusAddress || person.homeAddress;
+      const status = adminPeopleStatus(person);
       return `
-        <article class="admin-rider-card">
+        <article class="admin-rider-card" data-admin-person-open="${escapeHtml(person.id)}">
           <div class="admin-rider-row">
             <div class="admin-rider-copy">
               <strong>${escapeHtml(person.name)}</strong>
               <span>${escapeHtml(preferredAddress || "No address listed")}</span>
-              <span>${escapeHtml([person.phone, options.showSource ? person.sourceLabel : ""].filter(Boolean).join(" · ") || "No phone listed")}</span>
-              ${options.showData ? `${campusLine ? `<span>${escapeHtml(campusLine)}</span>` : ""}${homeLine ? `<span>${escapeHtml(homeLine)}</span>` : ""}` : ""}
+              <span>${escapeHtml(person.phone || "No phone listed")}</span>
+              ${options.showData ? `<span>${escapeHtml(person.notes || person.sourceLabel || "PeopleData")}</span>` : ""}
             </div>
-            <span class="pill">${escapeHtml(person.preferredAddressType === "campus" ? "Campus" : "Home")}</span>
-          </div>
-          <div class="admin-actions">
-            <button class="admin-chip-button" type="button" data-admin-add-person="${escapeHtml(person.id)}">Add to route</button>
-            ${mapAddress ? `<a class="admin-chip-button" href="${googleMaps(mapAddress)}" target="_blank" rel="noreferrer">Map</a>` : ""}
-            ${person.phone ? `<a class="admin-chip-button" href="${telHref(person.phone)}">Call</a>` : ""}
+            <span class="pill ${status === "Possible duplicate" ? "gray" : ""}">${escapeHtml(status)}</span>
           </div>
         </article>`;
     }
@@ -3586,6 +3641,58 @@
           </section>
           ${adminPublishButton(changed)}
           ${adminActivityList()}
+        </div>`;
+    }
+
+    function adminPersonDetailView() {
+      const person = adminPersonById(state.adminSelectedPersonId);
+      if (!person) {
+        return `
+          <div class="stack">
+            <button class="back-button" type="button" data-action="adminBack" aria-label="Back">&larr;</button>
+            <section class="empty-card"><p>Person not found.</p></section>
+          </div>`;
+      }
+
+      const duplicates = adminDuplicateCandidates(person);
+      const duplicate = duplicates[0];
+      const mapAddress = preferredPersonAddress(person);
+
+      return `
+        <div class="stack">
+          <section class="intro-block compact">
+            <div class="admin-top-row">
+              <div>
+                <p class="eyebrow">People Bank</p>
+                <h1>${escapeHtml(person.name || "Person")}</h1>
+                <p>Saved rider details</p>
+              </div>
+              <button class="admin-icon-button" type="button" data-action="adminBack" aria-label="Back to people">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+          ${duplicate ? `<section class="admin-message">Possible duplicate found: ${escapeHtml(duplicate.name)}</section>` : ""}
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+          <section class="admin-form-card">
+            <div class="detail-row"><small>Phone</small><strong>${escapeHtml(person.phone || "No phone listed")}</strong></div>
+            <div class="detail-row"><small>Home</small><strong>${escapeHtml(person.homeAddress || "No home address saved")}</strong></div>
+            <div class="detail-row"><small>Campus</small><strong>${escapeHtml(person.campusAddress || "No campus address saved")}</strong></div>
+            <div class="detail-row"><small>Primary</small><strong>${escapeHtml(person.preferredAddressType === "campus" ? "Campus address" : "Home address")}</strong></div>
+            <div class="detail-row"><small>Notes</small><strong>${escapeHtml(person.notes || person.sourceLabel || "No notes saved")}</strong></div>
+          </section>
+
+          <div class="admin-form-actions">
+            <button class="primary-action" type="button" data-admin-add-person="${escapeHtml(person.id)}">Add to route</button>
+            <button class="secondary-action" type="button" data-admin-person-edit="${escapeHtml(person.id)}">Edit</button>
+          </div>
+          <div class="admin-actions">
+            ${mapAddress ? `<a class="admin-chip-button" href="${googleMaps(mapAddress)}" target="_blank" rel="noreferrer">Map</a>` : ""}
+            ${person.phone ? `<a class="admin-chip-button" href="${telHref(person.phone)}">Call</a>` : ""}
+            ${duplicate ? `<button class="admin-chip-button" type="button" data-admin-person-merge="${escapeHtml(duplicate.id)}">Merge duplicate</button>` : ""}
+          </div>
         </div>`;
     }
 
@@ -4092,6 +4199,7 @@
       else if (state.view === "detail" && state.selectedRider) screen.innerHTML = detailView();
       else if (state.view === "admin") screen.innerHTML = adminView();
       else if (state.view === "adminReview") screen.innerHTML = adminReviewView();
+      else if (state.view === "adminPersonDetail") screen.innerHTML = adminPersonDetailView();
       else if (state.view === "adminEdit") screen.innerHTML = adminEditView();
       else if (state.view === "adminReset") screen.innerHTML = adminResetView();
       else screen.innerHTML = homeView();
@@ -4250,6 +4358,12 @@
         state.adminError = "";
         state.adminSelectedStopId = null;
         state.adminPersonSeed = null;
+        state.adminSelectedPersonId = null;
+        state.adminPersonDraft = null;
+        state.adminPersonReviewMode = "";
+        state.adminMergePrimaryId = "";
+        state.adminMergeDuplicateId = "";
+        state.adminMergeDraft = null;
         state.adminEditMode = "edit";
         state.view = "admin";
         render();
@@ -4274,6 +4388,12 @@
 
       const adminMoveButton = event.target.closest("[data-admin-move]");
       if (adminMoveButton) openAdminEditor(adminMoveButton.dataset.adminMove, "move");
+
+      const adminPersonOpenButton = event.target.closest("[data-admin-person-open]");
+      if (adminPersonOpenButton) {
+        openAdminPersonDetail(adminPersonOpenButton.dataset.adminPersonOpen);
+        return;
+      }
 
       const adminAddPersonButton = event.target.closest("[data-admin-add-person]");
       if (adminAddPersonButton) openAdminPersonEditor(adminAddPersonButton.dataset.adminAddPerson);

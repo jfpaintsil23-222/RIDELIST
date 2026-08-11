@@ -63,6 +63,8 @@ async function loadApp(fetchImpl) {
       adminReviewView: typeof adminReviewView === "function" ? adminReviewView : undefined,
       adminResetView: typeof adminResetView === "function" ? adminResetView : undefined,
       adminEditView,
+      adminPersonDetailView: typeof adminPersonDetailView === "function" ? adminPersonDetailView : undefined,
+      adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
       driverProfileCard,
@@ -251,7 +253,7 @@ test("admin uses routes and people tabs with a review action for pending changes
   assert.match(peopleHtml, /PeopleData · 2 people stored/);
   assert.match(peopleHtml, /data-admin-people-search/);
   assert.match(peopleHtml, /Tinnie/);
-  assert.match(peopleHtml, /data-admin-add-person="person-1"/);
+  assert.match(peopleHtml, /data-admin-person-open="person-1"/);
   assert.doesNotMatch(peopleHtml, /Zay/);
 
   app.state.adminActiveTab = "routes";
@@ -624,7 +626,7 @@ test("people tab uses the PeopleData bank with full rider details", async () => 
   assert.match(siahHtml, /PeopleData/);
   assert.match(siahHtml, /data-admin-people-search/);
   assert.match(siahHtml, /Siah/);
-  assert.match(siahHtml, /data-admin-add-person="person-1"/);
+  assert.match(siahHtml, /data-admin-person-open="person-1"/);
   assert.doesNotMatch(siahHtml, /Nicholas/);
 
   app.state.adminPeopleSearch = "burdine";
@@ -632,6 +634,66 @@ test("people tab uses the PeopleData bank with full rider details", async () => 
   assert.match(nicholasHtml, /PeopleData/);
   assert.match(nicholasHtml, /Nicholas/);
   assert.match(nicholasHtml, /11525 Burdine St/);
+});
+
+test("people list stays calm and opens person details before edit or merge", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "dawson", displayName: "Dawson", initials: "DW" }],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Nicholas Montiel",
+        campusAddress: "",
+        homeAddress: "11525 Burdine St, Houston, TX 77035",
+        phone: "(832) 794-2032",
+        preferredAddressType: "home",
+        preferredAddress: "11525 Burdine St, Houston, TX 77035",
+        sourceLabel: "PeopleData",
+        notes: "Confirmed home pickup address.",
+      },
+      {
+        id: "person-2",
+        name: "Nicholas",
+        campusAddress: "",
+        homeAddress: "Old address needs review",
+        phone: "",
+        preferredAddressType: "home",
+        preferredAddress: "Old address needs review",
+        sourceLabel: "PeopleData",
+        notes: "Possible duplicate.",
+      },
+    ],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminDeletedStopIds = [];
+  app.state.adminActiveTab = "people";
+  app.state.adminPeopleSearch = "nicholas";
+
+  const listHtml = app.adminView();
+  assert.match(listHtml, /Nicholas Montiel/);
+  assert.match(listHtml, /data-admin-person-open="person-1"/);
+  assert.match(listHtml, /Possible duplicate/);
+  assert.doesNotMatch(listHtml, /data-admin-person-edit="person-1"/);
+  assert.doesNotMatch(listHtml, /data-admin-person-merge="person-1"/);
+
+  assert.equal(typeof app.adminDuplicateCandidates, "function");
+  assert.deepEqual(
+    app.adminDuplicateCandidates(app.state.admin.people[1]).map((person) => person.id),
+    ["person-1"],
+  );
+
+  app.state.adminSelectedPersonId = "person-2";
+  assert.equal(typeof app.adminPersonDetailView, "function");
+  const detailHtml = app.adminPersonDetailView();
+  assert.match(detailHtml, /People Bank/);
+  assert.match(detailHtml, /Nicholas/);
+  assert.match(detailHtml, /Possible duplicate found: Nicholas Montiel/);
+  assert.match(detailHtml, /data-admin-add-person="person-2"/);
+  assert.match(detailHtml, /data-admin-person-edit="person-2"/);
+  assert.match(detailHtml, /data-admin-person-merge="person-1"/);
 });
 
 test("add rider form searches PeopleData and offers add-new fallback", async () => {

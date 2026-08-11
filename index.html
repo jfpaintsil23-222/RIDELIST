@@ -2789,8 +2789,16 @@
       return String(person?.name || "").trim().toLowerCase().replace(/\s+/g, " ");
     }
 
-    function adminPersonFirstName(person) {
-      return adminPersonNameKey(person).split(" ")[0] || "";
+    function adminPersonNamesCompatible(person, candidate) {
+      const nameKey = adminPersonNameKey(person);
+      const candidateNameKey = adminPersonNameKey(candidate);
+      if (!nameKey || !candidateNameKey) return false;
+
+      return (
+        nameKey === candidateNameKey ||
+        nameKey.startsWith(`${candidateNameKey} `) ||
+        candidateNameKey.startsWith(`${nameKey} `)
+      );
     }
 
     function adminPersonPhoneKey(person) {
@@ -2799,22 +2807,15 @@
 
     function adminDuplicateCandidates(person) {
       if (!person) return [];
-      const nameKey = adminPersonNameKey(person);
-      const firstName = adminPersonFirstName(person);
       const phoneKey = adminPersonPhoneKey(person);
-      const addressKey = preferredPersonAddress(person).trim().toLowerCase();
 
       return adminPeople().filter((candidate) => {
         if (!candidate || candidate.id === person.id) return false;
-        const candidateNameKey = adminPersonNameKey(candidate);
-        const candidateFirstName = adminPersonFirstName(candidate);
         const candidatePhoneKey = adminPersonPhoneKey(candidate);
-        const candidateAddressKey = preferredPersonAddress(candidate).trim().toLowerCase();
 
         return (
-          (nameKey && candidateNameKey && (nameKey === candidateNameKey || firstName === candidateFirstName)) ||
-          (phoneKey && candidatePhoneKey && phoneKey === candidatePhoneKey) ||
-          (addressKey && candidateAddressKey && addressKey === candidateAddressKey)
+          adminPersonNamesCompatible(person, candidate) ||
+          (phoneKey && candidatePhoneKey && phoneKey === candidatePhoneKey)
         );
       });
     }

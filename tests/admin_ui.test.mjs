@@ -717,6 +717,54 @@ test("people list stays calm and opens person details before edit or merge", asy
   assert.match(detailHtml, /data-admin-person-merge="person-1"/);
 });
 
+test("people who share a home address are not automatically duplicates", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Zarah",
+        campusAddress: "",
+        homeAddress: "1221 Highland Row Ln, Houston, TX",
+        phone: "(936) 662-1716",
+        preferredAddressType: "home",
+        preferredAddress: "1221 Highland Row Ln, Houston, TX",
+        sourceLabel: "PeopleData",
+        notes: "",
+      },
+      {
+        id: "person-2",
+        name: "Daglyn",
+        campusAddress: "",
+        homeAddress: "1221 Highland Row Ln, Houston, TX",
+        phone: "(936) 555-0101",
+        preferredAddressType: "home",
+        preferredAddress: "1221 Highland Row Ln, Houston, TX",
+        sourceLabel: "PeopleData",
+        notes: "",
+      },
+    ],
+  };
+
+  assert.equal(typeof app.adminDuplicateCandidates, "function");
+  assert.equal(JSON.stringify(app.adminDuplicateCandidates(app.state.admin.people[0])), JSON.stringify([]));
+
+  app.state.adminActiveTab = "people";
+  app.state.adminPeopleSearch = "zarah";
+  const listHtml = app.adminView();
+  assert.match(listHtml, /Zarah/);
+  assert.doesNotMatch(listHtml, /Possible duplicate/);
+
+  app.state.adminSelectedPersonId = "person-1";
+  const detailHtml = app.adminPersonDetailView();
+  assert.match(detailHtml, /Zarah/);
+  assert.doesNotMatch(detailHtml, /Possible duplicate found: Daglyn/);
+  assert.doesNotMatch(detailHtml, /data-admin-person-merge="person-2"/);
+});
+
 test("person edit reviews changes before saving PeopleData", async () => {
   const calls = [];
   const app = await loadApp(async (url, options = {}) => {

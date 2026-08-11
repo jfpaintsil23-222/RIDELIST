@@ -42,6 +42,7 @@ create table if not exists rides_private.ride_people (
   home_apple_maps text not null default '',
   preferred_address_type text not null default 'home',
   source_label text not null default 'PeopleData',
+  notes text not null default '',
   active boolean not null default true,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
@@ -51,6 +52,8 @@ create table if not exists rides_private.ride_people (
 
 alter table rides_private.ride_people enable row level security;
 alter table rides_private.ride_people force row level security;
+alter table rides_private.ride_people
+add column if not exists notes text not null default '';
 
 create or replace function rides_private.ride_people_name_key(p_name text)
 returns text
@@ -212,6 +215,7 @@ begin
         'homeGoogleMaps', p.home_google_maps,
         'homeAppleMaps', p.home_apple_maps,
         'sourceLabel', p.source_label,
+        'notes', p.notes,
         'active', p.active
       )
       order by lower(p.name), p.name
@@ -269,6 +273,7 @@ declare
   v_person jsonb;
   v_name text;
   v_name_key text;
+  v_person_id uuid;
   v_count integer := 0;
   v_preferred text;
 begin
@@ -283,6 +288,11 @@ begin
   for v_person in select value from jsonb_array_elements(p_people) loop
     v_name := btrim(coalesce(v_person->>'name', ''));
     v_name_key := rides_private.ride_people_name_key(v_name);
+    begin
+      v_person_id := nullif(btrim(coalesce(v_person->>'id', '')), '')::uuid;
+    exception when others then
+      return jsonb_build_object('ok', false, 'error', 'invalid_person_id');
+    end;
 
     if v_name = '' or v_name_key = '' then
       continue;
@@ -297,52 +307,159 @@ begin
       end;
     end if;
 
-    insert into rides_private.ride_people (
-      name,
-      name_key,
-      campus_address,
-      home_address,
-      phone,
-      campus_google_maps,
-      campus_apple_maps,
-      home_google_maps,
-      home_apple_maps,
-      preferred_address_type,
-      source_label,
-      active
-    )
-    values (
-      v_name,
-      v_name_key,
-      btrim(coalesce(v_person->>'campusAddress', '')),
-      btrim(coalesce(v_person->>'homeAddress', '')),
-      btrim(coalesce(v_person->>'phone', '')),
-      btrim(coalesce(v_person->>'campusGoogleMaps', '')),
-      btrim(coalesce(v_person->>'campusAppleMaps', '')),
-      btrim(coalesce(v_person->>'homeGoogleMaps', '')),
-      btrim(coalesce(v_person->>'homeAppleMaps', '')),
-      v_preferred,
-      btrim(coalesce(p_source_label, 'PeopleData')),
-      true
-    )
-    on conflict (name_key) do update
-    set name = excluded.name,
-        campus_address = excluded.campus_address,
-        home_address = excluded.home_address,
-        phone = excluded.phone,
-        campus_google_maps = excluded.campus_google_maps,
-        campus_apple_maps = excluded.campus_apple_maps,
-        home_google_maps = excluded.home_google_maps,
-        home_apple_maps = excluded.home_apple_maps,
-        preferred_address_type = excluded.preferred_address_type,
-        source_label = excluded.source_label,
-        active = true,
-        updated_at = now();
+    if v_person_id is not null and exists (
+      select 1
+      from rides_private.ride_people p
+      where p.id = v_person_id
+    ) then
+      update rides_private.ride_people p
+      set name = v_name,
+          name_key = v_name_key,
+          campus_address = btrim(coalesce(v_person->>'campusAddress', '')),
+          home_address = btrim(coalesce(v_person->>'homeAddress', '')),
+          phone = btrim(coalesce(v_person->>'phone', '')),
+          campus_google_maps = btrim(coalesce(v_person->>'campusGoogleMaps', '')),
+          campus_apple_maps = btrim(coalesce(v_person->>'campusAppleMaps', '')),
+          home_google_maps = btrim(coalesce(v_person->>'homeGoogleMaps', '')),
+          home_apple_maps = btrim(coalesce(v_person->>'homeAppleMaps', '')),
+          preferred_address_type = v_preferred,
+          source_label = btrim(coalesce(p_source_label, 'PeopleData')),
+          notes = btrim(coalesce(v_person->>'notes', '')),
+          active = true,
+          updated_at = now()
+      where p.id = v_person_id;
+    else
+      insert into rides_private.ride_people (
+        name,
+        name_key,
+        campus_address,
+        home_address,
+        phone,
+        campus_google_maps,
+        campus_apple_maps,
+        home_google_maps,
+        home_apple_maps,
+        preferred_address_type,
+        source_label,
+        notes,
+        active
+      )
+      values (
+        v_name,
+        v_name_key,
+        btrim(coalesce(v_person->>'campusAddress', '')),
+        btrim(coalesce(v_person->>'homeAddress', '')),
+        btrim(coalesce(v_person->>'phone', '')),
+        btrim(coalesce(v_person->>'campusGoogleMaps', '')),
+        btrim(coalesce(v_person->>'campusAppleMaps', '')),
+        btrim(coalesce(v_person->>'homeGoogleMaps', '')),
+        btrim(coalesce(v_person->>'homeAppleMaps', '')),
+        v_preferred,
+        btrim(coalesce(p_source_label, 'PeopleData')),
+        btrim(coalesce(v_person->>'notes', '')),
+        true
+      )
+      on conflict (name_key) do update
+      set name = excluded.name,
+          campus_address = excluded.campus_address,
+          home_address = excluded.home_address,
+          phone = excluded.phone,
+          campus_google_maps = excluded.campus_google_maps,
+          campus_apple_maps = excluded.campus_apple_maps,
+          home_google_maps = excluded.home_google_maps,
+          home_apple_maps = excluded.home_apple_maps,
+          preferred_address_type = excluded.preferred_address_type,
+          source_label = excluded.source_label,
+          notes = excluded.notes,
+          active = true,
+          updated_at = now();
+    end if;
 
     v_count := v_count + 1;
   end loop;
 
   return jsonb_build_object('ok', true, 'upserted', v_count);
+end;
+$$;
+
+create or replace function public.ride_admin_merge_people(
+  p_admin_code text,
+  p_primary_person_id uuid,
+  p_duplicate_person_id uuid,
+  p_primary_person jsonb
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_primary record;
+  v_duplicate record;
+  v_name text := btrim(coalesce(p_primary_person->>'name', ''));
+  v_name_key text := rides_private.ride_people_name_key(btrim(coalesce(p_primary_person->>'name', '')));
+  v_preferred text := lower(btrim(coalesce(p_primary_person->>'preferredAddressType', 'home')));
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if p_primary_person_id is null or p_duplicate_person_id is null or p_primary_person_id = p_duplicate_person_id then
+    return jsonb_build_object('ok', false, 'error', 'invalid_merge_people');
+  end if;
+
+  if v_name = '' or v_name_key = '' then
+    return jsonb_build_object('ok', false, 'error', 'person_name_required');
+  end if;
+
+  if v_preferred not in ('home', 'campus') then
+    v_preferred := 'home';
+  end if;
+
+  select p.id
+  into v_primary
+  from rides_private.ride_people p
+  where p.id = p_primary_person_id
+    and p.active
+  limit 1;
+
+  select p.id
+  into v_duplicate
+  from rides_private.ride_people p
+  where p.id = p_duplicate_person_id
+    and p.active
+  limit 1;
+
+  if v_primary.id is null or v_duplicate.id is null then
+    return jsonb_build_object('ok', false, 'error', 'person_not_found');
+  end if;
+
+  update rides_private.ride_people p
+  set active = false,
+      name_key = rides_private.ride_people_name_key(p.name || ' merged ' || p.id::text),
+      notes = btrim(concat_ws(' ', nullif(p.notes, ''), 'Merged into ' || v_name || '.')),
+      updated_at = now()
+  where p.id = p_duplicate_person_id;
+
+  update rides_private.ride_people p
+  set name = v_name,
+      name_key = v_name_key,
+      campus_address = btrim(coalesce(p_primary_person->>'campusAddress', '')),
+      home_address = btrim(coalesce(p_primary_person->>'homeAddress', '')),
+      phone = btrim(coalesce(p_primary_person->>'phone', '')),
+      preferred_address_type = v_preferred,
+      source_label = btrim(coalesce(p_primary_person->>'sourceLabel', 'PeopleData')),
+      notes = btrim(coalesce(p_primary_person->>'notes', '')),
+      active = true,
+      updated_at = now()
+  where p.id = p_primary_person_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'primaryPersonId', p_primary_person_id::text,
+    'duplicatePersonId', p_duplicate_person_id::text
+  );
 end;
 $$;
 
@@ -510,4 +627,5 @@ $$;
 
 grant execute on function public.ride_admin_snapshot(text, date) to anon, authenticated;
 grant execute on function public.ride_admin_upsert_people(text, jsonb, text) to anon, authenticated;
+grant execute on function public.ride_admin_merge_people(text, uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function public.ride_admin_publish_plan(text, date, jsonb, text[]) to anon, authenticated;

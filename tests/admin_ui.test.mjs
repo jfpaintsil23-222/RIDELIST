@@ -112,6 +112,22 @@ test("app contains admin ride control entry points", async () => {
   assert.match(html, /function adminEditView/);
 });
 
+test("SQL source supports PeopleData notes and protected merge RPC", async () => {
+  const sql = await readFile(new URL("../supabase/admin_ride_control.sql", import.meta.url), "utf8");
+
+  assert.match(sql, /notes text not null default ''/);
+  assert.match(sql, /'notes', p\.notes/);
+  assert.match(sql, /v_person_id uuid/);
+  assert.match(sql, /where p\.id = v_person_id/);
+  assert.match(sql, /create or replace function public\.ride_admin_merge_people/);
+  assert.match(sql, /p_primary_person_id uuid/);
+  assert.match(sql, /p_duplicate_person_id uuid/);
+  assert.match(sql, /security definer/);
+  assert.match(sql, /set search_path to ''/);
+  assert.match(sql, /set active = false/);
+  assert.match(sql, /grant execute on function public\.ride_admin_merge_people/);
+});
+
 test("driver route modal shows only the passcode field", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const driverModal = html.match(/async function openCodeModal[\s\S]*?function openAdminCodeModal/)?.[0] || "";

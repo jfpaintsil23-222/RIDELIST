@@ -18,6 +18,15 @@ values (
 )
 on conflict (id) do nothing;
 
+do $$
+begin
+  if to_regclass('rides_private.ride_people') is not null then
+    alter table rides_private.ride_people
+    add column if not exists notes text not null default '';
+  end if;
+end;
+$$;
+
 create or replace function rides_private.current_ride_plan_date()
 returns date
 language sql
@@ -297,6 +306,7 @@ begin
         'homeGoogleMaps', p.home_google_maps,
         'homeAppleMaps', p.home_apple_maps,
         'sourceLabel', p.source_label,
+        'notes', p.notes,
         'active', p.active
       )
       order by lower(p.name), p.name
@@ -501,6 +511,87 @@ begin
 end;
 $$;
 
+create or replace function public.ride_admin_merge_people(
+  p_admin_code text,
+  p_primary_person_id uuid,
+  p_duplicate_person_id uuid,
+  p_primary_person jsonb
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_primary record;
+  v_duplicate record;
+  v_name text := btrim(coalesce(p_primary_person->>'name', ''));
+  v_name_key text := rides_private.ride_people_name_key(btrim(coalesce(p_primary_person->>'name', '')));
+  v_preferred text := lower(btrim(coalesce(p_primary_person->>'preferredAddressType', 'home')));
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if p_primary_person_id is null or p_duplicate_person_id is null or p_primary_person_id = p_duplicate_person_id then
+    return jsonb_build_object('ok', false, 'error', 'invalid_merge_people');
+  end if;
+
+  if v_name = '' or v_name_key = '' then
+    return jsonb_build_object('ok', false, 'error', 'person_name_required');
+  end if;
+
+  if v_preferred not in ('home', 'campus') then
+    v_preferred := 'home';
+  end if;
+
+  select p.id
+  into v_primary
+  from rides_private.ride_people p
+  where p.id = p_primary_person_id
+    and p.active
+  limit 1;
+
+  select p.id
+  into v_duplicate
+  from rides_private.ride_people p
+  where p.id = p_duplicate_person_id
+    and p.active
+  limit 1;
+
+  if v_primary.id is null or v_duplicate.id is null then
+    return jsonb_build_object('ok', false, 'error', 'person_not_found');
+  end if;
+
+  update rides_private.ride_people p
+  set active = false,
+      name_key = rides_private.ride_people_name_key(p.name || ' merged ' || p.id::text),
+      notes = btrim(concat_ws(' ', nullif(p.notes, ''), 'Merged into ' || v_name || '.')),
+      updated_at = now()
+  where p.id = p_duplicate_person_id;
+
+  update rides_private.ride_people p
+  set name = v_name,
+      name_key = v_name_key,
+      campus_address = btrim(coalesce(p_primary_person->>'campusAddress', '')),
+      home_address = btrim(coalesce(p_primary_person->>'homeAddress', '')),
+      phone = btrim(coalesce(p_primary_person->>'phone', '')),
+      preferred_address_type = v_preferred,
+      source_label = btrim(coalesce(p_primary_person->>'sourceLabel', 'PeopleData')),
+      notes = btrim(coalesce(p_primary_person->>'notes', '')),
+      active = true,
+      updated_at = now()
+  where p.id = p_primary_person_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'primaryPersonId', p_primary_person_id::text,
+    'duplicatePersonId', p_duplicate_person_id::text
+  );
+end;
+$$;
+
 create or replace function public.ride_admin_start_new_sunday(
   p_admin_code text,
   p_plan_date date,
@@ -663,6 +754,7 @@ grant execute on function public.ride_driver_directory(date) to anon, authentica
 grant execute on function public.ride_driver_route(text, text, date) to anon, authenticated;
 grant execute on function public.ride_admin_snapshot(text, date) to anon, authenticated;
 grant execute on function public.ride_admin_publish_plan(text, date, jsonb, text[]) to anon, authenticated;
+grant execute on function public.ride_admin_merge_people(text, uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function public.ride_admin_start_new_sunday(text, date, text[], date, boolean) to anon, authenticated;
 
 notify pgrst, 'reload schema';

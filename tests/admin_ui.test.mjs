@@ -69,6 +69,7 @@ async function loadApp(fetchImpl) {
       adminPersonChangeList: typeof adminPersonChangeList === "function" ? adminPersonChangeList : undefined,
       adminPersonMergeView: typeof adminPersonMergeView === "function" ? adminPersonMergeView : undefined,
       adminMergeDraft: typeof adminMergeDraft === "function" ? adminMergeDraft : undefined,
+      saveAdminPersonArchive: typeof saveAdminPersonArchive === "function" ? saveAdminPersonArchive : undefined,
       adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
@@ -126,6 +127,11 @@ test("SQL source supports PeopleData notes and protected merge RPC", async () =>
   assert.match(sql, /set search_path to ''/);
   assert.match(sql, /set active = false/);
   assert.match(sql, /grant execute on function public\.ride_admin_merge_people/);
+  assert.match(sql, /create or replace function public\.ride_admin_archive_people/);
+  assert.match(sql, /p_person_id uuid/);
+  assert.match(sql, /where p\.id = p_person_id/);
+  assert.match(sql, /grant execute on function public\.ride_admin_archive_people/);
+  assert.doesNotMatch(sql, /Archived from People Bank/);
 });
 
 test("driver route modal shows only the passcode field", async () => {
@@ -680,6 +686,8 @@ test("people tab uses the PeopleData bank with full rider details", async () => 
         homeAddress: "2304 Sam Houston Ave, Huntsville, TX",
         phone: "(301) 543-7407",
         preferredAddress: "2304 Sam Houston Ave, Huntsville, TX",
+        sourceLabel: "7_06 PeopleData",
+        notes: "",
       },
       {
         id: "person-2",
@@ -701,6 +709,8 @@ test("people tab uses the PeopleData bank with full rider details", async () => 
   assert.match(siahHtml, /data-admin-people-search/);
   assert.match(siahHtml, /Siah/);
   assert.match(siahHtml, /data-admin-person-open="person-1"/);
+  assert.doesNotMatch(siahHtml, /Ready/);
+  assert.doesNotMatch(siahHtml, /7_06 PeopleData/);
   assert.doesNotMatch(siahHtml, /Nicholas/);
 
   app.state.adminPeopleSearch = "burdine";
@@ -814,6 +824,8 @@ test("people who share a home address are not automatically duplicates", async (
   app.state.adminSelectedPersonId = "person-1";
   const detailHtml = app.adminPersonDetailView();
   assert.match(detailHtml, /Zarah/);
+  assert.match(detailHtml, /No notes saved/);
+  assert.doesNotMatch(detailHtml, /PeopleData/);
   assert.doesNotMatch(detailHtml, /Possible duplicate found: Daglyn/);
   assert.doesNotMatch(detailHtml, /data-admin-person-merge="person-2"/);
 });
@@ -867,6 +879,9 @@ test("person edit reviews changes before saving PeopleData", async () => {
   assert.match(editHtml, /Edit Person/);
   assert.match(editHtml, /name="name" value="Nora"/);
   assert.match(editHtml, /name="notes"/);
+  assert.doesNotMatch(editHtml, /name="sourceLabel"/);
+  assert.doesNotMatch(editHtml, />Source</);
+  assert.match(editHtml, /Archive from People Bank/);
   assert.match(editHtml, /Review changes/);
 
   app.state.adminPersonDraft = {
@@ -899,6 +914,70 @@ test("person edit reviews changes before saving PeopleData", async () => {
   assert.match(reviewHtml, /Confirm save/);
 
   assert.equal(calls.some((call) => String(call.url).includes("ride_admin_upsert_people")), false);
+});
+
+test("person archive stays in edit and hides the person after confirmation", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (String(url).includes("ride_driver_directory")) {
+      return {
+        ok: true,
+        json: async () => [],
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        plan: { date: "2026-08-09" },
+        destination: { label: "UH Hilton", address: "4800 Calhoun Rd" },
+        drivers: [],
+        stops: [],
+        people: [],
+      }),
+    };
+  });
+
+  app.state.adminCode = "admin-test";
+  app.state.admin = {
+    drivers: [],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Nora",
+        campusAddress: "",
+        homeAddress: "10819 Tryon Dr, Houston, TX 77065",
+        phone: "(281) 704-1697",
+        preferredAddressType: "home",
+        preferredAddress: "10819 Tryon Dr, Houston, TX 77065",
+        sourceLabel: "7_06 PeopleData",
+        notes: "",
+      },
+    ],
+  };
+  app.state.adminSelectedPersonId = "person-1";
+
+  const detailHtml = app.adminPersonDetailView();
+  assert.doesNotMatch(detailHtml, /Archive from People Bank/);
+
+  const editHtml = app.adminPersonEditView();
+  assert.match(editHtml, /data-action="adminPersonArchive"/);
+
+  app.state.adminPersonReviewMode = "archive";
+  const reviewHtml = app.adminPersonReviewView();
+  assert.match(reviewHtml, /Review Archive/);
+  assert.match(reviewHtml, /Nora will be hidden from normal People Bank search/);
+  assert.match(reviewHtml, /Confirm archive/);
+
+  assert.equal(typeof app.saveAdminPersonArchive, "function");
+  await app.saveAdminPersonArchive();
+
+  const archiveCall = calls.find((call) => String(call.url).includes("ride_admin_archive_people"));
+  assert.ok(archiveCall, "archive should call the People Bank archive RPC");
+  assert.match(JSON.stringify(archiveCall.options.body), /person-1/);
 });
 
 test("person merge review keeps merge behind detail and requires primary confirmation", async () => {

@@ -2831,7 +2831,7 @@
     }
 
     function adminPeople() {
-      return state.admin?.people || [];
+      return (state.admin?.people || []).filter((person) => person?.active !== false);
     }
 
     function adminPersonById(personId) {
@@ -2876,7 +2876,7 @@
     function adminPeopleStatus(person) {
       if (adminDuplicateCandidates(person).length) return "Possible duplicate";
       if (!String(person?.phone || "").trim() || !preferredPersonAddress(person)) return "Needs review";
-      return "Ready";
+      return "";
     }
 
     function preferredPersonAddress(person) {
@@ -3166,7 +3166,7 @@
         person.campusAddress,
         person.homeAddress,
         person.preferredAddress,
-        person.sourceLabel,
+        person.notes,
       ].filter(Boolean).join(" ").toLowerCase();
     }
 
@@ -3269,7 +3269,7 @@
         campusAddress: String(formData.get("campusAddress") || "").trim(),
         homeAddress: String(formData.get("homeAddress") || "").trim(),
         preferredAddressType: preferredAddressType === "campus" ? "campus" : "home",
-        sourceLabel: String(formData.get("sourceLabel") || "PeopleData").trim() || "PeopleData",
+        sourceLabel: adminPersonById(state.adminSelectedPersonId)?.sourceLabel || "PeopleData",
         notes: String(formData.get("notes") || "").trim(),
       };
     }
@@ -3300,7 +3300,6 @@
         changes.push(`Primary address changed to ${after.preferredAddressType === "campus" ? "Campus" : "Home"}`);
       }
       if (before.notes !== after.notes) changes.push("Notes updated");
-      if (before.sourceLabel !== after.sourceLabel) changes.push("Source updated");
       return changes;
     }
 
@@ -3689,6 +3688,41 @@
       }
     }
 
+    async function saveAdminPersonArchive() {
+      const person = adminPersonById(state.adminSelectedPersonId);
+      if (!person) return;
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const archived = await rpc("ride_admin_archive_people", {
+          p_admin_code: state.adminCode,
+          p_person_id: person.id,
+        }, adminRpcOptions());
+
+        if (!archived?.ok) {
+          throw new Error(archived?.error || "people_archive_failed");
+        }
+
+        const archivedName = person.name || "Person";
+        await loadAdminSnapshot(state.adminCode);
+        state.adminActiveTab = "people";
+        state.adminPeopleSearch = "";
+        state.adminSelectedPersonId = null;
+        state.adminPersonDraft = null;
+        state.adminPersonReviewMode = "";
+        state.adminMessage = `${archivedName} archived.`;
+        state.view = "admin";
+      } catch (error) {
+        state.adminError = "Could not archive this person.";
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
     function setView(view) {
       state.view = view;
       state.selectedRider = null;
@@ -3853,9 +3887,9 @@
               <strong>${escapeHtml(person.name)}</strong>
               <span>${escapeHtml(preferredAddress || "No address listed")}</span>
               <span>${escapeHtml(person.phone || "No phone listed")}</span>
-              ${options.showData ? `<span>${escapeHtml(person.notes || person.sourceLabel || "PeopleData")}</span>` : ""}
+              ${options.showData && person.notes ? `<span>${escapeHtml(person.notes)}</span>` : ""}
             </div>
-            <span class="pill ${status === "Possible duplicate" ? "gray" : ""}">${escapeHtml(status)}</span>
+            ${status ? `<span class="pill ${status === "Possible duplicate" ? "gray" : ""}">${escapeHtml(status)}</span>` : ""}
           </div>
         </article>`;
     }
@@ -3881,7 +3915,7 @@
         <button class="primary-action" type="button" data-action="adminNew">Add rider</button>
         ${adminPeopleSearchInput("Search full PeopleData")}
         <section class="admin-rider-list" data-admin-people-results aria-label="PeopleData">
-          ${adminPeopleResultsHtml({ showData: true, showSource: true })}
+          ${adminPeopleResultsHtml({ showData: true })}
         </section>`;
     }
 
@@ -4003,7 +4037,7 @@
             <div class="detail-row"><small>Home</small><strong>${escapeHtml(person.homeAddress || "No home address saved")}</strong></div>
             <div class="detail-row"><small>Campus</small><strong>${escapeHtml(person.campusAddress || "No campus address saved")}</strong></div>
             <div class="detail-row"><small>Primary</small><strong>${escapeHtml(person.preferredAddressType === "campus" ? "Campus address" : "Home address")}</strong></div>
-            <div class="detail-row"><small>Notes</small><strong>${escapeHtml(person.notes || person.sourceLabel || "No notes saved")}</strong></div>
+            <div class="detail-row"><small>Notes</small><strong>${escapeHtml(person.notes || "No notes saved")}</strong></div>
           </section>
 
           <div class="admin-form-actions">
@@ -4084,14 +4118,12 @@
               </div>
             </section>
             <label>
-              <span>Source</span>
-              <input name="sourceLabel" value="${escapeHtml(draft.sourceLabel)}">
-            </label>
-            <label>
               <span>Notes</span>
               <textarea name="notes">${escapeHtml(draft.notes)}</textarea>
             </label>
           </section>
+
+          <button class="admin-delete-button admin-remove-action" type="button" data-action="adminPersonArchive">Archive from People Bank</button>
 
           <div class="admin-form-actions">
             <button class="secondary-action" type="button" data-action="adminPersonBack">Cancel</button>
@@ -4101,6 +4133,56 @@
     }
 
     function adminPersonReviewView() {
+      if (state.adminPersonReviewMode === "archive") {
+        const person = adminPersonById(state.adminSelectedPersonId);
+        if (!person) {
+          return `
+            <div class="stack">
+              <button class="back-button" type="button" data-action="adminPersonBack" aria-label="Back">&larr;</button>
+              <section class="empty-card"><p>No person selected to archive.</p></section>
+            </div>`;
+        }
+
+        return `
+          <div class="stack">
+            <section class="intro-block compact">
+              <div class="admin-top-row">
+                <div>
+                  <p class="eyebrow">People Bank</p>
+                  <h1>Review Archive</h1>
+                  <p>Hide this saved person</p>
+                </div>
+                <button class="admin-icon-button" type="button" data-action="adminPersonEditBack" aria-label="Back to edit">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+            </section>
+
+            ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+            <section class="admin-change-list" aria-label="PeopleData archive review">
+              <article class="admin-change-card">
+                <span class="admin-change-badge">-</span>
+                <span class="admin-change-copy">
+                  <strong>Archive ${escapeHtml(person.name || "this person")}</strong>
+                  <span>${escapeHtml(`${person.name || "This person"} will be hidden from normal People Bank search.`)}</span>
+                </span>
+              </article>
+            </section>
+
+            <section class="admin-form-card">
+              <div class="detail-row"><small>Name</small><strong>${escapeHtml(person.name || "Person")}</strong></div>
+              <div class="detail-row"><small>Phone</small><strong>${escapeHtml(person.phone || "No phone listed")}</strong></div>
+              <div class="detail-row"><small>Address</small><strong>${escapeHtml(preferredPersonAddress(person) || "No address saved")}</strong></div>
+            </section>
+
+            <div class="admin-form-actions">
+              <button class="secondary-action" type="button" data-action="adminPersonEditBack">Back</button>
+              <button class="admin-delete-button admin-remove-action" type="button" data-action="adminPersonConfirmArchive">${state.adminLoading ? "Archiving..." : "Confirm archive"}</button>
+            </div>
+          </div>`;
+      }
+
       const draft = state.adminPersonDraft;
       const changes = adminPersonChangeList();
       if (!draft) {
@@ -4903,6 +4985,14 @@
       }
       if (action === "adminPersonConfirmSave") saveAdminPersonDraft();
       if (action === "adminPersonConfirmMerge") saveAdminPersonMerge();
+      if (action === "adminPersonArchive") {
+        state.adminPersonDraft = null;
+        state.adminPersonReviewMode = "archive";
+        state.adminError = "";
+        state.view = "adminPersonReview";
+        render();
+      }
+      if (action === "adminPersonConfirmArchive") saveAdminPersonArchive();
       if (action === "adminResetBack") {
         state.adminError = "";
         state.adminResetDate = "";
@@ -5031,7 +5121,6 @@
         const results = screen.querySelector("[data-admin-people-results]");
         if (results) results.innerHTML = adminPeopleResultsHtml({
           showData: state.adminActiveTab === "people",
-          showSource: state.adminActiveTab === "people",
         });
         return;
       }

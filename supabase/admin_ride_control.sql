@@ -54,6 +54,8 @@ alter table rides_private.ride_people enable row level security;
 alter table rides_private.ride_people force row level security;
 alter table rides_private.ride_people
 add column if not exists notes text not null default '';
+alter table rides_private.ride_people
+add column if not exists active boolean not null default true;
 
 create or replace function rides_private.ride_people_name_key(p_name text)
 returns text
@@ -463,6 +465,44 @@ begin
 end;
 $$;
 
+create or replace function public.ride_admin_archive_people(
+  p_admin_code text,
+  p_person_id uuid
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_count integer := 0;
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if p_person_id is null then
+    return jsonb_build_object('ok', false, 'error', 'person_required');
+  end if;
+
+  update rides_private.ride_people p
+  set active = false,
+      name_key = rides_private.ride_people_name_key(p.name || ' archived ' || p.id::text),
+      updated_at = now()
+  where p.id = p_person_id
+    and p.active;
+
+  get diagnostics v_count = row_count;
+
+  if v_count = 0 then
+    return jsonb_build_object('ok', false, 'error', 'person_not_found');
+  end if;
+
+  return jsonb_build_object('ok', true, 'personId', p_person_id::text);
+end;
+$$;
+
 create or replace function public.ride_admin_publish_plan(
   p_admin_code text,
   p_plan_date date default '2026-08-09'::date,
@@ -628,4 +668,5 @@ $$;
 grant execute on function public.ride_admin_snapshot(text, date) to anon, authenticated;
 grant execute on function public.ride_admin_upsert_people(text, jsonb, text) to anon, authenticated;
 grant execute on function public.ride_admin_merge_people(text, uuid, uuid, jsonb) to anon, authenticated;
+grant execute on function public.ride_admin_archive_people(text, uuid) to anon, authenticated;
 grant execute on function public.ride_admin_publish_plan(text, date, jsonb, text[]) to anon, authenticated;

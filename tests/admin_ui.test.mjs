@@ -69,6 +69,7 @@ async function loadApp(fetchImpl) {
       adminPersonChangeList: typeof adminPersonChangeList === "function" ? adminPersonChangeList : undefined,
       adminPersonMergeView: typeof adminPersonMergeView === "function" ? adminPersonMergeView : undefined,
       adminMergeDraft: typeof adminMergeDraft === "function" ? adminMergeDraft : undefined,
+      saveAdminPersonMerge: typeof saveAdminPersonMerge === "function" ? saveAdminPersonMerge : undefined,
       saveAdminPersonArchive: typeof saveAdminPersonArchive === "function" ? saveAdminPersonArchive : undefined,
       adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
@@ -132,6 +133,7 @@ test("SQL source supports PeopleData notes and protected merge RPC", async () =>
   assert.match(sql, /where p\.id = p_person_id/);
   assert.match(sql, /grant execute on function public\.ride_admin_archive_people/);
   assert.doesNotMatch(sql, /Archived from People Bank/);
+  assert.doesNotMatch(sql, /Merged into /);
 });
 
 test("driver route modal shows only the passcode field", async () => {
@@ -780,6 +782,57 @@ test("people list stays calm and opens person details before edit or merge", asy
   assert.match(detailHtml, /data-admin-person-merge="person-1"/);
 });
 
+test("people detail matches the target icon-card action layout", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "dawson", displayName: "Dawson", initials: "DW" }],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "a'Lena Brother",
+        campusAddress: "",
+        homeAddress: "9425 Asheville Dr, Houston, TX",
+        phone: "",
+        preferredAddressType: "home",
+        preferredAddress: "9425 Asheville Dr, Houston, TX",
+        sourceLabel: "07_26 PeopleData",
+        notes: "",
+      },
+      {
+        id: "person-2",
+        name: "a'Lena",
+        campusAddress: "",
+        homeAddress: "9425 Asheville Dr, Houston, TX",
+        phone: "",
+        preferredAddressType: "home",
+        preferredAddress: "9425 Asheville Dr, Houston, TX",
+        sourceLabel: "07_26 PeopleData",
+        notes: "",
+      },
+    ],
+  };
+  app.state.adminSelectedPersonId = "person-1";
+
+  const detailHtml = app.adminPersonDetailView();
+  assert.match(detailHtml, /people-detail-screen/);
+  assert.match(detailHtml, /people-detail-back/);
+  assert.match(detailHtml, /people-detail-warning/);
+  assert.match(detailHtml, /Possible duplicate found: a&#39;Lena/);
+  assert.match(detailHtml, /data-detail-icon="phone"/);
+  assert.match(detailHtml, /data-detail-icon="home"/);
+  assert.match(detailHtml, /data-detail-icon="campus"/);
+  assert.match(detailHtml, /data-detail-icon="primary"/);
+  assert.match(detailHtml, /data-detail-icon="notes"/);
+  assert.match(detailHtml, /people-detail-primary-actions/);
+  assert.match(detailHtml, /people-detail-action primary/);
+  assert.match(detailHtml, /people-detail-action secondary/);
+  assert.match(detailHtml, /people-detail-pill-row/);
+  assert.match(detailHtml, /people-detail-pill/);
+  assert.doesNotMatch(detailHtml, /07_26 PeopleData/);
+});
+
 test("people who share a home address are not automatically duplicates", async () => {
   const app = await loadApp();
 
@@ -1019,6 +1072,7 @@ test("person merge review keeps merge behind detail and requires primary confirm
   assert.equal(typeof app.adminPersonMergeView, "function");
   assert.equal(typeof app.adminMergeDraft, "function");
   assert.equal(app.adminMergeDraft().finalPerson.name, "Nicholas Montiel");
+  assert.equal(app.adminMergeDraft().finalPerson.notes, "Confirmed home pickup address. Duplicate candidate.");
 
   const mergeHtml = app.adminPersonMergeView();
   assert.match(mergeHtml, /Review Merge/);
@@ -1032,6 +1086,77 @@ test("person merge review keeps merge behind detail and requires primary confirm
   const invalidHtml = app.adminPersonMergeView();
   assert.match(invalidHtml, /Choose the primary person/);
   assert.match(invalidHtml, /Confirm merge" disabled/);
+});
+
+test("merge failure explains when live Supabase merge support is missing", async () => {
+  const app = await loadApp(async (url) => {
+    if (String(url).includes("ride_admin_merge_people")) {
+      return {
+        ok: false,
+        text: async () => JSON.stringify({
+          code: "PGRST202",
+          message: "Could not find the function public.ride_admin_merge_people in the schema cache",
+        }),
+      };
+    }
+
+    if (String(url).includes("ride_driver_directory")) {
+      return {
+        ok: true,
+        json: async () => [],
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        plan: { date: "2026-08-09" },
+        destination: { label: "UH Hilton", address: "4800 Calhoun Rd" },
+        drivers: [],
+        stops: [],
+        people: [],
+      }),
+    };
+  });
+
+  app.state.adminCode = "admin-test";
+  app.state.admin = {
+    drivers: [],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Fabio",
+        campusAddress: "North American University, 11801 S Gessner Dr, Houston, TX 77071",
+        homeAddress: "",
+        phone: "",
+        preferredAddressType: "campus",
+        preferredAddress: "North American University, 11801 S Gessner Dr, Houston, TX 77071",
+        sourceLabel: "PeopleData",
+        notes: "",
+      },
+      {
+        id: "person-2",
+        name: "Fabio Nhampossa",
+        campusAddress: "North American University, 11801 S Gessner Dr, Houston, TX 77071",
+        homeAddress: "",
+        phone: "(281) 615-2502",
+        preferredAddressType: "campus",
+        preferredAddress: "North American University, 11801 S Gessner Dr, Houston, TX 77071",
+        sourceLabel: "PeopleData",
+        notes: "",
+      },
+    ],
+  };
+  app.state.adminSelectedPersonId = "person-1";
+  app.state.adminMergePrimaryId = "person-2";
+  app.state.adminMergeDuplicateId = "person-1";
+
+  assert.equal(typeof app.saveAdminPersonMerge, "function");
+  await app.saveAdminPersonMerge();
+
+  assert.match(app.state.adminError, /People Bank merge needs the Supabase setup first/);
 });
 
 test("add rider form searches PeopleData and offers add-new fallback", async () => {

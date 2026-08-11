@@ -440,7 +440,6 @@ begin
   update rides_private.ride_people p
   set active = false,
       name_key = rides_private.ride_people_name_key(p.name || ' merged ' || p.id::text),
-      notes = btrim(concat_ws(' ', nullif(p.notes, ''), 'Merged into ' || v_name || '.')),
       updated_at = now()
   where p.id = p_duplicate_person_id;
 

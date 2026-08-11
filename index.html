@@ -1760,6 +1760,248 @@
       min-height: 52px;
     }
 
+    .people-detail-screen {
+      display: grid;
+      gap: 22px;
+      padding-top: 4px;
+    }
+
+    .people-detail-back {
+      display: inline-grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      border: 0;
+      border-radius: 50%;
+      color: #050505;
+      background: #ffffff;
+      box-shadow: 0 16px 34px rgba(0, 0, 0, 0.11);
+      cursor: pointer;
+    }
+
+    .people-detail-back svg,
+    .people-detail-chevron,
+    .people-detail-svg {
+      width: 24px;
+      height: 24px;
+      flex: 0 0 auto;
+    }
+
+    .people-detail-header {
+      display: grid;
+      gap: 7px;
+    }
+
+    .people-detail-eyebrow {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.1;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .people-detail-title {
+      margin: 0;
+      color: #000000;
+      font-size: 44px;
+      line-height: 0.98;
+      font-weight: 900;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .people-detail-subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    .people-detail-warning {
+      width: 100%;
+      min-height: 62px;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 24px;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid #efc46f;
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: #050505;
+      background: #fffbf1;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .people-detail-warning-icon {
+      display: grid;
+      place-items: center;
+      color: #df9708;
+    }
+
+    .people-detail-warning strong {
+      min-width: 0;
+      font-size: 17px;
+      line-height: 1.2;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .people-detail-card {
+      display: grid;
+      border: 1px solid #dedfe4;
+      border-radius: 16px;
+      padding: 0 18px;
+      background: #ffffff;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.05);
+    }
+
+    .people-detail-row {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      min-height: 96px;
+      padding: 18px 0;
+      border-bottom: 1px solid #e2e4e8;
+    }
+
+    .people-detail-row:last-child {
+      border-bottom: 0;
+    }
+
+    .people-detail-icon {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      color: #050505;
+      background: #f2f2f4;
+    }
+
+    .people-detail-copy {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .people-detail-copy small {
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.1;
+      font-weight: 700;
+    }
+
+    .people-detail-copy strong {
+      color: #000000;
+      font-size: 20px;
+      line-height: 1.18;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .people-detail-primary-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: 14px;
+    }
+
+    .people-detail-action {
+      min-height: 64px;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr) 22px;
+      align-items: center;
+      gap: 12px;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 17px;
+      line-height: 1.1;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .people-detail-action.primary {
+      border: 1px solid #000000;
+      color: #ffffff;
+      background: #000000;
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+    }
+
+    .people-detail-action.secondary {
+      border: 1px solid #d8dce2;
+      color: #050505;
+      background: #ffffff;
+    }
+
+    .people-detail-action-icon {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 9px;
+      color: inherit;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .people-detail-action.secondary .people-detail-action-icon,
+    .people-detail-pill .people-detail-action-icon {
+      background: #f4f4f5;
+    }
+
+    .people-detail-action span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .people-detail-pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: -2px;
+    }
+
+    .people-detail-pill {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid #dde1e6;
+      border-radius: 999px;
+      padding: 0 16px;
+      color: #050505;
+      background: #ffffff;
+      font-size: 16px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    @media (max-width: 380px) {
+      .people-detail-title {
+        font-size: 38px;
+      }
+
+      .people-detail-primary-actions {
+        gap: 10px;
+      }
+
+      .people-detail-action {
+        grid-template-columns: 40px minmax(0, 1fr) 18px;
+        gap: 9px;
+        padding: 9px 10px;
+        font-size: 15px;
+      }
+
+      .people-detail-action-icon {
+        width: 38px;
+        height: 38px;
+      }
+    }
+
     .admin-reset-grid {
       display: grid;
       gap: 10px;
@@ -2298,7 +2540,19 @@
 
       if (!response.ok) {
         const message = await response.text();
-        throw new Error(message || "Supabase request failed");
+        let payload = {};
+        try {
+          payload = JSON.parse(message);
+        } catch {
+          payload = {};
+        }
+        const error = new Error(payload.message || payload.error || message || "Supabase request failed");
+        error.status = response.status;
+        error.code = payload.code || "";
+        error.details = payload.details || "";
+        error.hint = payload.hint || "";
+        error.raw = message;
+        throw error;
       }
 
       return response.json();
@@ -3303,6 +3557,56 @@
       return changes;
     }
 
+    function peopleDetailIcon(name) {
+      const icons = {
+        back: '<path d="M15 6 9 12l6 6"/>',
+        campus: '<path d="M4 21h16"/><path d="M6 21V7l6-3 6 3v14"/><path d="M9 9h1"/><path d="M14 9h1"/><path d="M9 13h1"/><path d="M14 13h1"/><path d="M10 21v-4h4v4"/>',
+        chevron: '<path d="m9 18 6-6-6-6"/>',
+        edit: '<path d="M12 20h9"/><path d="m16.5 3.5 4 4L8 20H4v-4z"/>',
+        home: '<path d="m3 11 9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+        map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
+        notes: '<path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4"/><path d="M9 12h6"/><path d="M9 16h4"/>',
+        phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.4 19.4 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.4 2.1L8.1 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.6 1.9z"/>',
+        primary: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2 7.5 14 3 9.6l6.2-.9z"/>',
+        send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+        users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
+        warning: '<path d="M10.3 4.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+      };
+      return `<svg class="people-detail-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ""}</g></svg>`;
+    }
+
+    function peopleDetailChevron() {
+      return `<svg class="people-detail-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    }
+
+    function peopleDetailRow(icon, label, value) {
+      return `
+        <div class="people-detail-row">
+          <span class="people-detail-icon" data-detail-icon="${escapeHtml(icon)}">${peopleDetailIcon(icon)}</span>
+          <span class="people-detail-copy">
+            <small>${escapeHtml(label)}</small>
+            <strong>${escapeHtml(value)}</strong>
+          </span>
+        </div>`;
+    }
+
+    function adminMergeErrorMessage(error) {
+      const errorText = [
+        error?.code,
+        error?.message,
+        error?.details,
+        error?.hint,
+        error?.raw,
+      ].filter(Boolean).join(" ");
+
+      if (error?.code === "PGRST202" || /ride_admin_merge_people/i.test(errorText)) {
+        return "People Bank merge needs the Supabase setup first. The live merge tool is missing.";
+      }
+      if (/invalid_admin_code/i.test(errorText)) return "Admin access expired. Sign in again before merging.";
+      if (/person_not_found/i.test(errorText)) return "One of these people is no longer active in People Bank.";
+      return "Could not merge these people.";
+    }
+
     function adminMergePeoplePair() {
       const selected = adminPersonById(state.adminSelectedPersonId);
       const explicitDuplicate = adminPersonById(state.adminMergeDuplicateId);
@@ -3315,13 +3619,12 @@
     function adminMergedPerson(primary, duplicate) {
       const primaryDraft = adminPersonEditable(primary);
       const duplicateDraft = adminPersonEditable(duplicate);
-      const duplicateNote = duplicateDraft.notes ? `Merged duplicate: ${duplicateDraft.notes}` : "Merged duplicate record.";
       return {
         ...primaryDraft,
         phone: primaryDraft.phone || duplicateDraft.phone,
         campusAddress: primaryDraft.campusAddress || duplicateDraft.campusAddress,
         homeAddress: primaryDraft.homeAddress || duplicateDraft.homeAddress,
-        notes: [primaryDraft.notes, duplicateNote].filter(Boolean).join(" "),
+        notes: [primaryDraft.notes, duplicateDraft.notes].filter(Boolean).join(" "),
       };
     }
 
@@ -3680,8 +3983,8 @@
         state.adminMessage = `${mergedName} merged.`;
         state.view = "admin";
       } catch (error) {
-        state.adminError = "Could not merge these people.";
-        console.error(error);
+        state.adminError = adminMergeErrorMessage(error);
+        if (state.adminError === "Could not merge these people.") console.error(error);
       } finally {
         state.adminLoading = false;
         render();
@@ -4015,39 +4318,50 @@
       const mapAddress = preferredPersonAddress(person);
 
       return `
-        <div class="stack">
-          <section class="intro-block compact">
-            <div class="admin-top-row">
-              <div>
-                <p class="eyebrow">People Bank</p>
-                <h1>${escapeHtml(person.name || "Person")}</h1>
-                <p>Saved rider details</p>
-              </div>
-              <button class="admin-icon-button" type="button" data-action="adminBack" aria-label="Back to people">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              </button>
-            </div>
+        <div class="people-detail-screen">
+          <button class="people-detail-back" type="button" data-action="adminBack" aria-label="Back to people">
+            ${peopleDetailIcon("back")}
+          </button>
+
+          <section class="people-detail-header">
+            <p class="people-detail-eyebrow">People Bank</p>
+            <h1 class="people-detail-title">${escapeHtml(person.name || "Person")}</h1>
+            <p class="people-detail-subtitle">Saved rider details</p>
           </section>
 
-          ${duplicate ? `<section class="admin-message">Possible duplicate found: ${escapeHtml(duplicate.name)}</section>` : ""}
+          ${duplicate ? `
+            <button class="people-detail-warning" type="button" data-admin-person-merge="${escapeHtml(duplicate.id)}">
+              <span class="people-detail-warning-icon">${peopleDetailIcon("warning")}</span>
+              <strong>Possible duplicate found: ${escapeHtml(duplicate.name)}</strong>
+              ${peopleDetailChevron()}
+            </button>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
 
-          <section class="admin-form-card">
-            <div class="detail-row"><small>Phone</small><strong>${escapeHtml(person.phone || "No phone listed")}</strong></div>
-            <div class="detail-row"><small>Home</small><strong>${escapeHtml(person.homeAddress || "No home address saved")}</strong></div>
-            <div class="detail-row"><small>Campus</small><strong>${escapeHtml(person.campusAddress || "No campus address saved")}</strong></div>
-            <div class="detail-row"><small>Primary</small><strong>${escapeHtml(person.preferredAddressType === "campus" ? "Campus address" : "Home address")}</strong></div>
-            <div class="detail-row"><small>Notes</small><strong>${escapeHtml(person.notes || "No notes saved")}</strong></div>
+          <section class="people-detail-card">
+            ${peopleDetailRow("phone", "Phone", person.phone || "No phone listed")}
+            ${peopleDetailRow("home", "Home", person.homeAddress || "No home address saved")}
+            ${peopleDetailRow("campus", "Campus", person.campusAddress || "No campus address saved")}
+            ${peopleDetailRow("primary", "Primary", person.preferredAddressType === "campus" ? "Campus address" : "Home address")}
+            ${peopleDetailRow("notes", "Notes", person.notes || "No notes saved")}
           </section>
 
-          <div class="admin-form-actions">
-            <button class="primary-action" type="button" data-admin-add-person="${escapeHtml(person.id)}">Add to route</button>
-            <button class="secondary-action" type="button" data-admin-person-edit="${escapeHtml(person.id)}">Edit</button>
+          <div class="people-detail-primary-actions">
+            <button class="people-detail-action primary" type="button" data-admin-add-person="${escapeHtml(person.id)}">
+              <span class="people-detail-action-icon">${peopleDetailIcon("send")}</span>
+              <span>Add to route</span>
+              ${peopleDetailChevron()}
+            </button>
+            <button class="people-detail-action secondary" type="button" data-admin-person-edit="${escapeHtml(person.id)}">
+              <span class="people-detail-action-icon">${peopleDetailIcon("edit")}</span>
+              <span>Edit</span>
+              ${peopleDetailChevron()}
+            </button>
           </div>
-          <div class="admin-actions">
-            ${mapAddress ? `<a class="admin-chip-button" href="${googleMaps(mapAddress)}" target="_blank" rel="noreferrer">Map</a>` : ""}
-            ${person.phone ? `<a class="admin-chip-button" href="${telHref(person.phone)}">Call</a>` : ""}
-            ${duplicate ? `<button class="admin-chip-button" type="button" data-admin-person-merge="${escapeHtml(duplicate.id)}">Merge duplicate</button>` : ""}
+
+          <div class="people-detail-pill-row">
+            ${mapAddress ? `<a class="people-detail-pill" href="${googleMaps(mapAddress)}" target="_blank" rel="noreferrer"><span>${peopleDetailIcon("map")}</span><span>Map</span></a>` : ""}
+            ${person.phone ? `<a class="people-detail-pill" href="${telHref(person.phone)}"><span>${peopleDetailIcon("phone")}</span><span>Call</span></a>` : ""}
+            ${duplicate ? `<button class="people-detail-pill" type="button" data-admin-person-merge="${escapeHtml(duplicate.id)}"><span>${peopleDetailIcon("users")}</span><span>Merge duplicate</span></button>` : ""}
           </div>
         </div>`;
     }

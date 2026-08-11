@@ -57,6 +57,26 @@ add column if not exists notes text not null default '';
 alter table rides_private.ride_people
 add column if not exists active boolean not null default true;
 
+create table if not exists rides_private.ride_driver_push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  plan_date date not null,
+  driver_slug text not null,
+  endpoint text not null unique,
+  subscription jsonb not null,
+  user_agent text not null default '',
+  active boolean not null default true,
+  last_error text not null default '',
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+
+alter table rides_private.ride_driver_push_subscriptions enable row level security;
+alter table rides_private.ride_driver_push_subscriptions force row level security;
+
+create index if not exists ride_driver_push_subscriptions_driver_idx
+on rides_private.ride_driver_push_subscriptions (plan_date, driver_slug)
+where active;
+
 create or replace function rides_private.ride_people_name_key(p_name text)
 returns text
 language sql
@@ -106,6 +126,148 @@ as $$
     else array_to_string(rider_names[1:array_length(rider_names, 1) - 1], ', ') || ', and ' || rider_names[array_length(rider_names, 1)]
   end
   from names;
+$$;
+
+create or replace function public.ride_driver_save_push_subscription(
+  p_driver_slug text,
+  p_access_code text,
+  p_plan_date date default null,
+  p_subscription jsonb default '{}'::jsonb,
+  p_user_agent text default ''
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan_date date := coalesce(p_plan_date, date '2026-08-09');
+  v_plan_id uuid;
+  v_driver record;
+  v_endpoint text := btrim(coalesce(p_subscription->>'endpoint', ''));
+begin
+  if v_endpoint = '' then
+    return jsonb_build_object('ok', false, 'error', 'missing_push_endpoint');
+  end if;
+
+  select p.id
+  into v_plan_id
+  from rides_private.ride_plans p
+  where p.plan_date = v_plan_date
+  limit 1;
+
+  select d.id, d.slug, d.access_code_hash
+  into v_driver
+  from rides_private.ride_drivers d
+  where d.plan_id = v_plan_id
+    and d.slug = lower(btrim(coalesce(p_driver_slug, '')))
+  limit 1;
+
+  if v_driver.id is null or v_driver.access_code_hash <> rides_private.hash_driver_code(p_access_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_code');
+  end if;
+
+  insert into rides_private.ride_driver_push_subscriptions (
+    plan_date,
+    driver_slug,
+    endpoint,
+    subscription,
+    user_agent,
+    active,
+    last_error,
+    updated_at
+  )
+  values (
+    v_plan_date,
+    v_driver.slug,
+    v_endpoint,
+    p_subscription,
+    btrim(coalesce(p_user_agent, '')),
+    true,
+    '',
+    now()
+  )
+  on conflict (endpoint) do update
+  set plan_date = excluded.plan_date,
+      driver_slug = excluded.driver_slug,
+      subscription = excluded.subscription,
+      user_agent = excluded.user_agent,
+      active = true,
+      last_error = '',
+      updated_at = now();
+
+  return jsonb_build_object('ok', true, 'driverSlug', v_driver.slug);
+end;
+$$;
+
+create or replace function public.ride_admin_driver_push_subscriptions(
+  p_admin_code text,
+  p_plan_date date default null,
+  p_driver_slugs text[] default '{}'::text[]
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan_date date := coalesce(p_plan_date, date '2026-08-09');
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'subscriptions', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', s.id::text,
+          'driverSlug', s.driver_slug,
+          'endpoint', s.endpoint,
+          'subscription', s.subscription
+        )
+        order by s.driver_slug, s.updated_at desc
+      )
+      from rides_private.ride_driver_push_subscriptions s
+      where s.plan_date = v_plan_date
+        and s.active
+        and (
+          coalesce(array_length(p_driver_slugs, 1), 0) = 0
+          or s.driver_slug = any(p_driver_slugs)
+        )
+    ), '[]'::jsonb)
+  );
+end;
+$$;
+
+create or replace function public.ride_admin_update_push_subscription_status(
+  p_admin_code text,
+  p_endpoint text,
+  p_active boolean,
+  p_last_error text default ''
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  update rides_private.ride_driver_push_subscriptions s
+  set active = coalesce(p_active, s.active),
+      last_error = btrim(coalesce(p_last_error, '')),
+      updated_at = now()
+  where s.endpoint = btrim(coalesce(p_endpoint, ''));
+
+  return jsonb_build_object('ok', true);
+end;
 $$;
 
 create or replace function public.ride_admin_snapshot(
@@ -669,3 +831,6 @@ grant execute on function public.ride_admin_upsert_people(text, jsonb, text) to 
 grant execute on function public.ride_admin_merge_people(text, uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function public.ride_admin_archive_people(text, uuid) to anon, authenticated;
 grant execute on function public.ride_admin_publish_plan(text, date, jsonb, text[]) to anon, authenticated;
+grant execute on function public.ride_driver_save_push_subscription(text, text, date, jsonb, text) to anon, authenticated;
+grant execute on function public.ride_admin_driver_push_subscriptions(text, date, text[]) to anon, authenticated;
+grant execute on function public.ride_admin_update_push_subscription_status(text, text, boolean, text) to anon, authenticated;

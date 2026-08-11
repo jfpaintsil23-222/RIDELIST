@@ -138,6 +138,19 @@ test("SQL source supports PeopleData notes and protected merge RPC", async () =>
   assert.doesNotMatch(sql, /Merged into /);
 });
 
+test("SQL source protects driver push subscriptions", async () => {
+  const sql = await readFile(new URL("../supabase/admin_ride_control.sql", import.meta.url), "utf8");
+
+  assert.match(sql, /create table if not exists rides_private\.ride_driver_push_subscriptions/);
+  assert.match(sql, /alter table rides_private\.ride_driver_push_subscriptions enable row level security/);
+  assert.match(sql, /create or replace function public\.ride_driver_save_push_subscription/);
+  assert.match(sql, /create or replace function public\.ride_admin_driver_push_subscriptions/);
+  assert.match(sql, /create or replace function public\.ride_admin_update_push_subscription_status/);
+  assert.match(sql, /rides_private\.is_ride_admin_code\(p_admin_code\)/);
+  assert.match(sql, /rides_private\.hash_driver_code\(p_access_code\)/);
+  assert.match(sql, /grant execute on function public\.ride_driver_save_push_subscription/);
+});
+
 test("driver route modal stays simple and admin login is passcode-only", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const driverModal = html.match(/async function openCodeModal[\s\S]*?function openAdminCodeModal/)?.[0] || "";

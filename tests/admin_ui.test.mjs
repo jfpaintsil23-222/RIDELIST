@@ -98,11 +98,12 @@ test("app contains admin ride control entry points", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 
   assert.match(html, /data-action="admin"/);
-  assert.match(html, /adminAuthFields/);
-  assert.match(html, /adminEmail/);
-  assert.match(html, /adminPassword/);
-  assert.match(html, /adminCodeFallback/);
-  assert.match(html, /signInAdminWithPassword/);
+  assert.match(html, /modalClose/);
+  assert.match(html, /Admin passcode/);
+  assert.doesNotMatch(html, /id="adminEmail"/);
+  assert.doesNotMatch(html, /id="adminPassword"/);
+  assert.doesNotMatch(html, /adminCodeFallback/);
+  assert.doesNotMatch(html, /signInAdminWithPassword/);
   assert.match(html, /ride_app_context/);
   assert.match(html, /ride_admin_snapshot/);
   assert.match(html, /ride_admin_security_context/);
@@ -137,20 +138,28 @@ test("SQL source supports PeopleData notes and protected merge RPC", async () =>
   assert.doesNotMatch(sql, /Merged into /);
 });
 
-test("driver route modal shows only the passcode field", async () => {
+test("driver route modal stays simple and admin login is passcode-only", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const driverModal = html.match(/async function openCodeModal[\s\S]*?function openAdminCodeModal/)?.[0] || "";
-  const adminModal = html.match(/function openAdminCodeModal[\s\S]*?function setAdminCodeFallbackMode/)?.[0] || "";
+  const adminModal = html.match(/function openAdminCodeModal[\s\S]*?function closeCodeModal/)?.[0] || "";
+  const submitCode = html.match(/async function submitCode[\s\S]*?if \(!state\.selectedDriver\)/)?.[0] || "";
 
-  assert.match(html, /\.admin-auth-fields\[hidden\]\s*{\s*display:\s*none;?\s*}/);
   assert.match(driverModal, /document\.querySelector\("#modalTitle"\)\.textContent = "Passcode"/);
-  assert.match(driverModal, /adminAuthFields\.hidden = true/);
   assert.match(driverModal, /driverCode\.hidden = false/);
-  assert.match(driverModal, /adminEmail\.value = ""/);
-  assert.match(driverModal, /adminPassword\.value = ""/);
-  assert.match(adminModal, /document\.querySelector\("#modalTitle"\)\.textContent = "Admin sign in"/);
-  assert.match(adminModal, /adminAuthFields\.hidden = false/);
-  assert.match(adminModal, /driverCode\.hidden = true/);
+  assert.match(driverModal, /modalClose\.hidden = true/);
+  assert.match(driverModal, /cancelCode\.hidden = false/);
+  assert.match(driverModal, /codeForm\.classList\.remove\("admin-login-card"\)/);
+  assert.match(adminModal, /state\.adminLoginMode = "code"/);
+  assert.match(adminModal, /document\.querySelector\("#modalTitle"\)\.textContent = "Ride Control"/);
+  assert.match(adminModal, /modalKicker\.hidden = false/);
+  assert.match(adminModal, /modalDriver\.textContent = "Sunday · UH Hilton"/);
+  assert.match(adminModal, /codeSubmit\.textContent = "Open Ride Control"/);
+  assert.match(adminModal, /driverCode\.hidden = false/);
+  assert.match(adminModal, /modalClose\.hidden = false/);
+  assert.match(adminModal, /cancelCode\.hidden = true/);
+  assert.doesNotMatch(adminModal, /adminAuthFields\.hidden = false/);
+  assert.match(submitCode, /await loadAdminSnapshot\(driverCode\.value\)/);
+  assert.doesNotMatch(submitCode, /signInAdminWithPassword/);
 });
 
 test("app exposes home screen icon metadata", async () => {

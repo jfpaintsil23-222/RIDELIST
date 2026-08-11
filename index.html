@@ -650,27 +650,6 @@
       letter-spacing: 0;
     }
 
-    .admin-auth-fields {
-      display: grid;
-      gap: 10px;
-    }
-
-    .admin-auth-fields[hidden] {
-      display: none;
-    }
-
-    .admin-text-button {
-      justify-self: start;
-      border: 0;
-      padding: 0;
-      color: #050505;
-      background: transparent;
-      font-size: 13px;
-      font-weight: 850;
-      text-decoration: underline;
-      cursor: pointer;
-    }
-
     .modal-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -2485,6 +2464,7 @@
     }
 
     .modal-card {
+      position: relative;
       gap: 14px;
       border: 0;
       border-radius: 18px;
@@ -2497,8 +2477,111 @@
       font-size: 18px;
     }
 
+    .modal-card.admin-login-card {
+      gap: 18px;
+      padding: 22px;
+      border: 1px solid rgba(229, 231, 235, 0.9);
+      border-radius: 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+    }
+
+    .modal-heading {
+      display: grid;
+      gap: 6px;
+      padding-right: 56px;
+    }
+
+    .modal-kicker {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .modal-kicker[hidden],
+    .modal-close-button[hidden],
+    .modal-actions [hidden] {
+      display: none;
+    }
+
+    #modalTitle {
+      margin: 0;
+      color: #050505;
+      font-size: 28px;
+      line-height: 1.05;
+      font-weight: 800;
+    }
+
+    #modalDriver {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.25;
+      font-weight: 500;
+    }
+
+    .admin-login-card #modalTitle {
+      font-size: 34px;
+      font-weight: 850;
+    }
+
+    .modal-close-button {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border: 1px solid #eceef2;
+      border-radius: 50%;
+      color: #050505;
+      background: #ffffff;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.10);
+      font-size: 32px;
+      font-weight: 350;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .modal-passcode-field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .modal-field-label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .admin-login-card .modal-field-label {
+      font-size: 14px;
+    }
+
+    .modal-card.admin-login-card input {
+      height: 56px;
+      border-radius: 12px;
+      font-weight: 650;
+    }
+
+    .modal-card.admin-login-card .modal-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .modal-card.admin-login-card .primary-action {
+      min-height: 58px;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
     .primary-action:focus-visible,
     .secondary-action:focus-visible,
+    .modal-close-button:focus-visible,
     .driver-card:focus-visible,
     .route-stop:focus-visible,
     .nav-item:focus-visible,
@@ -2586,16 +2669,18 @@
 
       <div id="codeModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <form id="codeForm" class="modal-card">
-          <div>
+          <button class="modal-close-button" type="button" id="modalClose" aria-label="Close login" hidden>
+            <span aria-hidden="true">&times;</span>
+          </button>
+          <div class="modal-heading">
+            <p id="modalKicker" class="modal-kicker" hidden>Admin</p>
             <h2 id="modalTitle">Passcode</h2>
             <p id="modalDriver"></p>
           </div>
-          <div id="adminAuthFields" class="admin-auth-fields" hidden>
-            <input id="adminEmail" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Admin email" aria-label="Admin email">
-            <input id="adminPassword" type="password" autocomplete="current-password" placeholder="Admin password" aria-label="Admin password">
-            <button class="admin-text-button" type="button" id="adminCodeFallback">Use admin passcode instead</button>
-          </div>
-          <input id="driverCode" type="password" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" aria-label="Passcode">
+          <label class="modal-passcode-field">
+            <span id="codeLabel" class="modal-field-label">Passcode</span>
+            <input id="driverCode" type="password" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="Passcode" aria-label="Passcode">
+          </label>
           <p id="codeError" class="error" hidden></p>
           <div class="modal-actions">
             <button class="secondary-action" type="button" id="cancelCode">Cancel</button>
@@ -2648,7 +2733,7 @@
       route: null,
       selectedRider: null,
       codeMode: "driver",
-      adminLoginMode: "auth",
+      adminLoginMode: "code",
       adminSession: readAdminSession(),
       adminCode: "",
       admin: null,
@@ -2694,13 +2779,13 @@
     const codeModal = document.querySelector("#codeModal");
     const codeForm = document.querySelector("#codeForm");
     const driverCode = document.querySelector("#driverCode");
-    const adminAuthFields = document.querySelector("#adminAuthFields");
-    const adminEmail = document.querySelector("#adminEmail");
-    const adminPassword = document.querySelector("#adminPassword");
-    const adminCodeFallback = document.querySelector("#adminCodeFallback");
+    const modalKicker = document.querySelector("#modalKicker");
+    const modalClose = document.querySelector("#modalClose");
     const modalDriver = document.querySelector("#modalDriver");
+    const codeLabel = document.querySelector("#codeLabel");
     const codeError = document.querySelector("#codeError");
     const codeSubmit = document.querySelector("#codeSubmit");
+    const cancelCode = document.querySelector("#cancelCode");
 
     const escapeHtml = (value) => String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -2799,14 +2884,6 @@
         throw new Error(payload?.msg || payload?.message || payload?.error_description || "Auth request failed");
       }
       return payload;
-    }
-
-    async function signInAdminWithPassword(email, password) {
-      const session = await authRequest("token?grant_type=password", { email, password });
-      saveAdminSession(session);
-      state.adminSession = session;
-      state.adminCode = "";
-      await loadAdminSnapshot("");
     }
 
     async function signOutAdmin() {
@@ -5354,72 +5431,63 @@
       state.codeMode = "driver";
       state.adminLoginMode = "code";
       state.selectedDriver = state.drivers.find((driver) => driver.slug === slug);
+      codeForm.classList.remove("admin-login-card");
       document.querySelector("#modalTitle").textContent = "Passcode";
       modalDriver.textContent = state.selectedDriver?.display_name || "";
+      modalKicker.hidden = true;
+      codeLabel.textContent = "Passcode";
+      driverCode.placeholder = "Passcode";
+      driverCode.setAttribute("aria-label", "Passcode");
       codeSubmit.textContent = "Open route";
-      adminAuthFields.hidden = true;
       driverCode.hidden = false;
+      modalClose.hidden = true;
+      cancelCode.hidden = false;
       codeError.hidden = true;
       codeError.textContent = "";
       driverCode.value = "";
-      adminEmail.value = "";
-      adminPassword.value = "";
       codeModal.classList.add("open");
     }
 
     function openAdminCodeModal() {
-      if (state.adminSession?.access_token) {
-        state.codeMode = "admin";
-        loadAdminSnapshot("");
-        return;
-      }
       state.codeMode = "admin";
       state.selectedDriver = null;
-      state.adminLoginMode = "auth";
-      document.querySelector("#modalTitle").textContent = "Admin sign in";
-      modalDriver.textContent = "Ride Control";
-      codeSubmit.textContent = "Sign in";
-      adminAuthFields.hidden = false;
-      driverCode.hidden = true;
+      state.adminLoginMode = "code";
+      codeForm.classList.add("admin-login-card");
+      document.querySelector("#modalTitle").textContent = "Ride Control";
+      modalKicker.hidden = false;
+      modalDriver.textContent = "Sunday · UH Hilton";
+      codeLabel.textContent = "Admin passcode";
+      driverCode.placeholder = "Enter passcode";
+      driverCode.setAttribute("aria-label", "Admin passcode");
+      codeSubmit.textContent = "Open Ride Control";
+      driverCode.hidden = false;
+      modalClose.hidden = false;
+      cancelCode.hidden = true;
       codeError.hidden = true;
       codeError.textContent = "";
-      adminEmail.value = "";
-      adminPassword.value = "";
       driverCode.value = "";
       codeModal.classList.add("open");
-    }
-
-    function setAdminCodeFallbackMode() {
-      state.codeMode = "admin";
-      state.adminLoginMode = "code";
-      document.querySelector("#modalTitle").textContent = "Admin passcode";
-      modalDriver.textContent = "Ride Control";
-      codeSubmit.textContent = "Open admin";
-      adminAuthFields.hidden = true;
-      driverCode.hidden = false;
-      codeError.hidden = true;
-      codeError.textContent = "";
-      driverCode.value = "";
       driverCode.focus();
     }
 
     function closeCodeModal() {
       codeModal.classList.remove("open");
+      codeForm.classList.remove("admin-login-card");
+      modalKicker.hidden = true;
+      modalClose.hidden = true;
+      cancelCode.hidden = false;
       codeError.hidden = true;
       codeError.textContent = "";
+      driverCode.value = "";
     }
 
     async function submitCode(event) {
       event.preventDefault();
       if (state.codeMode === "admin") {
         try {
-          if (state.adminLoginMode === "auth") {
-            await signInAdminWithPassword(adminEmail.value.trim(), adminPassword.value);
-          } else {
-            await loadAdminSnapshot(driverCode.value);
-          }
+          await loadAdminSnapshot(driverCode.value);
         } catch (error) {
-          codeError.textContent = state.adminLoginMode === "auth" ? "Admin login could not open Ride Control." : "Admin could not open.";
+          codeError.textContent = "Admin passcode could not open Ride Control.";
           codeError.hidden = false;
           console.error(error);
         }
@@ -5722,9 +5790,9 @@
       else openHome();
     });
     profileNav.addEventListener("click", openProfile);
-    adminCodeFallback.addEventListener("click", setAdminCodeFallbackMode);
     codeForm.addEventListener("submit", submitCode);
-    document.querySelector("#cancelCode").addEventListener("click", closeCodeModal);
+    modalClose.addEventListener("click", closeCodeModal);
+    cancelCode.addEventListener("click", closeCodeModal);
     codeModal.addEventListener("click", (event) => {
       if (event.target === codeModal) closeCodeModal();
     });

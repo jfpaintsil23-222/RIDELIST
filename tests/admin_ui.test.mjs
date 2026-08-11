@@ -64,6 +64,9 @@ async function loadApp(fetchImpl) {
       adminResetView: typeof adminResetView === "function" ? adminResetView : undefined,
       adminEditView,
       adminPersonDetailView: typeof adminPersonDetailView === "function" ? adminPersonDetailView : undefined,
+      adminPersonEditView: typeof adminPersonEditView === "function" ? adminPersonEditView : undefined,
+      adminPersonReviewView: typeof adminPersonReviewView === "function" ? adminPersonReviewView : undefined,
+      adminPersonChangeList: typeof adminPersonChangeList === "function" ? adminPersonChangeList : undefined,
       adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
@@ -694,6 +697,89 @@ test("people list stays calm and opens person details before edit or merge", asy
   assert.match(detailHtml, /data-admin-add-person="person-2"/);
   assert.match(detailHtml, /data-admin-person-edit="person-2"/);
   assert.match(detailHtml, /data-admin-person-merge="person-1"/);
+});
+
+test("person edit reviews changes before saving PeopleData", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (String(url).includes("ride_driver_directory")) {
+      return {
+        ok: true,
+        json: async () => [],
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        plan: { date: "2026-08-09" },
+        destination: { label: "UH Hilton", address: "4800 Calhoun Rd" },
+        drivers: [],
+        stops: [],
+        people: [],
+      }),
+    };
+  });
+
+  app.state.adminCode = "admin-test";
+  app.state.admin = {
+    drivers: [],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Nora",
+        campusAddress: "Guinan Hall, University of St. Thomas, Houston, TX",
+        homeAddress: "10819 Tryon Dr, Houston, TX 77065",
+        phone: "(281) 704-1697",
+        preferredAddressType: "campus",
+        preferredAddress: "Guinan Hall, University of St. Thomas, Houston, TX",
+        sourceLabel: "PeopleData",
+        notes: "Confirm every semester.",
+      },
+    ],
+  };
+  app.state.adminSelectedPersonId = "person-1";
+
+  assert.equal(typeof app.adminPersonEditView, "function");
+  const editHtml = app.adminPersonEditView();
+  assert.match(editHtml, /Edit Person/);
+  assert.match(editHtml, /name="name" value="Nora"/);
+  assert.match(editHtml, /name="notes"/);
+  assert.match(editHtml, /Review changes/);
+
+  app.state.adminPersonDraft = {
+    id: "person-1",
+    name: "Nora Osei",
+    phone: "(281) 704-1697",
+    campusAddress: "Guinan Hall, University of St. Thomas, Houston, TX",
+    homeAddress: "10819 Tryon Dr, Houston, TX 77065",
+    preferredAddressType: "home",
+    sourceLabel: "PeopleData",
+    notes: "Confirmed home for Sunday pickup.",
+  };
+  app.state.adminPersonReviewMode = "edit";
+
+  assert.equal(typeof app.adminPersonReviewView, "function");
+  assert.equal(typeof app.adminPersonChangeList, "function");
+  assert.equal(
+    JSON.stringify(app.adminPersonChangeList()),
+    JSON.stringify([
+      "Name changed from Nora to Nora Osei",
+      "Primary address changed to Home",
+      "Notes updated",
+    ]),
+  );
+
+  const reviewHtml = app.adminPersonReviewView();
+  assert.match(reviewHtml, /Review Person/);
+  assert.match(reviewHtml, /Nora to Nora Osei/);
+  assert.match(reviewHtml, /Primary address changed to Home/);
+  assert.match(reviewHtml, /Confirm save/);
+
+  assert.equal(calls.some((call) => String(call.url).includes("ride_admin_upsert_people")), false);
 });
 
 test("add rider form searches PeopleData and offers add-new fallback", async () => {

@@ -3104,6 +3104,64 @@
       render();
     }
 
+    function adminPersonEditable(person) {
+      return {
+        id: person?.id || "",
+        name: person?.name || "",
+        phone: person?.phone || "",
+        campusAddress: person?.campusAddress || "",
+        homeAddress: person?.homeAddress || "",
+        preferredAddressType: person?.preferredAddressType === "campus" ? "campus" : "home",
+        sourceLabel: person?.sourceLabel || "PeopleData",
+        notes: person?.notes || "",
+      };
+    }
+
+    function adminPersonDraftFromForm(form) {
+      const formData = new FormData(form);
+      const preferredAddressType = String(formData.get("preferredAddressType") || "home");
+      return {
+        id: String(formData.get("id") || ""),
+        name: String(formData.get("name") || "").trim(),
+        phone: String(formData.get("phone") || "").trim(),
+        campusAddress: String(formData.get("campusAddress") || "").trim(),
+        homeAddress: String(formData.get("homeAddress") || "").trim(),
+        preferredAddressType: preferredAddressType === "campus" ? "campus" : "home",
+        sourceLabel: String(formData.get("sourceLabel") || "PeopleData").trim() || "PeopleData",
+        notes: String(formData.get("notes") || "").trim(),
+      };
+    }
+
+    function openAdminPersonEdit(personId) {
+      const person = adminPersonById(personId);
+      if (!person) return;
+
+      state.adminSelectedPersonId = personId;
+      state.adminPersonDraft = adminPersonEditable(person);
+      state.adminPersonReviewMode = "";
+      state.adminError = "";
+      state.view = "adminPersonEdit";
+      render();
+    }
+
+    function adminPersonChangeList() {
+      const before = adminPersonEditable(adminPersonById(state.adminSelectedPersonId));
+      const after = state.adminPersonDraft;
+      if (!after) return [];
+
+      const changes = [];
+      if (before.name !== after.name) changes.push(`Name changed from ${before.name} to ${after.name}`);
+      if (before.phone !== after.phone) changes.push("Phone updated");
+      if (before.campusAddress !== after.campusAddress) changes.push("Campus address updated");
+      if (before.homeAddress !== after.homeAddress) changes.push("Home address updated");
+      if (before.preferredAddressType !== after.preferredAddressType) {
+        changes.push(`Primary address changed to ${after.preferredAddressType === "campus" ? "Campus" : "Home"}`);
+      }
+      if (before.notes !== after.notes) changes.push("Notes updated");
+      if (before.sourceLabel !== after.sourceLabel) changes.push("Source updated");
+      return changes;
+    }
+
     function adminSelectedStop() {
       if (state.adminSelectedStopId === "new") {
         const seed = state.adminPersonSeed;
@@ -3360,6 +3418,38 @@
         state.adminError = error.message === "sunday_date_required"
           ? "Choose a Sunday date."
           : "Could not start the new Sunday.";
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
+    async function saveAdminPersonDraft() {
+      if (!state.adminPersonDraft) return;
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const saved = await rpc("ride_admin_upsert_people", {
+          p_admin_code: state.adminCode,
+          p_people: [state.adminPersonDraft],
+          p_source_label: state.adminPersonDraft.sourceLabel || "PeopleData",
+        }, adminRpcOptions());
+
+        if (!saved?.ok) {
+          throw new Error(saved?.error || "people_save_failed");
+        }
+
+        const savedName = state.adminPersonDraft.name;
+        await loadAdminSnapshot(state.adminCode);
+        state.adminActiveTab = "people";
+        state.adminPeopleSearch = savedName;
+        state.adminMessage = `${savedName} saved.`;
+        state.view = "admin";
+      } catch (error) {
+        state.adminError = "Could not save this person.";
         console.error(error);
       } finally {
         state.adminLoading = false;
@@ -3692,6 +3782,142 @@
             ${mapAddress ? `<a class="admin-chip-button" href="${googleMaps(mapAddress)}" target="_blank" rel="noreferrer">Map</a>` : ""}
             ${person.phone ? `<a class="admin-chip-button" href="${telHref(person.phone)}">Call</a>` : ""}
             ${duplicate ? `<button class="admin-chip-button" type="button" data-admin-person-merge="${escapeHtml(duplicate.id)}">Merge duplicate</button>` : ""}
+          </div>
+        </div>`;
+    }
+
+    function adminPersonEditView() {
+      const person = adminPersonById(state.adminSelectedPersonId);
+      const draft = state.adminPersonDraft || adminPersonEditable(person);
+      if (!person) {
+        return `
+          <div class="stack">
+            <button class="back-button" type="button" data-action="adminBack" aria-label="Back">&larr;</button>
+            <section class="empty-card"><p>Person not found.</p></section>
+          </div>`;
+      }
+
+      return `
+        <form class="stack" data-admin-form="person">
+          <section class="intro-block compact">
+            <div class="admin-top-row">
+              <div>
+                <p class="eyebrow">People Bank</p>
+                <h1>Edit Person</h1>
+                <p>Review before saving</p>
+              </div>
+              <button class="admin-icon-button" type="button" data-action="adminPersonBack" aria-label="Back to person">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+          <section class="admin-form-card">
+            <input type="hidden" name="id" value="${escapeHtml(draft.id)}">
+            <label>
+              <span>Name</span>
+              <input name="name" value="${escapeHtml(draft.name)}" required>
+            </label>
+            <label>
+              <span>Phone</span>
+              <input name="phone" value="${escapeHtml(draft.phone)}" inputmode="tel">
+            </label>
+            <label>
+              <span>Campus address</span>
+              <input name="campusAddress" value="${escapeHtml(draft.campusAddress)}">
+            </label>
+            <label>
+              <span>Home address</span>
+              <input name="homeAddress" value="${escapeHtml(draft.homeAddress)}">
+            </label>
+            <section class="admin-field-group">
+              <span class="admin-field-label">Primary address</span>
+              <div class="admin-address-options">
+                <label class="admin-address-option">
+                  <input type="radio" name="preferredAddressType" value="campus" ${draft.preferredAddressType === "campus" ? "checked" : ""}>
+                  <span>
+                    <strong>Campus address</strong>
+                    <span>Use campus address first</span>
+                  </span>
+                </label>
+                <label class="admin-address-option">
+                  <input type="radio" name="preferredAddressType" value="home" ${draft.preferredAddressType === "home" ? "checked" : ""}>
+                  <span>
+                    <strong>Home address</strong>
+                    <span>Use home address first</span>
+                  </span>
+                </label>
+              </div>
+            </section>
+            <label>
+              <span>Source</span>
+              <input name="sourceLabel" value="${escapeHtml(draft.sourceLabel)}">
+            </label>
+            <label>
+              <span>Notes</span>
+              <textarea name="notes">${escapeHtml(draft.notes)}</textarea>
+            </label>
+          </section>
+
+          <div class="admin-form-actions">
+            <button class="secondary-action" type="button" data-action="adminPersonBack">Cancel</button>
+            <button class="primary-action" type="submit">Review changes</button>
+          </div>
+        </form>`;
+    }
+
+    function adminPersonReviewView() {
+      const draft = state.adminPersonDraft;
+      const changes = adminPersonChangeList();
+      if (!draft) {
+        return `
+          <div class="stack">
+            <button class="back-button" type="button" data-action="adminPersonBack" aria-label="Back">&larr;</button>
+            <section class="empty-card"><p>No person changes to review.</p></section>
+          </div>`;
+      }
+
+      return `
+        <div class="stack">
+          <section class="intro-block compact">
+            <div class="admin-top-row">
+              <div>
+                <p class="eyebrow">People Bank</p>
+                <h1>Review Person</h1>
+                <p>${changes.length ? `${changes.length} ${changes.length === 1 ? "change" : "changes"} waiting` : "No changes"}</p>
+              </div>
+              <button class="admin-icon-button" type="button" data-action="adminPersonEditBack" aria-label="Back to edit">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+          <section class="admin-change-list" aria-label="PeopleData changes">
+            ${changes.length ? changes.map((change) => `
+              <article class="admin-change-card">
+                <span class="admin-change-badge">*</span>
+                <span class="admin-change-copy">
+                  <strong>${escapeHtml(change)}</strong>
+                  <span>${escapeHtml(draft.name)}</span>
+                </span>
+              </article>`).join("") : `<section class="empty-card"><p>No changes to save.</p></section>`}
+          </section>
+
+          <section class="admin-form-card">
+            <div class="detail-row"><small>Name</small><strong>${escapeHtml(draft.name)}</strong></div>
+            <div class="detail-row"><small>Phone</small><strong>${escapeHtml(draft.phone || "No phone listed")}</strong></div>
+            <div class="detail-row"><small>Campus</small><strong>${escapeHtml(draft.campusAddress || "No campus address saved")}</strong></div>
+            <div class="detail-row"><small>Home</small><strong>${escapeHtml(draft.homeAddress || "No home address saved")}</strong></div>
+            <div class="detail-row"><small>Notes</small><strong>${escapeHtml(draft.notes || "No notes saved")}</strong></div>
+          </section>
+
+          <div class="admin-form-actions">
+            <button class="secondary-action" type="button" data-action="adminPersonEditBack">Back</button>
+            <button class="primary-action" type="button" data-action="adminPersonConfirmSave" ${changes.length ? "" : "disabled"}>${state.adminLoading ? "Saving..." : "Confirm save"}</button>
           </div>
         </div>`;
     }
@@ -4200,6 +4426,8 @@
       else if (state.view === "admin") screen.innerHTML = adminView();
       else if (state.view === "adminReview") screen.innerHTML = adminReviewView();
       else if (state.view === "adminPersonDetail") screen.innerHTML = adminPersonDetailView();
+      else if (state.view === "adminPersonEdit") screen.innerHTML = adminPersonEditView();
+      else if (state.view === "adminPersonReview") screen.innerHTML = adminPersonReviewView();
       else if (state.view === "adminEdit") screen.innerHTML = adminEditView();
       else if (state.view === "adminReset") screen.innerHTML = adminResetView();
       else screen.innerHTML = homeView();
@@ -4373,6 +4601,17 @@
         state.view = "adminReview";
         render();
       }
+      if (action === "adminPersonBack") {
+        state.adminError = "";
+        state.view = state.adminSelectedPersonId ? "adminPersonDetail" : "admin";
+        render();
+      }
+      if (action === "adminPersonEditBack") {
+        state.adminError = "";
+        state.view = "adminPersonEdit";
+        render();
+      }
+      if (action === "adminPersonConfirmSave") saveAdminPersonDraft();
       if (action === "adminResetBack") {
         state.adminError = "";
         state.adminResetDate = "";
@@ -4392,6 +4631,12 @@
       const adminPersonOpenButton = event.target.closest("[data-admin-person-open]");
       if (adminPersonOpenButton) {
         openAdminPersonDetail(adminPersonOpenButton.dataset.adminPersonOpen);
+        return;
+      }
+
+      const adminPersonEditButton = event.target.closest("[data-admin-person-edit]");
+      if (adminPersonEditButton) {
+        openAdminPersonEdit(adminPersonEditButton.dataset.adminPersonEdit);
         return;
       }
 
@@ -4511,9 +4756,29 @@
       }
 
       const adminForm = event.target.closest("[data-admin-form='rider']");
-      if (!adminForm) return;
-      event.preventDefault();
-      saveAdminDraftFromForm(adminForm);
+      if (adminForm) {
+        event.preventDefault();
+        saveAdminDraftFromForm(adminForm);
+        return;
+      }
+
+      const personForm = event.target.closest("[data-admin-form='person']");
+      if (personForm) {
+        event.preventDefault();
+        const draft = adminPersonDraftFromForm(personForm);
+        if (!draft.name || (!draft.phone && !draft.campusAddress && !draft.homeAddress)) {
+          state.adminError = "Name and at least one phone or address are required.";
+          state.adminPersonDraft = draft;
+          render();
+          return;
+        }
+
+        state.adminPersonDraft = draft;
+        state.adminPersonReviewMode = "edit";
+        state.adminError = "";
+        state.view = "adminPersonReview";
+        render();
+      }
     });
 
     homeNav.addEventListener("click", () => {

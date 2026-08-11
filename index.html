@@ -1765,6 +1765,47 @@
       color: var(--danger);
     }
 
+    .admin-notify-card {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid #d8dce2;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.04);
+    }
+
+    .admin-notify-heading {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+    }
+
+    .admin-notify-heading strong,
+    .admin-notify-preview strong {
+      display: block;
+      color: #050505;
+      font-size: 17px;
+      font-weight: 750;
+      line-height: 1.25;
+    }
+
+    .admin-notify-heading small,
+    .admin-notify-preview small,
+    .admin-notify-preview p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .admin-notify-preview {
+      display: grid;
+      gap: 8px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
     .admin-review-bar {
       position: sticky;
       bottom: 0;
@@ -2816,6 +2857,9 @@
       adminMessage: "",
       adminError: "",
       adminLoading: false,
+      adminNotifyDraft: null,
+      adminNotifyMode: "prompt",
+      adminNotifyStatus: "idle",
       weatherOpen: false,
       weatherStatus: "idle",
       weatherForecast: null,
@@ -3845,6 +3889,36 @@
       return changes;
     }
 
+    function adminAffectedDriverSlugs() {
+      const original = adminOriginalStopMap();
+      const seen = new Set();
+      const slugs = [];
+      const add = (slug) => {
+        const value = String(slug || "").trim();
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        slugs.push(value);
+      };
+
+      state.adminDeletedStopIds.forEach((stopId) => add(original.get(stopId)?.driverSlug));
+
+      adminStops().forEach((stop) => {
+        const before = original.get(stop.id);
+        if (!before || String(stop.id || "").startsWith("temp-")) {
+          add(stop.driverSlug);
+          return;
+        }
+
+        if (JSON.stringify(adminComparableStop(before)) !== JSON.stringify(adminComparableStop(stop))) {
+          add(before.driverSlug);
+          add(stop.driverSlug);
+        }
+      });
+
+      const order = new Map(adminDrivers().map((driver, index) => [driver.slug, index]));
+      return slugs.sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b));
+    }
+
     function adminSearchText(stop) {
       return [
         stop.name,
@@ -4268,6 +4342,7 @@
 
     async function publishAdminDraft() {
       if (!state.adminCode && !state.adminSession?.access_token) return;
+      const affectedDriverSlugs = adminAffectedDriverSlugs();
       state.adminLoading = true;
       state.adminError = "";
       render();
@@ -4302,6 +4377,12 @@
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
+        state.adminNotifyDraft = affectedDriverSlugs.length ? {
+          driverSlugs: affectedDriverSlugs,
+          message: "Your pickup list was updated. Open your route review.",
+        } : null;
+        state.adminNotifyMode = "prompt";
+        state.adminNotifyStatus = "idle";
         state.adminMessage = "Route changes published.";
         await loadAdminActivity();
         state.view = "admin";
@@ -4314,6 +4395,51 @@
         state.adminLoading = false;
         render();
       }
+    }
+
+    function openAdminNotifyReview() {
+      if (!state.adminNotifyDraft?.driverSlugs?.length) return;
+      state.adminNotifyMode = "review";
+      state.adminNotifyStatus = "idle";
+      state.adminError = "";
+      render();
+    }
+
+    function cancelAdminNotify() {
+      state.adminNotifyDraft = null;
+      state.adminNotifyMode = "prompt";
+      state.adminNotifyStatus = "idle";
+      render();
+    }
+
+    async function sendAdminRouteNotifications() {
+      const draft = state.adminNotifyDraft;
+      if (!draft?.driverSlugs?.length) return;
+      state.adminNotifyStatus = "sending";
+      state.adminError = "";
+      render();
+
+      try {
+        const sent = await pushRequest("send-route-update", {
+          adminCode: state.adminCode,
+          planDate: activePlanDate(),
+          driverSlugs: draft.driverSlugs,
+          message: draft.message,
+        });
+
+        if (!sent?.ok) throw new Error(sent?.error || "push_send_failed");
+        state.adminNotifyDraft = null;
+        state.adminNotifyMode = "prompt";
+        state.adminNotifyStatus = "idle";
+        state.adminMessage = sent.failed
+          ? `${sent.sent} route updates sent. ${sent.failed} failed.`
+          : `${sent.sent} route updates sent.`;
+      } catch (error) {
+        state.adminNotifyStatus = "error";
+        state.adminError = "Could not send route updates.";
+        console.error(error);
+      }
+      render();
     }
 
     function openAdminReset() {
@@ -4709,6 +4835,47 @@
         </button>
         <section class="admin-route-list" aria-label="Driver routes">
           ${drivers.map(adminRouteCard).join("")}
+        </section>`;
+    }
+
+    function adminNotifyDriverNames(driverSlugs = []) {
+      return driverSlugs.map((slug) => adminDriverName(slug));
+    }
+
+    function adminNotifyPromptHtml() {
+      const draft = state.adminNotifyDraft;
+      if (!draft?.driverSlugs?.length) return "";
+
+      const count = draft.driverSlugs.length;
+      const names = adminNotifyDriverNames(draft.driverSlugs);
+      const review = state.adminNotifyMode === "review";
+      const statusLine = state.adminNotifyStatus === "sending"
+        ? "Sending route updates..."
+        : `${count} ${count === 1 ? "driver had" : "drivers had"} route changes.`;
+
+      return `
+        <section class="admin-notify-card" aria-label="Notify drivers">
+          <div class="admin-notify-heading">
+            <span class="admin-control-action-icon" data-detail-icon="send">${peopleDetailIcon("send")}</span>
+            <span>
+              <strong>${review ? "Send route update" : "Notify drivers?"}</strong>
+              <small>${escapeHtml(statusLine)}</small>
+            </span>
+          </div>
+          ${review ? `
+            <section class="admin-notify-preview">
+              <small>Recipients</small>
+              <strong>${escapeHtml(names.join(", "))}</strong>
+              <small>Message preview</small>
+              <p>${escapeHtml(draft.message)}</p>
+            </section>
+            <div class="admin-form-actions">
+              <button class="secondary-action" type="button" data-action="adminNotifyCancel">Cancel</button>
+              <button class="primary-action" type="button" data-action="adminNotifySend">${state.adminNotifyStatus === "sending" ? "Sending..." : "Send"}</button>
+            </div>
+          ` : `
+            <button class="secondary-action" type="button" data-action="adminNotifyReview">Review message</button>
+          `}
         </section>`;
     }
 
@@ -5199,6 +5366,7 @@
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+          ${adminNotifyPromptHtml()}
           ${state.adminSession?.access_token ? `<button class="secondary-action" type="button" data-action="adminSignOut">Sign out admin</button>` : ""}
 
           <button class="secondary-action admin-reset-action" type="button" data-action="adminReset">
@@ -5800,6 +5968,9 @@
         render();
       }
       if (action === "adminReset") openAdminReset();
+      if (action === "adminNotifyReview") openAdminNotifyReview();
+      if (action === "adminNotifyCancel") cancelAdminNotify();
+      if (action === "adminNotifySend") sendAdminRouteNotifications();
       if (action === "adminReviewChanges") {
         state.view = "adminReview";
         render();

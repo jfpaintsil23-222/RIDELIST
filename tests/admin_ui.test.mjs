@@ -86,6 +86,7 @@ async function loadApp(fetchImpl) {
       weatherSummaryText: typeof weatherSummaryText === "function" ? weatherSummaryText : undefined,
       adminChangedCount,
       adminChangeList: typeof adminChangeList === "function" ? adminChangeList : undefined,
+      adminAffectedDriverSlugs: typeof adminAffectedDriverSlugs === "function" ? adminAffectedDriverSlugs : undefined,
       nextSundayDate: typeof nextSundayDate === "function" ? nextSundayDate : undefined,
       __storage: localStorage,
     };
@@ -667,6 +668,58 @@ test("driver push subscription uses Supabase without private keys", async () => 
   assert.match(html, /ride_driver_save_push_subscription/);
   assert.match(html, /ride-driver-notifications/);
   assert.doesNotMatch(html, /VAPID_PRIVATE_KEY|service_role|SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("admin affected drivers include added updated removed and moved routes", async () => {
+  const app = await loadApp();
+  app.state.admin = {
+    drivers: [
+      { slug: "dq", displayName: "DQ", initials: "DQ" },
+      { slug: "annie", displayName: "Annie", initials: "AN" },
+      { slug: "joojo", displayName: "Joojo", initials: "JP" },
+    ],
+    stops: [
+      { id: "stop-1", driverSlug: "dq", stopOrder: 1, name: "A'lena", phone: "", address: "A", pickupTime: "", readyBy: "", routeLabel: "", notes: "" },
+      { id: "stop-2", driverSlug: "annie", stopOrder: 1, name: "Nicholas", phone: "", address: "B", pickupTime: "", readyBy: "", routeLabel: "", notes: "" },
+    ],
+  };
+  app.state.adminDraftStops = [
+    { ...app.state.admin.stops[0], phone: "555-555-5555" },
+    { ...app.state.admin.stops[1], driverSlug: "joojo" },
+    { id: "temp-1", driverSlug: "annie", stopOrder: 2, name: "New", phone: "", address: "C", pickupTime: "", readyBy: "", routeLabel: "", notes: "" },
+  ];
+  app.state.adminDeletedStopIds = ["stop-1"];
+
+  assert.deepEqual(Array.from(app.adminAffectedDriverSlugs()), ["dq", "annie", "joojo"]);
+});
+
+test("admin reviews driver notification before sending", async () => {
+  const app = await loadApp();
+  app.state.admin = {
+    drivers: [
+      { slug: "dq", displayName: "DQ", initials: "DQ" },
+      { slug: "john-mark", displayName: "John Mark", initials: "JM" },
+    ],
+    stops: [],
+    people: [],
+  };
+  app.state.adminNotifyDraft = {
+    driverSlugs: ["dq", "john-mark"],
+    message: "Your pickup list was updated. Open your route review.",
+  };
+  app.state.adminNotifyMode = "prompt";
+
+  let html = app.adminView();
+  assert.match(html, /Notify drivers\?/);
+  assert.match(html, /2 drivers had route changes/);
+  assert.match(html, /data-action="adminNotifyReview"/);
+
+  app.state.adminNotifyMode = "review";
+  html = app.adminView();
+  assert.match(html, /Message preview/);
+  assert.match(html, /DQ/);
+  assert.match(html, /John Mark/);
+  assert.match(html, /data-action="adminNotifySend"/);
 });
 
 test("admin route cards show route warnings and timing status", async () => {

@@ -1330,28 +1330,81 @@
       gap: 12px;
     }
 
-    .admin-warning-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .admin-warning-chip {
-      display: inline-flex;
+    .admin-route-warning-summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      min-height: 26px;
-      padding: 5px 8px;
-      border-radius: 999px;
-      color: #050505;
-      background: #f1f1f1;
-      font-size: 11px;
-      line-height: 1;
-      font-weight: 800;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid #e6e6e6;
+      border-radius: 14px;
+      background: #f7f7f7;
     }
 
-    .admin-warning-chip.urgent {
-      color: #8a1f1f;
-      background: #fff0f0;
+    .admin-route-warning-summary.urgent {
+      border-color: #f0d3a7;
+      background: #fff8ed;
+    }
+
+    .admin-route-warning-copy,
+    .admin-warning-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .admin-route-warning-copy strong,
+    .admin-warning-copy strong {
+      color: #050505;
+      font-size: 14px;
+      line-height: 1.15;
+      font-weight: 850;
+    }
+
+    .admin-route-warning-copy span,
+    .admin-warning-copy span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+    }
+
+    .admin-warning-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .admin-warning-item {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px;
+      border-radius: 14px;
+      background: #f4f4f4;
+    }
+
+    .admin-warning-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      color: #050505;
+      background: #ffffff;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .admin-warning-icon.urgent {
+      color: #8a5207;
+      background: #fff3dc;
+    }
+
+    .admin-warning-item .admin-chip-button {
+      grid-column: 2;
+      justify-self: start;
     }
 
     .admin-driver-toggle {
@@ -2871,37 +2924,125 @@
 
     function adminRouteWarnings(driver, stops = [], timing = null) {
       const warnings = [];
-      const add = (key, label, level = "normal") => {
-        if (!warnings.some((warning) => warning.key === key || warning.label === label)) warnings.push({ key, label, level });
+      const add = (key, label, level = "normal", detail = {}) => {
+        if (warnings.some((warning) => warning.key === key)) return;
+        warnings.push({
+          key,
+          label,
+          level,
+          title: detail.title || label,
+          detail: detail.detail || "",
+          stopId: detail.stopId || "",
+          actionLabel: detail.actionLabel || "",
+        });
       };
 
-      if (!stops.length) add("no-riders", "No riders assigned");
+      if (!stops.length) {
+        add("no-riders", "No riders assigned", "normal", {
+          title: "No riders assigned",
+          detail: "Add riders before final route timing.",
+        });
+      }
 
-      stops.forEach((stop) => {
-        if (!String(stop.phone || "").trim()) add("missing-phone", "Missing number", "urgent");
-        if (!String(stop.pickupTime || "").trim()) add("missing-pickup-time", "Missing pickup time", "urgent");
-        if (!String(stop.address || "").trim()) add("missing-address", "Missing address", "urgent");
+      stops.forEach((stop, index) => {
+        const riderName = String(stop.name || `Stop ${index + 1}`).trim();
+        const stopKey = stop.id || `${driver?.slug || "route"}-${stop.stopOrder || index + 1}-${riderName}`;
+        const action = stop.id ? { stopId: stop.id, actionLabel: "Fix rider" } : {};
+        if (!String(stop.phone || "").trim()) {
+          add(`missing-phone-${stopKey}`, "Missing number", "urgent", {
+            title: `${riderName}: phone missing`,
+            detail: "Add a number so admin can call or text if pickup changes.",
+            ...action,
+          });
+        }
+        if (!String(stop.pickupTime || "").trim()) {
+          add(`missing-pickup-time-${stopKey}`, "Missing pickup time", "urgent", {
+            title: `${riderName}: pickup time missing`,
+            detail: "Add a pickup time before final route review.",
+            ...action,
+          });
+        }
+        if (!String(stop.address || "").trim()) {
+          add(`missing-address-${stopKey}`, "Missing address", "urgent", {
+            title: `${riderName}: pickup address missing`,
+            detail: "Choose a home or campus pickup address.",
+            ...action,
+          });
+        }
       });
 
       const timingStatus = timing?.status || "";
       if (timingStatus === "error" || (!timing && state.routeTimingStatus === "error")) {
-        add("route-time-unavailable", "Route time unavailable");
+        add("route-time-unavailable", "Route time unavailable", "normal", {
+          title: "Route timing paused",
+          detail: "Route time will update after rider data is fixed or live timing is available.",
+        });
       }
       if (timingStatus === "loading" || (!timing && state.routeTimingStatus === "loading")) {
-        add("route-time-loading", "Checking route time");
+        add("route-time-loading", "Checking route time", "normal", {
+          title: "Checking route time",
+          detail: "Live timing is updating for this route.",
+        });
       }
-      if (timing?.warning) add("route-warning", timing.warning, "urgent");
+      if (timing?.warning) {
+        add("route-warning", timing.warning, "urgent", {
+          title: "Route timing needs review",
+          detail: timing.warning,
+        });
+      }
 
       return warnings;
     }
 
-    function adminRouteWarningsHtml(driver, stops) {
+    function adminRouteAttentionTitle(warnings) {
+      if (!warnings.length) return "";
+      const count = warnings.length;
+      if (count === 1 && warnings[0].key === "route-time-loading") return "Checking route time";
+      return `${count} ${count === 1 ? "thing needs" : "things need"} attention`;
+    }
+
+    function adminRouteAttentionDetail(warnings) {
+      if (!warnings.length) return "";
+      if (warnings.some((warning) => warning.level === "urgent")) return "Fix these before final route timing.";
+      if (warnings.some((warning) => warning.key === "route-time-loading")) return "Live route time is updating.";
+      if (warnings.some((warning) => warning.key === "route-time-unavailable")) return "Timing will update when live route time is available.";
+      return "Review before Sunday.";
+    }
+
+    function adminRouteWarningSummaryHtml(driver, warnings, isOpen) {
+      const urgent = warnings.some((warning) => warning.level === "urgent");
+      return `
+        <section class="admin-route-warning-summary ${urgent ? "urgent" : ""}" aria-label="${escapeHtml(driver.displayName)} route attention">
+          <span class="admin-route-warning-copy">
+            <strong>${escapeHtml(adminRouteAttentionTitle(warnings))}</strong>
+            <span>${escapeHtml(adminRouteAttentionDetail(warnings))}</span>
+          </span>
+          ${isOpen ? "" : `<button class="admin-chip-button" type="button" data-admin-driver-toggle="${escapeHtml(driver.slug)}">Review</button>`}
+        </section>`;
+    }
+
+    function adminRouteWarningItemHtml(warning) {
+      const urgent = warning.level === "urgent";
+      return `
+        <article class="admin-warning-item">
+          <span class="admin-warning-icon ${urgent ? "urgent" : ""}" aria-hidden="true">${urgent ? "!" : "i"}</span>
+          <span class="admin-warning-copy">
+            <strong>${escapeHtml(warning.title)}</strong>
+            ${warning.detail ? `<span>${escapeHtml(warning.detail)}</span>` : ""}
+          </span>
+          ${warning.stopId ? `<button class="admin-chip-button" type="button" data-admin-edit="${escapeHtml(warning.stopId)}">${escapeHtml(warning.actionLabel || "Fix rider")}</button>` : ""}
+        </article>`;
+    }
+
+    function adminRouteWarningsHtml(driver, stops, options = {}) {
       const warnings = adminRouteWarnings(driver, stops, routeTimingForDriver(driver.slug));
       if (!warnings.length) return "";
       return `
+        ${adminRouteWarningSummaryHtml(driver, warnings, Boolean(options.isOpen))}
+        ${options.isOpen ? `
         <div class="admin-warning-list" aria-label="${escapeHtml(driver.displayName)} route warnings">
-          ${warnings.map((warning) => `<span class="admin-warning-chip ${warning.level === "urgent" ? "urgent" : ""}">${escapeHtml(warning.label)}</span>`).join("")}
-        </div>`;
+          ${warnings.map(adminRouteWarningItemHtml).join("")}
+        </div>` : ""}`;
     }
 
     function adminDriverBySlug(slug) {
@@ -3694,7 +3835,7 @@
               <span class="admin-route-arrow" aria-hidden="true">&rsaquo;</span>
             </span>
           </button>
-          ${adminRouteWarningsHtml(driver, stops)}
+          ${adminRouteWarningsHtml(driver, stops, { isOpen })}
           ${isOpen ? `
           <div class="admin-rider-list">
             ${stops.length ? stops.map((stop) => adminRiderCard(stop, { routeActions: true })).join("") : `<section class="empty-card"><p>No riders assigned.</p></section>`}

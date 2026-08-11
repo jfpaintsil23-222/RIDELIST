@@ -573,10 +573,63 @@ test("admin route cards show route warnings and timing status", async () => {
   );
 
   const html = app.adminView();
-  assert.match(html, /Missing number/);
-  assert.match(html, /Missing pickup time/);
-  assert.match(html, /Missing address/);
-  assert.match(html, /Route time unavailable/);
+  assert.match(html, /A&#39;lena: phone missing/);
+  assert.match(html, /A&#39;lena: pickup time missing/);
+  assert.match(html, /Christopher L: pickup address missing/);
+  assert.match(html, /Route timing paused/);
+});
+
+test("admin route warnings summarize exact rider fixes", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "dq", displayName: "DQ", initials: "DQ" }],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "dq",
+        stopOrder: 1,
+        name: "A'lena",
+        phone: "",
+        address: "9425 Asheville Rd, Houston, TX",
+        area: "South Houston",
+        pickupTime: "",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+      {
+        id: "stop-2",
+        driverSlug: "dq",
+        stopOrder: 2,
+        name: "Christopher L",
+        phone: "832-942-1381",
+        address: "",
+        area: "South Houston",
+        pickupTime: "11:30 AM",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+    people: [],
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminDeletedStopIds = [];
+  app.state.adminActiveTab = "routes";
+  app.state.adminExpandedDriverSlug = "dq";
+  app.state.routeTimingStatus = "error";
+  app.state.routeTimings = {};
+
+  const html = app.adminView();
+  assert.match(html, /4 things need attention/);
+  assert.match(html, /Fix these before final route timing/);
+  assert.match(html, /A&#39;lena: phone missing/);
+  assert.match(html, /A&#39;lena: pickup time missing/);
+  assert.match(html, /Christopher L: pickup address missing/);
+  assert.match(html, /Route timing paused/);
+  assert.match(html, /data-admin-edit="stop-1"[\s\S]*Fix rider/);
+  assert.match(html, /data-admin-edit="stop-2"[\s\S]*Fix rider/);
 });
 
 test("secure route timing request calls Supabase Edge Function without Google keys", async () => {

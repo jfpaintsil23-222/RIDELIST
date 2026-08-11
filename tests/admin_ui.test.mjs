@@ -74,6 +74,7 @@ async function loadApp(fetchImpl) {
       adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
+      returnToAdminPersonDetailFromAdd: typeof returnToAdminPersonDetailFromAdd === "function" ? returnToAdminPersonDetailFromAdd : undefined,
       driverProfileCard,
       driverHomeView,
       ridesView,
@@ -353,6 +354,77 @@ test("admin routes collapse by driver and rider rows use move instead of remove"
   assert.match(expanded, /Tinnie/);
   assert.match(expanded, /data-admin-move="stop-1"/);
   assert.doesNotMatch(expanded, /data-admin-delete="stop-1"/);
+});
+
+test("admin routes page uses the target Ride Control chrome without extra cards", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [
+      { slug: "john-mark", displayName: "John Mark", initials: "JM" },
+      { slug: "dq", displayName: "DQ", initials: "DQ" },
+      { slug: "dawson", displayName: "Dawson", initials: "DW" },
+    ],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "john-mark",
+        stopOrder: 1,
+        name: "A'lena",
+        phone: "",
+        address: "",
+        area: "",
+        pickupTime: "",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+    people: [],
+    security: { actor: { type: "code" } },
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminActiveTab = "routes";
+
+  const html = app.adminView();
+  assert.match(html, /class="stack admin-control-screen"/);
+  assert.match(html, /class="[^"]*admin-control-header[^"]*"/);
+  assert.match(html, /class="[^"]*admin-close-button[^"]*"/);
+  assert.match(html, /class="[^"]*admin-control-tabs[^"]*"/);
+  assert.match(html, /class="[^"]*admin-control-stats[^"]*"/);
+  assert.match(html, /class="secondary-action admin-reset-action" type="button" data-action="adminReset"/);
+  assert.match(html, /data-detail-icon="calendar"/);
+  assert.match(html, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
+  assert.match(html, /data-detail-icon="user-plus"/);
+  assert.match(html, /0 Pickups/);
+  assert.doesNotMatch(html, /admin-security-message/);
+  assert.doesNotMatch(html, /Passcode fallback active/);
+  assert.doesNotMatch(html, /No riders assigned[\s\S]*Add riders before final route timing/);
+});
+
+test("admin people tab keeps the icon Add rider action", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "john-mark", displayName: "John Mark", initials: "JM" }],
+    stops: [],
+    people: [{ id: "person-1", name: "Zarah", phone: "", homeAddress: "1221 Highland Row Ln, Houston, TX" }],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminActiveTab = "people";
+
+  const html = app.adminView();
+  assert.match(html, /PeopleData · 1 people stored/);
+  assert.match(html, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
+  assert.match(html, /data-detail-icon="user-plus"/);
+});
+
+test("people detail values use a softer text weight", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  const rule = html.match(/\.people-detail-copy strong\s*{[^}]*}/)?.[0] || "";
+  assert.match(rule, /font-weight:\s*500;/);
+  assert.doesNotMatch(rule, /font-weight:\s*900;/);
 });
 
 test("admin route headers summarize route area and first pickup timing", async () => {
@@ -1252,6 +1324,46 @@ test("selected PeopleData rider auto-fills phone and selectable pickup addresses
   assert.match(html, /10819 Tryon Dr/);
   assert.match(html, /name="addressChoice"/);
   assert.match(html, /value="10819 Tryon Dr, Houston, TX 77065" checked/);
+});
+
+test("adding a saved PeopleData rider can return to saved rider details", async () => {
+  const app = await loadApp();
+  const person = {
+    id: "person-1",
+    name: "Nora",
+    campusAddress: "",
+    homeAddress: "10819 Tryon Dr, Houston, TX 77065",
+    phone: "(281) 704-1697",
+    preferredAddressType: "home",
+    preferredAddress: "10819 Tryon Dr, Houston, TX 77065",
+  };
+
+  app.state.admin = {
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JP" }],
+    stops: [],
+    people: [person],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminSelectedPersonId = "person-1";
+  app.state.adminSelectedStopId = "new";
+  app.state.adminPersonSeed = person;
+  app.state.adminRiderQuery = "Nora";
+  app.state.adminSelectedAddressType = "home";
+  app.state.adminEditMode = "add";
+  app.state.view = "adminEdit";
+
+  assert.equal(typeof app.returnToAdminPersonDetailFromAdd, "function");
+
+  const html = app.adminEditView();
+  assert.match(html, /data-action="adminPersonAddBack" aria-label="Back to person"/);
+  assert.match(html, /<button class="secondary-action" type="button" data-action="adminPersonAddBack">Cancel<\/button>/);
+
+  assert.equal(app.returnToAdminPersonDetailFromAdd(), true);
+  assert.equal(app.state.view, "adminPersonDetail");
+  assert.equal(app.state.adminSelectedPersonId, "person-1");
+  assert.equal(app.state.adminSelectedStopId, null);
+  assert.equal(app.state.adminPersonSeed, null);
+  assert.equal(app.state.adminEditMode, "edit");
 });
 
 test("edit screen contains the red remove control above form actions", async () => {

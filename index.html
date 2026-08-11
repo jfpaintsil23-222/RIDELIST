@@ -976,6 +976,58 @@
       font-weight: 650;
     }
 
+    .driver-alert-card {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: none;
+    }
+
+    .driver-alert-card.enabled {
+      grid-template-columns: 38px minmax(0, 1fr);
+    }
+
+    .driver-alert-icon {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      color: #050505;
+      background: #f3f4f6;
+    }
+
+    .driver-alert-card strong,
+    .driver-alert-card small {
+      display: block;
+    }
+
+    .driver-alert-card strong {
+      color: #050505;
+      font-size: 16px;
+      line-height: 1.25;
+      font-weight: 750;
+    }
+
+    .driver-alert-card small {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 550;
+    }
+
+    .secondary-action.compact {
+      min-height: 38px;
+      padding-inline: 14px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
     .passcode-card {
       padding: 17px 20px;
       background: #f4f4f4;
@@ -2732,6 +2784,10 @@
       selectedDriver: null,
       route: null,
       selectedRider: null,
+      driverAccessCode: "",
+      pushStatus: "idle",
+      pushMessage: "",
+      pushPublicKey: "",
       codeMode: "driver",
       adminLoginMode: "code",
       adminSession: readAdminSession(),
@@ -2864,6 +2920,132 @@
         throw new Error(data?.error || "route_timing_failed");
       }
       return data;
+    }
+
+    async function pushRequest(mode, payload = {}) {
+      const headers = {
+        "apikey": SUPABASE_KEY,
+        "content-type": "application/json",
+      };
+      if (mode === "send-route-update" && state.adminSession?.access_token) {
+        headers.authorization = "Bearer " + state.adminSession.access_token;
+      }
+
+      const response = await fetch(SUPABASE_URL + "/functions/v1/ride-driver-notifications", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ mode, ...payload }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "push_request_failed");
+      }
+      return data;
+    }
+
+    function pushSupported() {
+      return Boolean(
+        window.isSecureContext &&
+        "serviceWorker" in navigator &&
+        "PushManager" in window &&
+        "Notification" in window
+      );
+    }
+
+    function urlBase64ToUint8Array(value) {
+      const padding = "=".repeat((4 - value.length % 4) % 4);
+      const base64 = (value + padding).replaceAll("-", "+").replaceAll("_", "/");
+      const raw = atob(base64);
+      return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
+    }
+
+    async function pushServiceWorkerRegistration() {
+      if (!pushSupported()) return null;
+      return navigator.serviceWorker.register("./sw.js");
+    }
+
+    async function loadPushPublicKey() {
+      if (state.pushPublicKey) return state.pushPublicKey;
+      const data = await pushRequest("public-key");
+      if (!data?.ok || !data.publicKey) throw new Error("push_not_configured");
+      state.pushPublicKey = data.publicKey;
+      return state.pushPublicKey;
+    }
+
+    async function refreshDriverPushStatus() {
+      if (!pushSupported()) {
+        state.pushStatus = "unsupported";
+        state.pushMessage = "Add RIDELIST to your Home Screen on iPhone, or use a browser that supports alerts.";
+        render();
+        return;
+      }
+
+      if (Notification.permission === "denied") {
+        state.pushStatus = "denied";
+        state.pushMessage = "Alerts are off for this browser.";
+        render();
+        return;
+      }
+
+      try {
+        const registration = await pushServiceWorkerRegistration();
+        const subscription = await registration.pushManager.getSubscription();
+        state.pushStatus = subscription ? "enabled" : "available";
+        state.pushMessage = "";
+      } catch (error) {
+        state.pushStatus = "error";
+        state.pushMessage = "Route alerts are not ready on this browser.";
+        console.warn(error);
+      }
+      render();
+    }
+
+    async function enableDriverRouteAlerts() {
+      if (!state.route?.driver?.slug || !state.driverAccessCode) return;
+      state.pushStatus = "loading";
+      state.pushMessage = "";
+      render();
+
+      try {
+        if (!pushSupported()) throw new Error("push_unsupported");
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          state.pushStatus = permission === "denied" ? "denied" : "available";
+          state.pushMessage = permission === "denied" ? "Alerts are off for this browser." : "Alerts were not turned on.";
+          render();
+          return;
+        }
+
+        const registration = await pushServiceWorkerRegistration();
+        const publicKey = await loadPushPublicKey();
+        let subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey),
+          });
+        }
+
+        const saved = await rpc("ride_driver_save_push_subscription", {
+          p_driver_slug: state.route.driver.slug,
+          p_access_code: state.driverAccessCode,
+          p_plan_date: activePlanDate(),
+          p_subscription: subscription.toJSON(),
+          p_user_agent: navigator.userAgent || "",
+        });
+
+        if (!saved?.ok) throw new Error(saved?.error || "push_save_failed");
+        state.pushStatus = "enabled";
+        state.pushMessage = "";
+      } catch (error) {
+        state.pushStatus = error.message === "push_unsupported" ? "unsupported" : "error";
+        state.pushMessage = state.pushStatus === "unsupported"
+          ? "Add RIDELIST to your Home Screen on iPhone, or use a browser that supports alerts."
+          : "Could not turn on route alerts. Try again later.";
+        console.warn(error);
+      }
+      render();
     }
 
     async function authRequest(path, body, accessToken = "") {
@@ -3313,6 +3495,7 @@
         car: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 1.5-4.5A2 2 0 0 1 8.4 6h7.2a2 2 0 0 1 1.9 1.5L19 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M4 12h16v6H4v-6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 18v2M17 18v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="7.5" cy="15" r="1" fill="currentColor"/><circle cx="16.5" cy="15" r="1" fill="currentColor"/></svg>`,
         map: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18-6 3V6l6-3m0 15 6 3m-6-3V3m6 18 6-3V3l-6 3m0 15V6m0 0L9 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
         weather: `<svg class="driver-meta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.3 10.5 3.5 3.5 0 0 0 7 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 21h.01M12 21h.01M16 21h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+        bell: `<svg class="driver-meta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 20a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
       };
       return icons[name] || "";
     }
@@ -4339,6 +4522,9 @@
     }
 
     function openHome() {
+      state.driverAccessCode = "";
+      state.pushStatus = "idle";
+      state.pushMessage = "";
       setView("home");
     }
 
@@ -5176,6 +5362,37 @@
       return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
     }
 
+    function driverRouteAlertsHtml() {
+      const driverName = state.route?.driver?.displayName || "this driver";
+      if (state.pushStatus === "enabled") {
+        return `
+          <section class="driver-alert-card enabled" aria-label="Route alerts">
+            <span class="driver-alert-icon">${iconSvg("bell")}</span>
+            <span>
+              <strong>Route alerts on</strong>
+              <small>This phone will get updates for ${escapeHtml(driverName)}&#39;s route.</small>
+            </span>
+          </section>`;
+      }
+
+      const unsupported = state.pushStatus === "unsupported" || state.pushStatus === "denied";
+      let message = state.pushMessage || "Get notified if admin changes your pickups.";
+      if (state.pushStatus === "unsupported" && !state.pushMessage) {
+        message = "Add RIDELIST to your Home Screen on iPhone, or use a browser that supports alerts.";
+      } else if (state.pushStatus === "denied" && !state.pushMessage) {
+        message = "Alerts are off for this browser.";
+      }
+      return `
+        <section class="driver-alert-card" aria-label="Route alerts">
+          <span class="driver-alert-icon">${iconSvg("bell")}</span>
+          <span>
+            <strong>Route alerts</strong>
+            <small>${escapeHtml(message)}</small>
+          </span>
+          ${unsupported ? "" : `<button class="secondary-action compact" type="button" data-action="enableRouteAlerts">${state.pushStatus === "loading" ? "Turning on..." : "Turn on"}</button>`}
+        </section>`;
+    }
+
     function driverHomeView() {
       const driver = state.route?.driver;
       const riders = state.route?.riders || [];
@@ -5225,6 +5442,8 @@
             </button>
             ${state.weatherOpen ? `<p class="weather-details">${escapeHtml(weatherDetailsText())}</p>` : ""}
           </section>
+
+          ${driverRouteAlertsHtml()}
 
           <button class="primary-action" type="button" data-action="rides">View my rides <span aria-hidden="true">&rarr;</span></button>
         </div>`;
@@ -5512,6 +5731,7 @@
         }
 
         state.route = route;
+        state.driverAccessCode = driverCode.value;
         state.weatherOpen = false;
         state.weatherStatus = "idle";
         state.weatherForecast = null;
@@ -5522,6 +5742,7 @@
         state.routeTimings = {};
         closeCodeModal();
         setDriverHome();
+        refreshDriverPushStatus();
         loadDriverRouteTiming(driverCode.value);
         loadWeatherForecast();
       } catch (error) {
@@ -5557,6 +5778,7 @@
         if (state.weatherOpen && state.weatherStatus === "idle") loadWeatherForecast();
         render();
       }
+      if (action === "enableRouteAlerts") enableDriverRouteAlerts();
       if (action === "admin") openAdminCodeModal();
       if (action === "adminSignOut") signOutAdmin();
       if (action === "adminPersonAddBack") {

@@ -635,6 +635,40 @@ test("driver dashboard prefers secure route timing when available", async () => 
   assert.doesNotMatch(html, /1 hr 22 min to UH Hilton/);
 });
 
+test("driver dashboard exposes simple route alert opt-in states", async () => {
+  const app = await loadApp();
+  app.state.route = {
+    driver: { slug: "john-mark", displayName: "John Mark" },
+    riders: [],
+    destination: { label: "UH Hilton", address: "4450 University Dr" },
+  };
+
+  app.state.pushStatus = "available";
+  let html = app.driverHomeView();
+  assert.match(html, /Route alerts/);
+  assert.match(html, /Get notified if admin changes your pickups/);
+  assert.match(html, /data-action="enableRouteAlerts"/);
+
+  app.state.pushStatus = "enabled";
+  html = app.driverHomeView();
+  assert.match(html, /Route alerts on/);
+  assert.match(html, /This phone will get updates for John Mark&#39;s route/);
+
+  app.state.pushStatus = "unsupported";
+  html = app.driverHomeView();
+  assert.match(html, /Add RIDELIST to your Home Screen/i);
+});
+
+test("driver push subscription uses Supabase without private keys", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  assert.match(html, /navigator\.serviceWorker\.register\("\.\/sw\.js"\)/);
+  assert.match(html, /PushManager/);
+  assert.match(html, /ride_driver_save_push_subscription/);
+  assert.match(html, /ride-driver-notifications/);
+  assert.doesNotMatch(html, /VAPID_PRIVATE_KEY|service_role|SUPABASE_SERVICE_ROLE_KEY/);
+});
+
 test("admin route cards show route warnings and timing status", async () => {
   const app = await loadApp();
 

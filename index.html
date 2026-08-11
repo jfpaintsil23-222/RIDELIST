@@ -3162,6 +3162,57 @@
       return changes;
     }
 
+    function adminMergePeoplePair() {
+      const selected = adminPersonById(state.adminSelectedPersonId);
+      const explicitDuplicate = adminPersonById(state.adminMergeDuplicateId);
+      const duplicate = explicitDuplicate && explicitDuplicate.id !== selected?.id
+        ? explicitDuplicate
+        : adminDuplicateCandidates(selected)[0];
+      return [selected, duplicate].filter(Boolean);
+    }
+
+    function adminMergedPerson(primary, duplicate) {
+      const primaryDraft = adminPersonEditable(primary);
+      const duplicateDraft = adminPersonEditable(duplicate);
+      const duplicateNote = duplicateDraft.notes ? `Merged duplicate: ${duplicateDraft.notes}` : "Merged duplicate record.";
+      return {
+        ...primaryDraft,
+        phone: primaryDraft.phone || duplicateDraft.phone,
+        campusAddress: primaryDraft.campusAddress || duplicateDraft.campusAddress,
+        homeAddress: primaryDraft.homeAddress || duplicateDraft.homeAddress,
+        notes: [primaryDraft.notes, duplicateNote].filter(Boolean).join(" "),
+      };
+    }
+
+    function adminMergeDraft() {
+      const primary = adminPersonById(state.adminMergePrimaryId);
+      const pair = adminMergePeoplePair();
+      const duplicate = pair.find((person) => person.id !== primary?.id);
+      if (!primary || !duplicate || primary.id === duplicate.id) return null;
+      return {
+        primaryId: primary.id,
+        duplicateId: duplicate.id,
+        primary,
+        duplicate,
+        finalPerson: adminMergedPerson(primary, duplicate),
+      };
+    }
+
+    function openAdminPersonMerge(duplicateId) {
+      const selected = adminPersonById(state.adminSelectedPersonId);
+      const duplicate = adminPersonById(duplicateId);
+      if (!selected || !duplicate || selected.id === duplicate.id) return;
+
+      const selectedWeight = [selected.phone, selected.homeAddress, selected.campusAddress].filter(Boolean).length;
+      const duplicateWeight = [duplicate.phone, duplicate.homeAddress, duplicate.campusAddress].filter(Boolean).length;
+      const selectedIsPrimary = selectedWeight >= duplicateWeight;
+      state.adminMergePrimaryId = selectedIsPrimary ? selected.id : duplicate.id;
+      state.adminMergeDuplicateId = selectedIsPrimary ? duplicate.id : selected.id;
+      state.adminError = "";
+      state.view = "adminPersonMerge";
+      render();
+    }
+
     function adminSelectedStop() {
       if (state.adminSelectedStopId === "new") {
         const seed = state.adminPersonSeed;
@@ -3450,6 +3501,45 @@
         state.view = "admin";
       } catch (error) {
         state.adminError = "Could not save this person.";
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
+    async function saveAdminPersonMerge() {
+      const draft = adminMergeDraft();
+      if (!draft) {
+        state.adminError = "Choose the primary person before merging.";
+        render();
+        return;
+      }
+
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const merged = await rpc("ride_admin_merge_people", {
+          p_admin_code: state.adminCode,
+          p_primary_person_id: draft.primaryId,
+          p_duplicate_person_id: draft.duplicateId,
+          p_primary_person: draft.finalPerson,
+        }, adminRpcOptions());
+
+        if (!merged?.ok) {
+          throw new Error(merged?.error || "people_merge_failed");
+        }
+
+        const mergedName = draft.finalPerson.name;
+        await loadAdminSnapshot(state.adminCode);
+        state.adminActiveTab = "people";
+        state.adminPeopleSearch = mergedName;
+        state.adminMessage = `${mergedName} merged.`;
+        state.view = "admin";
+      } catch (error) {
+        state.adminError = "Could not merge these people.";
         console.error(error);
       } finally {
         state.adminLoading = false;
@@ -3918,6 +4008,63 @@
           <div class="admin-form-actions">
             <button class="secondary-action" type="button" data-action="adminPersonEditBack">Back</button>
             <button class="primary-action" type="button" data-action="adminPersonConfirmSave" ${changes.length ? "" : "disabled"}>${state.adminLoading ? "Saving..." : "Confirm save"}</button>
+          </div>
+        </div>`;
+    }
+
+    function adminPersonMergeOption(person, role) {
+      const selected = state.adminMergePrimaryId === person.id;
+      return `
+        <label class="admin-address-option">
+          <input type="radio" name="mergePrimary" value="${escapeHtml(person.id)}" ${selected ? "checked" : ""}>
+          <span>
+            <strong>${escapeHtml(person.name)}</strong>
+            <span>${escapeHtml(role)} · ${escapeHtml([person.phone, preferredPersonAddress(person)].filter(Boolean).join(" · ") || "No phone or address")}</span>
+          </span>
+        </label>`;
+    }
+
+    function adminPersonMergeView() {
+      const pair = adminMergePeoplePair();
+      const draft = adminMergeDraft();
+      const finalPerson = draft?.finalPerson;
+      const invalid = !draft;
+
+      return `
+        <div class="stack">
+          <section class="intro-block compact">
+            <div class="admin-top-row">
+              <div>
+                <p class="eyebrow">People Bank</p>
+                <h1>Review Merge</h1>
+                <p>Confirm before saving</p>
+              </div>
+              <button class="admin-icon-button" type="button" data-action="adminPersonBack" aria-label="Back to person">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </section>
+
+          ${invalid ? `<section class="admin-message error">Choose the primary person before merging.</section>` : ""}
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+
+          <section class="admin-form-card">
+            <span class="admin-field-label">Keep this person</span>
+            <div class="admin-address-options">
+              ${pair.map((person) => adminPersonMergeOption(person, person.id === draft?.duplicateId || (!draft && person.id === state.adminMergeDuplicateId) ? "Archive duplicate" : "Duplicate candidate")).join("")}
+            </div>
+          </section>
+
+          <section class="admin-form-card">
+            <div class="detail-row"><small>Name</small><strong>${escapeHtml(finalPerson?.name || "No primary selected")}</strong></div>
+            <div class="detail-row"><small>Phone</small><strong>${escapeHtml(finalPerson?.phone || "No phone listed")}</strong></div>
+            <div class="detail-row"><small>Home</small><strong>${escapeHtml(finalPerson?.homeAddress || "No home address saved")}</strong></div>
+            <div class="detail-row"><small>Result</small><strong>${draft ? `One active person. ${draft.duplicate.name} hidden from People search.` : "Choose the primary person."}</strong></div>
+          </section>
+
+          <div class="admin-form-actions">
+            <button class="secondary-action" type="button" data-action="adminPersonBack">Back</button>
+            <button class="primary-action admin-danger-action" type="button" data-action="adminPersonConfirmMerge" aria-label="Confirm merge" ${invalid ? "disabled" : ""}>${state.adminLoading ? "Saving..." : "Confirm merge"}</button>
           </div>
         </div>`;
     }
@@ -4428,6 +4575,7 @@
       else if (state.view === "adminPersonDetail") screen.innerHTML = adminPersonDetailView();
       else if (state.view === "adminPersonEdit") screen.innerHTML = adminPersonEditView();
       else if (state.view === "adminPersonReview") screen.innerHTML = adminPersonReviewView();
+      else if (state.view === "adminPersonMerge") screen.innerHTML = adminPersonMergeView();
       else if (state.view === "adminEdit") screen.innerHTML = adminEditView();
       else if (state.view === "adminReset") screen.innerHTML = adminResetView();
       else screen.innerHTML = homeView();
@@ -4612,6 +4760,7 @@
         render();
       }
       if (action === "adminPersonConfirmSave") saveAdminPersonDraft();
+      if (action === "adminPersonConfirmMerge") saveAdminPersonMerge();
       if (action === "adminResetBack") {
         state.adminError = "";
         state.adminResetDate = "";
@@ -4637,6 +4786,12 @@
       const adminPersonEditButton = event.target.closest("[data-admin-person-edit]");
       if (adminPersonEditButton) {
         openAdminPersonEdit(adminPersonEditButton.dataset.adminPersonEdit);
+        return;
+      }
+
+      const adminPersonMergeButton = event.target.closest("[data-admin-person-merge]");
+      if (adminPersonMergeButton) {
+        openAdminPersonMerge(adminPersonMergeButton.dataset.adminPersonMerge);
         return;
       }
 
@@ -4736,6 +4891,15 @@
           showData: state.adminActiveTab === "people",
           showSource: state.adminActiveTab === "people",
         });
+        return;
+      }
+
+      const mergePrimaryInput = event.target.closest("input[name='mergePrimary']");
+      if (mergePrimaryInput) {
+        const pair = adminMergePeoplePair();
+        state.adminMergePrimaryId = mergePrimaryInput.value;
+        state.adminMergeDuplicateId = pair.find((person) => person.id !== state.adminMergePrimaryId)?.id || "";
+        render();
         return;
       }
 

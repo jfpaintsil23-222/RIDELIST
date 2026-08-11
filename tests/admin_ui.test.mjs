@@ -67,6 +67,8 @@ async function loadApp(fetchImpl) {
       adminPersonEditView: typeof adminPersonEditView === "function" ? adminPersonEditView : undefined,
       adminPersonReviewView: typeof adminPersonReviewView === "function" ? adminPersonReviewView : undefined,
       adminPersonChangeList: typeof adminPersonChangeList === "function" ? adminPersonChangeList : undefined,
+      adminPersonMergeView: typeof adminPersonMergeView === "function" ? adminPersonMergeView : undefined,
+      adminMergeDraft: typeof adminMergeDraft === "function" ? adminMergeDraft : undefined,
       adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
@@ -780,6 +782,60 @@ test("person edit reviews changes before saving PeopleData", async () => {
   assert.match(reviewHtml, /Confirm save/);
 
   assert.equal(calls.some((call) => String(call.url).includes("ride_admin_upsert_people")), false);
+});
+
+test("person merge review keeps merge behind detail and requires primary confirmation", async () => {
+  const app = await loadApp();
+
+  app.state.adminCode = "admin-test";
+  app.state.admin = {
+    drivers: [],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Nicholas Montiel",
+        campusAddress: "",
+        homeAddress: "11525 Burdine St, Houston, TX 77035",
+        phone: "(832) 794-2032",
+        preferredAddressType: "home",
+        preferredAddress: "11525 Burdine St, Houston, TX 77035",
+        sourceLabel: "PeopleData",
+        notes: "Confirmed home pickup address.",
+      },
+      {
+        id: "person-2",
+        name: "Nicholas",
+        campusAddress: "",
+        homeAddress: "Old address needs review",
+        phone: "",
+        preferredAddressType: "home",
+        preferredAddress: "Old address needs review",
+        sourceLabel: "PeopleData",
+        notes: "Duplicate candidate.",
+      },
+    ],
+  };
+  app.state.adminSelectedPersonId = "person-2";
+  app.state.adminMergePrimaryId = "person-1";
+  app.state.adminMergeDuplicateId = "person-2";
+
+  assert.equal(typeof app.adminPersonMergeView, "function");
+  assert.equal(typeof app.adminMergeDraft, "function");
+  assert.equal(app.adminMergeDraft().finalPerson.name, "Nicholas Montiel");
+
+  const mergeHtml = app.adminPersonMergeView();
+  assert.match(mergeHtml, /Review Merge/);
+  assert.match(mergeHtml, /Keep this person/);
+  assert.match(mergeHtml, /Nicholas Montiel/);
+  assert.match(mergeHtml, /Archive duplicate/);
+  assert.match(mergeHtml, /Confirm merge/);
+  assert.match(mergeHtml, /One active person/);
+
+  app.state.adminMergePrimaryId = "";
+  const invalidHtml = app.adminPersonMergeView();
+  assert.match(invalidHtml, /Choose the primary person/);
+  assert.match(invalidHtml, /Confirm merge" disabled/);
 });
 
 test("add rider form searches PeopleData and offers add-new fallback", async () => {

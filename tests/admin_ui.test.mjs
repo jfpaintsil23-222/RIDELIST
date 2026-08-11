@@ -778,6 +778,18 @@ test("secure route timing request calls Supabase Edge Function without Google ke
   assert.doesNotMatch(JSON.stringify(timingCall), /GOOGLE|AIza|Routes API/i);
 });
 
+test("driver notification Edge Function keeps push secrets server-side", async () => {
+  const fn = await readFile(new URL("../supabase/functions/ride-driver-notifications/index.ts", import.meta.url), "utf8");
+
+  assert.match(fn, /Deno\.env\.get\("VAPID_PUBLIC_KEY"\)/);
+  assert.match(fn, /Deno\.env\.get\("VAPID_PRIVATE_KEY"\)/);
+  assert.match(fn, /Deno\.env\.get\("VAPID_SUBJECT"\)/);
+  assert.match(fn, /ride_admin_driver_push_subscriptions/);
+  assert.match(fn, /ride_admin_update_push_subscription_status/);
+  assert.match(fn, /sendNotification/);
+  assert.doesNotMatch(fn, /GOOGLE_ROUTES_API_KEY/);
+});
+
 test("people tab uses the PeopleData bank with full rider details", async () => {
   const app = await loadApp();
 

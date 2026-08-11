@@ -178,6 +178,16 @@ test("app exposes home screen icon metadata", async () => {
   await access(new URL("../assets/app-icon-512.png", import.meta.url));
 });
 
+test("app includes a root push service worker", async () => {
+  const sw = await readFile(new URL("../sw.js", import.meta.url), "utf8");
+
+  assert.match(sw, /addEventListener\("push"/);
+  assert.match(sw, /showNotification/);
+  assert.match(sw, /addEventListener\("notificationclick"/);
+  assert.match(sw, /clients\.openWindow/);
+  assert.match(sw, /ridelist-route-update/);
+});
+
 test("driver profile cards show route areas instead of rider names", async () => {
   const app = await loadApp();
 

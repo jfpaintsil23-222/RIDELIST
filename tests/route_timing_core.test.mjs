@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GOOGLE_ROUTE_FIELD_MASK,
   buildGoogleRouteBody,
   buildRouteWarnings,
   routeTimingFromGoogleRoute,
@@ -28,6 +29,8 @@ test("buildGoogleRouteBody uses first pickup as origin and remaining pickups as 
   assert.equal(body.destination.address, destination.address);
   assert.equal(body.travelMode, "DRIVE");
   assert.equal(body.routingPreference, "TRAFFIC_AWARE");
+  assert.equal(body.optimizeWaypointOrder, true);
+  assert.match(GOOGLE_ROUTE_FIELD_MASK, /routes\.optimizedIntermediateWaypointIndex/);
 });
 
 test("stopsForDriver keeps unscoped stops for single-driver routes", () => {
@@ -81,6 +84,23 @@ test("routeTimingFromGoogleRoute formats hour-long routes", () => {
   assert.equal(timing.durationText, "1 hr 2 min");
   assert.equal(timing.distanceText, "50 mi");
   assert.equal(timing.etaText, "9:47 AM");
+});
+
+test("routeTimingFromGoogleRoute returns Google optimized pickup order", () => {
+  const timing = routeTimingFromGoogleRoute({
+    stops: [
+      { stopOrder: 1, name: "Nora", pickupTime: "10:00 AM", address: "10819 Tryon Dr, Cypress, TX" },
+      { stopOrder: 2, name: "Simi + 2", pickupTime: "10:10 AM", address: "17254 Cricketbriar Ct, Houston, TX" },
+      { stopOrder: 3, name: "Kayla Williams", pickupTime: "10:20 AM", address: "2926 Barker Cypress Rd, Houston, TX" },
+    ],
+    googleRoute: {
+      duration: "3600s",
+      distanceMeters: 48280,
+      optimizedIntermediateWaypointIndex: [1, 0],
+    },
+  });
+
+  assert.deepEqual(timing.optimizedStopOrder, ["Nora", "Kayla Williams", "Simi + 2"]);
 });
 
 test("buildRouteWarnings deduplicates missing route data", () => {

@@ -440,6 +440,11 @@ declare
   v_person_id uuid;
   v_count integer := 0;
   v_preferred text;
+  v_existing_name text;
+  v_preferred_address text;
+  v_route_area text;
+  v_route_updates integer := 0;
+  v_total_route_updates integer := 0;
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
@@ -471,11 +476,38 @@ begin
       end;
     end if;
 
+    v_preferred_address := case
+      when v_preferred = 'campus' then btrim(coalesce(v_person->>'campusAddress', ''))
+      else btrim(coalesce(v_person->>'homeAddress', ''))
+    end;
+
+    if v_preferred_address = '' then
+      v_preferred_address := case
+        when v_preferred = 'campus' then btrim(coalesce(v_person->>'homeAddress', ''))
+        else btrim(coalesce(v_person->>'campusAddress', ''))
+      end;
+    end if;
+
+    v_route_area := case
+      when v_preferred_address = '' then ''
+      when v_preferred = 'campus' and btrim(coalesce(v_person->>'campusAddress', '')) <> '' then 'Campus'
+      when v_preferred = 'home' and btrim(coalesce(v_person->>'homeAddress', '')) <> '' then 'Home'
+      else ''
+    end;
+
+    v_existing_name := v_name;
+
     if v_person_id is not null and exists (
       select 1
       from rides_private.ride_people p
       where p.id = v_person_id
     ) then
+      select p.name
+      into v_existing_name
+      from rides_private.ride_people p
+      where p.id = v_person_id
+      limit 1;
+
       update rides_private.ride_people p
       set name = v_name,
           name_key = v_name_key,
@@ -539,10 +571,32 @@ begin
           updated_at = now();
     end if;
 
+    update rides_private.ride_stops s
+    set rider_name = v_name,
+        phone = btrim(coalesce(v_person->>'phone', '')),
+        address = case when v_preferred_address <> '' then v_preferred_address else s.address end,
+        area = case when v_route_area <> '' then v_route_area else s.area end,
+        updated_at = now()
+    from rides_private.ride_drivers d
+    join rides_private.ride_plans rp on rp.id = d.plan_id
+    where s.driver_id = d.id
+      and rp.plan_date = rides_private.current_ride_plan_date()
+      and lower(btrim(s.rider_name)) in (lower(btrim(v_name)), lower(btrim(coalesce(v_existing_name, v_name))));
+
+    get diagnostics v_route_updates = row_count;
+    v_total_route_updates := v_total_route_updates + v_route_updates;
+
     v_count := v_count + 1;
   end loop;
 
-  return jsonb_build_object('ok', true, 'upserted', v_count);
+  update rides_private.ride_drivers d
+  set subtitle = rides_private.rider_names_summary(d.id),
+      updated_at = now()
+  from rides_private.ride_plans rp
+  where d.plan_id = rp.id
+    and rp.plan_date = rides_private.current_ride_plan_date();
+
+  return jsonb_build_object('ok', true, 'upserted', v_count, 'routeStopsUpdated', v_total_route_updates);
 end;
 $$;
 

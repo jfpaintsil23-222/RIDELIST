@@ -1,4 +1,4 @@
-export const GOOGLE_ROUTE_FIELD_MASK = "routes.duration,routes.distanceMeters,routes.legs.duration,routes.legs.distanceMeters";
+export const GOOGLE_ROUTE_FIELD_MASK = "routes.duration,routes.distanceMeters,routes.legs.duration,routes.legs.distanceMeters,routes.optimizedIntermediateWaypointIndex";
 
 export function orderedStops(stops = []) {
   return stops
@@ -28,6 +28,7 @@ export function buildGoogleRouteBody(stops = [], destination = {}) {
     travelMode: "DRIVE",
     routingPreference: "TRAFFIC_AWARE",
     computeAlternativeRoutes: false,
+    optimizeWaypointOrder: intermediates.length > 1,
     units: "IMPERIAL",
   };
 }
@@ -85,14 +86,28 @@ export function routeTimingFromGoogleRoute({ stops = [], googleRoute = {} }) {
     return { status: "error", warning: "Route time unavailable" };
   }
 
+  const usableStops = orderedStops(stops).filter((stop) => String(stop.address || "").trim());
+  const [origin, ...intermediates] = usableStops;
+  const optimizedIndexes = Array.isArray(googleRoute.optimizedIntermediateWaypointIndex)
+    ? googleRoute.optimizedIntermediateWaypointIndex
+    : [];
+  const optimizedIntermediateStops = optimizedIndexes
+    .map((index) => intermediates[Number(index)])
+    .filter(Boolean);
+  const optimizedStopOrder = optimizedIntermediateStops.length
+    ? [origin, ...optimizedIntermediateStops].filter(Boolean).map((stop) => stop.name).filter(Boolean)
+    : [];
+
   const firstPickup = parsePickupMinutes(firstPickupTime(stops));
-  return {
+  const timing = {
     status: "ready",
     totalMinutes,
     durationText: formatDuration(totalMinutes),
     distanceText: formatDistanceMiles(googleRoute.distanceMeters),
     etaText: firstPickup === null ? "" : formatClockMinutes(firstPickup + totalMinutes),
   };
+  if (optimizedStopOrder.length) timing.optimizedStopOrder = optimizedStopOrder;
+  return timing;
 }
 
 export function buildRouteWarnings(stops = [], timing = null) {

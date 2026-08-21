@@ -3,7 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-async function loadApp(fetchImpl) {
+async function loadApp(fetchImpl, options = {}) {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
   assert.ok(script, "index.html should include the app script");
@@ -32,7 +32,16 @@ async function loadApp(fetchImpl) {
   const context = {
     console,
     encodeURIComponent,
+    URLSearchParams,
     FormData: class {},
+    location: {
+      href: `https://example.test/${options.search || ""}`,
+      search: options.search || "",
+    },
+    navigator: {},
+    window: {
+      isSecureContext: false,
+    },
     localStorage: {
       getItem(key) {
         return storage.get(key) || null;
@@ -67,8 +76,10 @@ async function loadApp(fetchImpl) {
       adminPersonEditView: typeof adminPersonEditView === "function" ? adminPersonEditView : undefined,
       adminPersonReviewView: typeof adminPersonReviewView === "function" ? adminPersonReviewView : undefined,
       adminPersonChangeList: typeof adminPersonChangeList === "function" ? adminPersonChangeList : undefined,
+      preferredPersonAddress: typeof preferredPersonAddress === "function" ? preferredPersonAddress : undefined,
       adminPersonMergeView: typeof adminPersonMergeView === "function" ? adminPersonMergeView : undefined,
       adminMergeDraft: typeof adminMergeDraft === "function" ? adminMergeDraft : undefined,
+      saveAdminPersonDraft: typeof saveAdminPersonDraft === "function" ? saveAdminPersonDraft : undefined,
       saveAdminPersonMerge: typeof saveAdminPersonMerge === "function" ? saveAdminPersonMerge : undefined,
       saveAdminPersonArchive: typeof saveAdminPersonArchive === "function" ? saveAdminPersonArchive : undefined,
       adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
@@ -82,12 +93,20 @@ async function loadApp(fetchImpl) {
       driverRouteSummary,
       routeTimingForDriver: typeof routeTimingForDriver === "function" ? routeTimingForDriver : undefined,
       secureRouteTimingRequest: typeof secureRouteTimingRequest === "function" ? secureRouteTimingRequest : undefined,
+      submitCode: typeof submitCode === "function" ? submitCode : undefined,
+      loadDrivers: typeof loadDrivers === "function" ? loadDrivers : undefined,
+      publishAdminDraft: typeof publishAdminDraft === "function" ? publishAdminDraft : undefined,
+      sendAdminRouteNotifications: typeof sendAdminRouteNotifications === "function" ? sendAdminRouteNotifications : undefined,
+      isRehearsalMode: typeof isRehearsalMode === "function" ? isRehearsalMode : undefined,
+      openRehearsalDriverRoute: typeof openRehearsalDriverRoute === "function" ? openRehearsalDriverRoute : undefined,
       adminRouteWarnings: typeof adminRouteWarnings === "function" ? adminRouteWarnings : undefined,
       weatherSummaryText: typeof weatherSummaryText === "function" ? weatherSummaryText : undefined,
       adminChangedCount,
       adminChangeList: typeof adminChangeList === "function" ? adminChangeList : undefined,
       adminAffectedDriverSlugs: typeof adminAffectedDriverSlugs === "function" ? adminAffectedDriverSlugs : undefined,
+      adminRouteAlertDraft: typeof adminRouteAlertDraft === "function" ? adminRouteAlertDraft : undefined,
       nextSundayDate: typeof nextSundayDate === "function" ? nextSundayDate : undefined,
+      __driverCode: driverCode,
       __storage: localStorage,
     };
   `, context);
@@ -124,6 +143,9 @@ test("SQL source supports PeopleData notes and protected merge RPC", async () =>
   assert.match(sql, /'notes', p\.notes/);
   assert.match(sql, /v_person_id uuid/);
   assert.match(sql, /where p\.id = v_person_id/);
+  assert.match(sql, /v_total_route_updates integer := 0/);
+  assert.match(sql, /rp\.plan_date = rides_private\.current_ride_plan_date\(\)/);
+  assert.match(sql, /'routeStopsUpdated', v_total_route_updates/);
   assert.match(sql, /create or replace function public\.ride_admin_merge_people/);
   assert.match(sql, /p_primary_person_id uuid/);
   assert.match(sql, /p_duplicate_person_id uuid/);
@@ -237,10 +259,10 @@ test("driver profile cards show route areas instead of rider names", async () =>
 
   assert.match(dannyHtml, /Richmond Route/);
   assert.doesNotMatch(dannyHtml, /Faith and Precious/);
-  assert.match(preciousHtml, /South Houston Route/);
+  assert.match(preciousHtml, /Central \/ Southeast Route/);
   assert.doesNotMatch(preciousHtml, /DaSilva, Emmanuel Mitch, and Christopher R/);
-  assert.equal(dawsonSummary.routeLabel, "West Houston Route");
-  assert.equal(dqSummary.routeLabel, "South Houston Route");
+  assert.equal(dawsonSummary.routeLabel, "Cypress / West Route");
+  assert.equal(dqSummary.routeLabel, "South / NAU Route");
   assert.doesNotMatch(homeAreaHtml, /Home Route/);
 });
 
@@ -425,6 +447,11 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
   assert.match(html, /class="[^"]*admin-close-button[^"]*"/);
   assert.match(html, /class="[^"]*admin-control-tabs[^"]*"/);
   assert.match(html, /class="[^"]*admin-control-stats[^"]*"/);
+  assert.doesNotMatch(html, /admin-stat-icon/);
+  assert.doesNotMatch(html, /admin-stat-svg/);
+  assert.match(html, /<div class="admin-stat"><strong>3<\/strong><span>drivers<\/span><\/div>/);
+  assert.match(html, /<div class="admin-stat"><strong>1<\/strong><span>assigned<\/span><\/div>/);
+  assert.match(html, /<div class="admin-stat "><strong>0<\/strong><span>changes<\/span><\/div>/);
   assert.match(html, /class="secondary-action admin-reset-action" type="button" data-action="adminReset"/);
   assert.match(html, /data-detail-icon="calendar"/);
   assert.match(html, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
@@ -552,7 +579,7 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   assert.match(homeHtml, /Cypress Route/);
   assert.match(homeHtml, /First pickup: 11:00 AM/);
   assert.match(homeHtml, /Total route/);
-  assert.match(homeHtml, /1 hr 22 min to UH Hilton/);
+  assert.match(homeHtml, /Total route time pending/);
   assert.match(homeHtml, /Ends at UH Hilton/);
   assert.match(homeHtml, /Weather/);
   assert.doesNotMatch(homeHtml, /<section class="destination-block">/);
@@ -573,7 +600,7 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   const pendingHtml = app.ridesView();
   assert.match(pendingHtml, /Start route to Nora/);
   assert.match(pendingHtml, /Ready by 10:55 AM/);
-  assert.match(pendingHtml, /Details/);
+  assert.match(pendingHtml, /Details<span aria-hidden="true">&rsaquo;<\/span>/);
   assert.match(pendingHtml, /aria-label="Open Nora pickup details"/);
   assert.doesNotMatch(pendingHtml, /10819 Tryon Dr/);
   assert.doesNotMatch(pendingHtml, /All pickups complete/);
@@ -619,6 +646,17 @@ test("driver dashboard prefers secure route timing when available", async () => 
         routeLabel: "",
         notes: "",
       },
+      {
+        stopOrder: 2,
+        name: "Simi",
+        phone: "(832) 406-1493",
+        address: "17254 Cricketbriar Ct, Houston, TX",
+        area: "Cypress",
+        pickupTime: "Follow after Nora",
+        readyBy: "10:55 AM",
+        routeLabel: "",
+        notes: "",
+      },
     ],
   };
   app.state.routeTimings = {
@@ -627,12 +665,14 @@ test("driver dashboard prefers secure route timing when available", async () => 
       durationText: "42 min",
       etaText: "11:42 AM",
       distanceText: "22 mi",
+      optimizedStopOrder: ["Nora", "Simi"],
     },
   };
 
   const html = app.driverHomeView();
   assert.match(html, /Total route: 42 min/);
   assert.match(html, /Estimated UH arrival: 11:42 AM/);
+  assert.match(html, /Suggested order: Nora, Simi/);
   assert.doesNotMatch(html, /1 hr 22 min to UH Hilton/);
 });
 
@@ -697,6 +737,7 @@ test("admin reviews driver notification before sending", async () => {
   const app = await loadApp();
   app.state.admin = {
     drivers: [
+      { slug: "joojo", displayName: "Joojo", initials: "JJ" },
       { slug: "dq", displayName: "DQ", initials: "DQ" },
       { slug: "john-mark", displayName: "John Mark", initials: "JM" },
     ],
@@ -704,22 +745,333 @@ test("admin reviews driver notification before sending", async () => {
     people: [],
   };
   app.state.adminNotifyDraft = {
-    driverSlugs: ["dq", "john-mark"],
-    message: "Your pickup list was updated. Open your route review.",
+    driverSlugs: ["joojo", "dq", "john-mark"],
+    message: "Your RIDELIST route was updated. Open your route review before Sunday.",
+    alerts: [
+      {
+        driverSlug: "joojo",
+        detail: "a'Lena Lavallais added · route review needed",
+        badge: "Route updated",
+      },
+      {
+        driverSlug: "dq",
+        detail: "Pickup time changed · 1 rider affected",
+        badge: "Time changed",
+        tone: "time",
+      },
+      {
+        driverSlug: "john-mark",
+        detail: "Rider moved off route · route review needed",
+        badge: "Route updated",
+      },
+    ],
   };
   app.state.adminNotifyMode = "prompt";
 
   let html = app.adminView();
-  assert.match(html, /Notify drivers\?/);
-  assert.match(html, /2 drivers had route changes/);
+  assert.match(html, /3 drivers need alerts/);
+  assert.match(html, /Generated from your latest route changes/);
+  assert.match(html, /Alerts to send/);
+  assert.match(html, /a&#39;Lena Lavallais added · route review needed/);
+  assert.match(html, /Time changed/);
   assert.match(html, /data-action="adminNotifyReview"/);
+  assert.match(html, /data-action="adminNotifySend"/);
 
   app.state.adminNotifyMode = "review";
   html = app.adminView();
-  assert.match(html, /Message preview/);
+  assert.match(html, /Review Alerts/);
+  assert.match(html, /Confirm before sending/);
+  assert.match(html, /Auto-generated/);
+  assert.match(html, /Your RIDELIST route was updated/);
   assert.match(html, /DQ/);
   assert.match(html, /John Mark/);
   assert.match(html, /data-action="adminNotifySend"/);
+});
+
+test("admin generated route alerts summarize each affected driver", async () => {
+  const app = await loadApp();
+  app.state.admin = {
+    drivers: [
+      { slug: "joojo", displayName: "Joojo", initials: "JJ" },
+      { slug: "dq", displayName: "DQ", initials: "DQ" },
+      { slug: "john-mark", displayName: "John Mark", initials: "JM" },
+    ],
+    stops: [
+      { id: "stop-1", driverSlug: "dq", stopOrder: 1, name: "Fabio", phone: "", address: "A", pickupTime: "9:00 AM", readyBy: "", routeLabel: "", notes: "" },
+      { id: "stop-2", driverSlug: "john-mark", stopOrder: 1, name: "Mina", phone: "", address: "B", pickupTime: "", readyBy: "", routeLabel: "", notes: "" },
+    ],
+    people: [],
+  };
+  app.state.adminDraftStops = [
+    { id: "temp-1", driverSlug: "joojo", stopOrder: 1, name: "a'Lena Lavallais", phone: "", address: "C", pickupTime: "", readyBy: "", routeLabel: "", notes: "" },
+    { ...app.state.admin.stops[0], pickupTime: "9:20 AM" },
+  ];
+  app.state.adminDeletedStopIds = ["stop-2"];
+
+  const draft = app.adminRouteAlertDraft(["joojo", "dq", "john-mark"]);
+
+  assert.equal(draft.message, "Your RIDELIST route was updated. Open your route review before Sunday.");
+  const alerts = JSON.parse(JSON.stringify(draft.alerts.map((alert) => ({
+    driverSlug: alert.driverSlug,
+    detail: alert.detail,
+    badge: alert.badge,
+    tone: alert.tone,
+  }))));
+
+  assert.deepEqual(alerts, [
+    {
+      driverSlug: "joojo",
+      detail: "a'Lena Lavallais added · route review needed",
+      badge: "Route updated",
+      tone: "route",
+    },
+    {
+      driverSlug: "dq",
+      detail: "Pickup time changed · 1 rider affected",
+      badge: "Time changed",
+      tone: "time",
+    },
+    {
+      driverSlug: "john-mark",
+      detail: "Rider moved off route · route review needed",
+      badge: "Route updated",
+      tone: "route",
+    },
+  ]);
+});
+
+test("local Sunday rehearsal loads sheet riders without Supabase writes", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options = {}) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({ ok: true }),
+    };
+  }, { search: "?rehearsal=sheet" });
+
+  assert.equal(typeof app.isRehearsalMode, "function");
+  assert.equal(app.isRehearsalMode(), true);
+  assert.equal(typeof app.loadDrivers, "function");
+  await app.loadDrivers();
+
+  assert.equal(calls.length, 0, "rehearsal mode must not call Supabase while loading");
+  assert.equal(app.state.planDate, "2026-08-16");
+  assert.equal(app.state.plan.title, "August 16 Rehearsal");
+  assert.equal(app.state.destination.label, "UH Hilton");
+  assert.equal(app.state.drivers.length, 11);
+  assert.ok(app.state.drivers.some((driver) => driver.slug === "blue" && driver.displayName === "Blu"));
+  assert.ok(app.state.drivers.some((driver) => driver.slug === "dolapo" && driver.displayName === "Dolapo"));
+  assert.ok(app.state.drivers.some((driver) => driver.slug === "danny-p" && driver.displayName === "P. Danny"));
+  assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "dolapo") < app.state.drivers.findIndex((driver) => driver.slug === "albert"));
+  assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "danny-p") < app.state.drivers.findIndex((driver) => driver.slug === "albert"));
+  assert.equal(app.state.drivers.at(-3).slug, "albert");
+  assert.equal(app.state.drivers.at(-2).slug, "joojo");
+  assert.equal(app.state.drivers.at(-1).slug, "naa");
+  assert.equal(app.state.adminDraftStops.length, 23);
+  assert.equal(app.state.admin.people.length, 23);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "john-mark").length, 4);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "dq").length, 2);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "annie").length, 4);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "dawson").length, 1);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "blue").length, 6);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "precious").length, 3);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "dolapo").length, 2);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "danny-p").length, 1);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Simi + siblings").driverSlug, "blue");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Simi + siblings").stopOrder, 1);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Simi + siblings").pickupTime, "10:00 AM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nora").driverSlug, "blue");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nora").stopOrder, 2);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nora").pickupTime, "10:10 AM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Uforo").driverSlug, "blue");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Uforo").stopOrder, 3);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Uforo").pickupTime, "11:45 AM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Aniyah").driverSlug, "blue");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Aniyah").pickupTime, "11:45 AM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Simone").pickupTime, "12:00 PM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tobechi").driverSlug, "blue");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tobechi").pickupTime, "1:15 PM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Siah").driverSlug, "john-mark");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Siah").pickupTime, "11:40 AM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Amari").driverSlug, "john-mark");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Amari").pickupTime, "11:42 AM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Terrance").driverSlug, "john-mark");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Terrance").pickupTime, "11:20 AM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tae").driverSlug, "john-mark");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tae").stopOrder, 2);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tae").pickupTime, "11:30 AM");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Tae").address, /2424 Montgomery Rd/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "A’lena").driverSlug, "annie");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Christopher L").driverSlug, "annie");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nicholas Montiel").driverSlug, "annie");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Michelle").driverSlug, "annie");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Sherese").driverSlug, "dq");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Vera").driverSlug, "dq");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Vera").stopOrder, 2);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Amanda").driverSlug, "dawson");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Amanda").pickupTime, "12:00 PM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Kayla Williams").driverSlug, "dolapo");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Kayla Williams").pickupTime, "11:40 AM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zara").driverSlug, "dolapo");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zara").pickupTime, "12:20 PM");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zoe").driverSlug, "danny-p");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zoe").pickupTime, "8:45 AM");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Zoe").address, /5502 Mustang Ridge Ln/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nadia"), undefined);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zarah"), undefined);
+  assert.equal(
+    JSON.stringify(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "blue").map((stop) => stop.name)),
+    JSON.stringify(["Simi + siblings", "Nora", "Uforo", "Aniyah", "Simone", "Tobechi"])
+  );
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "De Silva").address, /9796 Windwater Dr/);
+
+  const html = app.adminView();
+  assert.match(html, /Local rehearsal/);
+  assert.match(html, /23<\/strong><span>assigned/);
+  assert.match(html, /23 changes pending/);
+  assert.match(html, /Blu/);
+  assert.match(html, /Dolapo/);
+  assert.match(html, /P\. Danny/);
+  assert.match(html, /data-action="adminReviewChanges"/);
+  assert.match(app.adminReviewView(), /Publish route changes \(23\)/);
+
+  app.state.adminActiveTab = "people";
+  const peopleHtml = app.adminView();
+  assert.match(peopleHtml, /PeopleData · 23 people stored/);
+  assert.match(peopleHtml, /A’lena/);
+  assert.match(peopleHtml, /Christopher L/);
+  assert.doesNotMatch(peopleHtml, /Owen/);
+  assert.match(peopleHtml, /Michelle/);
+  assert.match(peopleHtml, /Sherese/);
+  assert.match(peopleHtml, /Simi \+ siblings/);
+  assert.match(peopleHtml, /Nora/);
+  assert.match(peopleHtml, /Tae/);
+  assert.match(peopleHtml, /Tobechi/);
+  assert.match(peopleHtml, /Amanda/);
+  assert.match(peopleHtml, /Kayla Williams/);
+  assert.match(peopleHtml, /Zara/);
+  assert.match(peopleHtml, /Zoe/);
+});
+
+test("local Sunday rehearsal shows data warnings and simulates driver alerts", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options = {}) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({ ok: true }),
+    };
+  }, { search: "?rehearsal=sheet" });
+  await app.loadDrivers();
+
+  const siah = app.state.admin.people.find((person) => person.name === "Siah");
+  const amari = app.state.admin.people.find((person) => person.name === "Amari");
+  assert.equal(app.adminDuplicateCandidates(siah).length, 0);
+  assert.equal(app.adminDuplicateCandidates(amari).length, 0);
+
+  app.state.adminExpandedDriverSlug = "john-mark";
+  const routeHtml = app.adminView();
+  assert.match(routeHtml, /Terrance/);
+  assert.match(routeHtml, /Tae/);
+  assert.match(routeHtml, /2424 Montgomery Rd/);
+  assert.match(routeHtml, /11:20 AM/);
+  assert.match(routeHtml, /11:42 AM/);
+  assert.doesNotMatch(routeHtml, /Siah: pickup time missing/);
+  assert.doesNotMatch(routeHtml, /Terrance: pickup time missing/);
+  assert.match(routeHtml, /Tae: phone missing/);
+  assert.doesNotMatch(routeHtml, /Route timing paused/);
+
+  app.state.adminExpandedDriverSlug = "dq";
+  const dqHtml = app.adminView();
+  assert.match(dqHtml, /Sherese/);
+  assert.match(dqHtml, /Vera/);
+  assert.match(dqHtml, /DQ route/);
+  assert.doesNotMatch(dqHtml, /No riders assigned/);
+  assert.doesNotMatch(dqHtml, /Route time unavailable/);
+
+  app.state.adminExpandedDriverSlug = "dawson";
+  const dawsonHtml = app.adminView();
+  assert.match(dawsonHtml, /Dawson/);
+  assert.match(dawsonHtml, /Amanda/);
+  assert.match(dawsonHtml, /9700 Leawood Blvd/);
+  assert.match(dawsonHtml, /12:00 PM/);
+  assert.doesNotMatch(dawsonHtml, /Amanda: pickup time missing/);
+
+  app.state.adminExpandedDriverSlug = "annie";
+  const annieHtml = app.adminView();
+  assert.match(annieHtml, /A’lena/);
+  assert.match(annieHtml, /Christopher L/);
+  assert.match(annieHtml, /Nicholas Montiel/);
+  assert.match(annieHtml, /Michelle/);
+  assert.match(annieHtml, /10:35 AM/);
+
+  app.state.adminExpandedDriverSlug = "precious";
+  const preciousHtml = app.adminView();
+  assert.match(preciousHtml, /Emmanuel Mitch/);
+  assert.match(preciousHtml, /Christopher R/);
+  assert.doesNotMatch(preciousHtml, /Sherese/);
+  assert.doesNotMatch(preciousHtml, /Vera/);
+
+  app.state.adminExpandedDriverSlug = "blue";
+  const blueHtml = app.adminView();
+  assert.match(blueHtml, /Blu/);
+  assert.match(blueHtml, /Simi \+ siblings/);
+  assert.match(blueHtml, /Nora/);
+  assert.match(blueHtml, /Uforo/);
+  assert.match(blueHtml, /Aniyah/);
+  assert.match(blueHtml, /Simone/);
+  assert.match(blueHtml, /Tobechi/);
+  assert.match(blueHtml, /10:00 AM/);
+  assert.match(blueHtml, /11:45 AM/);
+  assert.match(blueHtml, /1:15 PM/);
+  assert.doesNotMatch(blueHtml, /Tobechi: pickup time missing/);
+  assert.doesNotMatch(blueHtml, /Owen/);
+  assert.doesNotMatch(blueHtml, /Nadia/);
+  assert.doesNotMatch(blueHtml, /Siah/);
+  assert.equal(app.routeTimingForDriver("blue").status, "ready");
+  assert.equal(app.routeTimingForDriver("blue").durationText, "Timing pending");
+
+  app.state.adminExpandedDriverSlug = "dolapo";
+  const dolapoHtml = app.adminView();
+  assert.match(dolapoHtml, /Dolapo/);
+  assert.match(dolapoHtml, /Kayla Williams/);
+  assert.match(dolapoHtml, /Zara/);
+  assert.match(dolapoHtml, /Houston Christian University/);
+  assert.match(dolapoHtml, /11:40 AM/);
+  assert.match(dolapoHtml, /12:20 PM/);
+  assert.doesNotMatch(dolapoHtml, /Kayla Williams: pickup time missing/);
+  assert.equal(app.routeTimingForDriver("dolapo").status, "ready");
+
+  app.state.adminExpandedDriverSlug = "danny-p";
+  const dannyHtml = app.adminView();
+  assert.match(dannyHtml, /P\. Danny/);
+  assert.match(dannyHtml, /Zoe/);
+  assert.match(dannyHtml, /5502 Mustang Ridge Ln/);
+  assert.match(dannyHtml, /8:45 AM/);
+  assert.doesNotMatch(dannyHtml, /Zoe: pickup time missing/);
+  assert.equal(app.routeTimingForDriver("danny-p").status, "ready");
+
+  const joojoTiming = app.routeTimingForDriver("joojo");
+  assert.equal(joojoTiming.status, "empty");
+
+  assert.equal(typeof app.openRehearsalDriverRoute, "function");
+  app.openRehearsalDriverRoute("blue");
+  const driverHtml = app.driverHomeView();
+  assert.match(driverHtml, /Total route: /);
+  assert.match(driverHtml, /Suggested order: Simi \+ siblings, Nora, Uforo, Aniyah, Simone, Tobechi/);
+  assert.doesNotMatch(driverHtml, /Live timing unavailable/);
+
+  assert.equal(typeof app.publishAdminDraft, "function");
+  await app.publishAdminDraft();
+  assert.equal(calls.length, 0, "local publish must not call Supabase");
+  assert.equal(app.state.adminNotifyDraft.driverSlugs.length, 8);
+  assert.match(app.adminView(), /8 drivers need alerts/);
+
+  assert.equal(typeof app.sendAdminRouteNotifications, "function");
+  await app.sendAdminRouteNotifications();
+  assert.equal(calls.length, 0, "local alert send must not call the notification function");
+  assert.match(app.state.adminMessage, /Rehearsal alerts marked sent/);
 });
 
 test("admin route cards show route warnings and timing status", async () => {
@@ -776,6 +1128,61 @@ test("admin route cards show route warnings and timing status", async () => {
   assert.match(html, /A&#39;lena: pickup time missing/);
   assert.match(html, /Christopher L: pickup address missing/);
   assert.match(html, /Route timing paused/);
+});
+
+test("admin route timing unavailable stays a normal timing notice when pickup times are complete", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "dq", displayName: "DQ", initials: "DQ" }],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "dq",
+        stopOrder: 1,
+        name: "Sherese",
+        phone: "(832) 935-9593",
+        address: "3416 Benfield Dr, Houston, TX",
+        area: "West Houston",
+        pickupTime: "11:35 AM",
+        readyBy: "11:25 AM",
+        routeLabel: "DQ route",
+        notes: "",
+      },
+      {
+        id: "stop-2",
+        driverSlug: "dq",
+        stopOrder: 2,
+        name: "Vera",
+        phone: "(832) 517-8929",
+        address: "4971 Martin Luther King Blvd, Houston, TX 77021",
+        area: "Southeast Houston",
+        pickupTime: "11:40 AM",
+        readyBy: "11:30 AM",
+        routeLabel: "DQ route",
+        notes: "",
+      },
+    ],
+    people: [],
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+
+  const warnings = app.adminRouteWarnings(app.state.admin.drivers[0], app.state.adminDraftStops, {
+    status: "error",
+    warning: "Route time unavailable",
+  });
+
+  assert.equal(JSON.stringify(warnings), JSON.stringify([
+    {
+      key: "route-time-unavailable",
+      label: "Route time unavailable",
+      level: "normal",
+      title: "Route timing paused",
+      detail: "Route time will update after rider data is fixed or live timing is available.",
+      stopId: "",
+      actionLabel: "",
+    },
+  ]));
 });
 
 test("admin route warnings summarize exact rider fixes", async () => {
@@ -863,6 +1270,97 @@ test("secure route timing request calls Supabase Edge Function without Google ke
   assert.equal(timingCall.options.method, "POST");
   assert.match(timingCall.options.headers.apikey, /^sb_publishable_/);
   assert.doesNotMatch(JSON.stringify(timingCall), /GOOGLE|AIza|Routes API/i);
+});
+
+test("driver login sends the typed passcode to live route timing", async () => {
+  const timingRequests = [];
+  const app = await loadApp(async (url, options = {}) => {
+    const body = JSON.parse(options.body || "{}");
+
+    if (String(url).includes("api.open-meteo.com")) {
+      return {
+        ok: true,
+        json: async () => ({
+          daily: {
+            time: ["2026-08-16"],
+            weather_code: [3],
+            temperature_2m_max: [93],
+            temperature_2m_min: [76],
+            precipitation_probability_max: [0],
+            wind_speed_10m_max: [8],
+          },
+        }),
+      };
+    }
+
+    if (String(url).includes("/functions/v1/ride-route-timing")) {
+      timingRequests.push(body);
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          timings: {
+            "john-mark": {
+              status: "ready",
+              durationText: "1 hr 46 min",
+              distanceText: "74 mi",
+              etaText: "1:06 PM",
+            },
+          },
+        }),
+      };
+    }
+
+    if (String(url).includes("ride_driver_route")) {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          plan: { date: "2026-08-16" },
+          driver: { slug: "john-mark", displayName: "John Mark", initials: "JM" },
+          riders: [
+            {
+              stopOrder: 1,
+              name: "Terrance",
+              phone: "(346) 628-1165",
+              address: "1615 Sycamore Avenue, Huntsville, TX",
+              area: "Huntsville",
+              pickupTime: "11:20 AM",
+              readyBy: "11:10 AM",
+            },
+          ],
+          destination: { label: "UH Hilton", address: "University of Houston Hilton" },
+        }),
+      };
+    }
+
+    if (String(url).includes("ride_app_context")) {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          plan: { date: "2026-08-16" },
+          destination: { label: "UH Hilton", address: "University of Houston Hilton" },
+        }),
+      };
+    }
+
+    return { ok: true, json: async () => [] };
+  });
+
+  app.state.planDate = "2026-08-16";
+  app.state.selectedDriver = { slug: "john-mark" };
+  app.state.codeMode = "driver";
+  app.__driverCode.value = "rides123";
+
+  await app.submitCode({ preventDefault() {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(timingRequests.length, 1);
+  assert.equal(timingRequests[0].accessCode, "rides123");
+  assert.equal(app.routeTimingForDriver("john-mark").durationText, "1 hr 46 min");
+  assert.match(app.driverHomeView(), /Total route: 1 hr 46 min/);
+  assert.doesNotMatch(app.driverHomeView(), /Total route time pending/);
 });
 
 test("driver notification Edge Function keeps push secrets server-side", async () => {
@@ -1170,6 +1668,67 @@ test("person edit reviews changes before saving PeopleData", async () => {
   assert.match(reviewHtml, /Confirm save/);
 
   assert.equal(calls.some((call) => String(call.url).includes("ride_admin_upsert_people")), false);
+});
+
+test("saving a PeopleData primary address updates matching ride stops", async () => {
+  const app = await loadApp(undefined, { search: "?rehearsal=sheet" });
+  const nora = {
+    id: "person-1",
+    name: "Nora",
+    campusAddress: "Guinan Hall, University of St. Thomas, Houston, TX",
+    homeAddress: "10819 Tryon Dr, Houston, TX 77065",
+    phone: "(281) 704-1697",
+    preferredAddress: "10819 Tryon Dr, Houston, TX 77065",
+    preferredAddressType: "home",
+    sourceLabel: "PeopleData",
+    notes: "",
+    active: true,
+  };
+
+  app.state.admin = {
+    drivers: [
+      { slug: "blue", displayName: "Blu", initials: "BLU", pickupCount: 1, pickup_count: 1 },
+      { slug: "albert", displayName: "Albert", initials: "AL", pickupCount: 0, pickup_count: 0 },
+      { slug: "dolapo", displayName: "Dolapo", initials: "DO", pickupCount: 2, pickup_count: 2 },
+    ],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "blue",
+        stopOrder: 1,
+        name: "Nora",
+        phone: "(281) 704-1697",
+        address: "10819 Tryon Dr, Houston, TX 77065",
+        area: "Home",
+        pickupTime: "",
+        readyBy: "",
+        routeLabel: "Blu route",
+        notes: "",
+      },
+    ],
+    people: [nora],
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminSelectedPersonId = "person-1";
+  app.state.adminPersonDraft = {
+    ...nora,
+    preferredAddressType: "campus",
+    preferredAddress: "10819 Tryon Dr, Houston, TX 77065",
+  };
+
+  assert.equal(typeof app.preferredPersonAddress, "function");
+  assert.equal(typeof app.saveAdminPersonDraft, "function");
+  assert.equal(app.preferredPersonAddress(app.state.adminPersonDraft), "Guinan Hall, University of St. Thomas, Houston, TX");
+
+  await app.saveAdminPersonDraft();
+
+  const savedPerson = app.state.admin.people.find((person) => person.id === "person-1");
+  const updatedStop = app.state.adminDraftStops.find((stop) => stop.id === "stop-1");
+  assert.equal(savedPerson.preferredAddressType, "campus");
+  assert.equal(savedPerson.preferredAddress, "Guinan Hall, University of St. Thomas, Houston, TX");
+  assert.equal(updatedStop.address, "Guinan Hall, University of St. Thomas, Houston, TX");
+  assert.equal(updatedStop.area, "Campus");
+  assert.equal(app.state.admin.drivers[0].slug, "blue");
 });
 
 test("person archive stays in edit and hides the person after confirmation", async () => {

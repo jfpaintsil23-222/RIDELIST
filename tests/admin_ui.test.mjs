@@ -106,6 +106,7 @@ async function loadApp(fetchImpl, options = {}) {
       adminAffectedDriverSlugs: typeof adminAffectedDriverSlugs === "function" ? adminAffectedDriverSlugs : undefined,
       adminRouteAlertDraft: typeof adminRouteAlertDraft === "function" ? adminRouteAlertDraft : undefined,
       nextSundayDate: typeof nextSundayDate === "function" ? nextSundayDate : undefined,
+      homeView: typeof homeView === "function" ? homeView : undefined,
       __driverCode: driverCode,
       __storage: localStorage,
     };
@@ -130,7 +131,7 @@ test("app contains admin ride control entry points", async () => {
   assert.match(html, /ride_admin_activity/);
   assert.match(html, /ride_admin_publish_plan/);
   assert.match(html, /ride_admin_start_new_sunday/);
-  assert.match(html, /const FALLBACK_PLAN_DATE = "2026-08-09"/);
+  assert.match(html, /const FALLBACK_PLAN_DATE = "2026-08-27"/);
   assert.match(html, /function adminView/);
   assert.match(html, /function adminResetView/);
   assert.match(html, /function adminEditView/);
@@ -214,6 +215,37 @@ test("app exposes home screen icon metadata", async () => {
   await access(new URL("../assets/app-icon-512.png", import.meta.url));
 });
 
+test("Coffee and Christ event branding updates home and admin cover copy", async () => {
+  const app = await loadApp();
+  await access(new URL("../assets/coffee-and-christ-cover.jpg", import.meta.url));
+
+  app.state.loading = false;
+  app.state.drivers = [
+    { slug: "joojo", displayName: "Joojo", initials: "JJ", pickup_count: 2 },
+  ];
+
+  const homeHtml = app.homeView();
+  assert.match(homeHtml, /aria-label="Coffee and Christ ride dashboard"/);
+  assert.match(homeHtml, /Coffee and Christ Ride Plan/);
+  assert.match(homeHtml, /assets\/coffee-and-christ-cover\.jpg/);
+  assert.match(homeHtml, /Coffee and Christ cover/);
+  assert.match(homeHtml, /1 drivers assigned/);
+  assert.doesNotMatch(homeHtml, /Sunday Ride Plan/);
+
+  app.state.admin = {
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ" }],
+    stops: [],
+    people: [],
+    security: { actor: { type: "code" } },
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminActiveTab = "riders";
+
+  const adminHtml = app.adminView();
+  assert.match(adminHtml, /<h1>Coffee and Christ Ride Plan<\/h1>/);
+  assert.match(adminHtml, /Build Thursday(?:'|&#39;)s list/);
+});
+
 test("app includes a root push service worker", async () => {
   const sw = await readFile(new URL("../sw.js", import.meta.url), "utf8");
 
@@ -259,14 +291,14 @@ test("driver profile cards show route areas instead of rider names", async () =>
 
   assert.match(dannyHtml, /Richmond Route/);
   assert.doesNotMatch(dannyHtml, /Faith and Precious/);
-  assert.match(preciousHtml, /Central \/ Southeast Route/);
+  assert.match(preciousHtml, /UH Clear Lake Route/);
   assert.doesNotMatch(preciousHtml, /DaSilva, Emmanuel Mitch, and Christopher R/);
-  assert.equal(dawsonSummary.routeLabel, "Cypress / West Route");
+  assert.equal(dawsonSummary.routeLabel, "UH Clear Lake Route");
   assert.equal(dqSummary.routeLabel, "South / NAU Route");
   assert.doesNotMatch(homeAreaHtml, /Home Route/);
 });
 
-test("admin uses routes and people tabs with a review action for pending changes", async () => {
+test("admin uses drivers sunday riders and changes tabs with rider assignment status", async () => {
   const app = await loadApp();
 
   app.state.admin = {
@@ -290,7 +322,7 @@ test("admin uses routes and people tabs with a review action for pending changes
       },
       {
         id: "stop-2",
-        driverSlug: "naa",
+        driverSlug: "",
         stopOrder: 1,
         name: "Zay",
         phone: "",
@@ -325,23 +357,42 @@ test("admin uses routes and people tabs with a review action for pending changes
   app.state.adminDeletedStopIds = [];
 
   const routesHtml = app.adminView();
-  assert.match(routesHtml, /data-admin-tab="routes"/);
-  assert.match(routesHtml, /data-admin-tab="people"/);
-  assert.doesNotMatch(routesHtml, /data-admin-tab="riders"/);
+  assert.doesNotMatch(routesHtml, /admin-control-tabs/);
+  assert.match(routesHtml, /data-admin-tab="drivers"/);
+  assert.match(routesHtml, /data-admin-tab="riders"/);
+  assert.match(routesHtml, /data-admin-tab="changes"/);
+  assert.match(routesHtml, /Coffee and Christ Ride Plan/);
+  assert.match(routesHtml, /Build Thursday(?:'|&#39;)s list/);
+  assert.match(routesHtml, /event riders/);
+  assert.match(routesHtml, /changes today/);
+  assert.doesNotMatch(routesHtml, /data-admin-tab="routes"/);
   assert.doesNotMatch(routesHtml, /data-admin-tab="data"/);
-  assert.doesNotMatch(routesHtml, /data-admin-tab="changes"/);
+  assert.doesNotMatch(routesHtml, /data-admin-tab="people"/);
+  assert.match(routesHtml, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
+  assert.doesNotMatch(routesHtml, /Start New Sunday/);
   assert.doesNotMatch(routesHtml, /Publish route changes/);
 
-  app.state.adminActiveTab = "people";
-  app.state.adminPeopleSearch = "tinnie";
-  const peopleHtml = app.adminView();
-  assert.match(peopleHtml, /PeopleData · 2 people stored/);
-  assert.match(peopleHtml, /data-admin-people-search/);
-  assert.match(peopleHtml, /Tinnie/);
-  assert.match(peopleHtml, /data-admin-person-open="person-1"/);
-  assert.doesNotMatch(peopleHtml, /Zay/);
+  app.state.adminActiveTab = "drivers";
+  const driversHtml = app.adminView();
+  assert.match(driversHtml, /Start New Sunday/);
+  assert.match(driversHtml, /data-action="adminReset"/);
+  assert.doesNotMatch(driversHtml, /Everyone coming/);
 
-  app.state.adminActiveTab = "routes";
+  app.state.adminActiveTab = "riders";
+  app.state.adminSearch = "zay";
+  const ridersHtml = app.adminView();
+  assert.match(ridersHtml, /Everyone coming/);
+  assert.match(ridersHtml, /Assigned and not assigned in one place/);
+  assert.match(ridersHtml, /data-admin-search/);
+  assert.match(ridersHtml, /Zay/);
+  assert.match(ridersHtml, /South Houston · Ready 12:11 PM/);
+  assert.match(ridersHtml, /Not assigned/);
+  assert.match(ridersHtml, /data-admin-edit="stop-2"/);
+  assert.match(ridersHtml, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
+  assert.doesNotMatch(ridersHtml, /Start New Sunday/);
+  assert.doesNotMatch(ridersHtml, /Tinnie/);
+
+  app.state.adminActiveTab = "drivers";
   app.state.adminDraftStops.push({
     id: "temp-test",
     driverSlug: "naa",
@@ -356,11 +407,13 @@ test("admin uses routes and people tabs with a review action for pending changes
     notes: "",
   });
   const changes = app.adminChangeList();
+  app.state.adminActiveTab = "changes";
   const routesWithChangeHtml = app.adminView();
   assert.equal(changes.length, 1);
-  assert.match(routesWithChangeHtml, /1 change pending/);
-  assert.match(routesWithChangeHtml, /data-action="adminReviewChanges"/);
-  assert.doesNotMatch(routesWithChangeHtml, /Added TEST New Rider to Naa/);
+  assert.match(routesWithChangeHtml, /Review changes/);
+  assert.match(routesWithChangeHtml, /Added TEST New Rider to Naa/);
+  assert.match(routesWithChangeHtml, /Publish route changes \(1\)/);
+  assert.doesNotMatch(routesWithChangeHtml, /Start New Sunday/);
 
   assert.equal(typeof app.adminReviewView, "function");
   const changesHtml = app.adminReviewView();
@@ -396,7 +449,7 @@ test("admin routes collapse by driver and rider rows use move instead of remove"
   };
   app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
   app.state.adminDeletedStopIds = [];
-  app.state.adminActiveTab = "routes";
+  app.state.adminActiveTab = "drivers";
   app.state.adminExpandedDriverSlug = "";
 
   const collapsed = app.adminView();
@@ -439,44 +492,89 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
     security: { actor: { type: "code" } },
   };
   app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
-  app.state.adminActiveTab = "routes";
+  app.state.adminActiveTab = "riders";
 
   const html = app.adminView();
   assert.match(html, /class="stack admin-control-screen"/);
   assert.match(html, /class="[^"]*admin-control-header[^"]*"/);
   assert.match(html, /class="[^"]*admin-close-button[^"]*"/);
-  assert.match(html, /class="[^"]*admin-control-tabs[^"]*"/);
+  assert.doesNotMatch(html, /admin-control-tabs/);
   assert.match(html, /class="[^"]*admin-control-stats[^"]*"/);
+  assert.match(html, /<p class="eyebrow">Today<\/p>/);
+  assert.match(html, /<h1>Coffee and Christ Ride Plan<\/h1>/);
+  assert.match(html, /Build Thursday(?:'|&#39;)s list/);
   assert.doesNotMatch(html, /admin-stat-icon/);
   assert.doesNotMatch(html, /admin-stat-svg/);
-  assert.match(html, /<div class="admin-stat"><strong>3<\/strong><span>drivers<\/span><\/div>/);
-  assert.match(html, /<div class="admin-stat"><strong>1<\/strong><span>assigned<\/span><\/div>/);
-  assert.match(html, /<div class="admin-stat "><strong>0<\/strong><span>changes<\/span><\/div>/);
-  assert.match(html, /class="secondary-action admin-reset-action" type="button" data-action="adminReset"/);
-  assert.match(html, /data-detail-icon="calendar"/);
+  assert.match(html, /<button class="admin-stat[^"]*" type="button" data-admin-tab="drivers"><strong>3<\/strong><span>drivers available<\/span>/);
+  assert.match(html, /<button class="admin-stat[^"]*" type="button" data-admin-tab="riders"><strong>1<\/strong><span>event riders<\/span>/);
+  assert.match(html, /<button class="admin-stat[^"]*" type="button" data-admin-tab="changes"><strong>0<\/strong><span>changes today<\/span>/);
   assert.match(html, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
   assert.match(html, /data-detail-icon="user-plus"/);
-  assert.match(html, /0 Pickups/);
+  assert.doesNotMatch(html, /Start New Sunday/);
+  assert.doesNotMatch(html, /data-action="adminReset"/);
+  assert.match(html, /Everyone coming/);
+  assert.match(html, /A&#39;lena/);
+  assert.match(html, /Assigned to John Mark/);
   assert.doesNotMatch(html, /admin-security-message/);
   assert.doesNotMatch(html, /Passcode fallback active/);
   assert.doesNotMatch(html, /No riders assigned[\s\S]*Add riders before final route timing/);
 });
 
-test("admin people tab keeps the icon Add rider action", async () => {
+test("admin sunday riders tab keeps the icon Add rider action", async () => {
   const app = await loadApp();
 
   app.state.admin = {
     drivers: [{ slug: "john-mark", displayName: "John Mark", initials: "JM" }],
-    stops: [],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "john-mark",
+        stopOrder: 1,
+        name: "Zarah",
+        phone: "",
+        address: "1221 Highland Row Ln, Houston, TX",
+        area: "Huntsville",
+        pickupTime: "",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
     people: [{ id: "person-1", name: "Zarah", phone: "", homeAddress: "1221 Highland Row Ln, Houston, TX" }],
   };
-  app.state.adminDraftStops = [];
-  app.state.adminActiveTab = "people";
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminActiveTab = "riders";
 
   const html = app.adminView();
-  assert.match(html, /PeopleData · 1 people stored/);
+  assert.match(html, /Everyone coming/);
+  assert.match(html, /Zarah/);
+  assert.match(html, /Assigned to John Mark/);
   assert.match(html, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
   assert.match(html, /data-detail-icon="user-plus"/);
+});
+
+test("new Sunday rider form defaults to not assigned and keeps driver optional", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [
+      { slug: "john-mark", displayName: "John Mark", initials: "JM" },
+      { slug: "dawson", displayName: "Dawson", initials: "DW" },
+    ],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminSelectedStopId = "new";
+  app.state.adminPersonSeed = null;
+  app.state.adminRiderQuery = "";
+
+  const html = app.adminEditView();
+  assert.match(html, /<option value="" selected>Not assigned yet<\/option>/);
+  assert.doesNotMatch(html, /<select name="driverSlug" required>/);
+  assert.match(html, /<select name="driverSlug">/);
+  assert.match(html, /<input name="name"[^>]*required/);
+  assert.match(html, /<input name="address"[^>]*required/);
 });
 
 test("people detail values use a softer text weight", async () => {
@@ -527,7 +625,7 @@ test("admin route headers summarize route area and first pickup timing", async (
   };
   app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
   app.state.adminDeletedStopIds = [];
-  app.state.adminActiveTab = "routes";
+  app.state.adminActiveTab = "drivers";
   app.state.adminExpandedDriverSlug = "joojo";
 
   const html = app.adminView();
@@ -840,7 +938,7 @@ test("admin generated route alerts summarize each affected driver", async () => 
   ]);
 });
 
-test("local Sunday rehearsal loads sheet riders without Supabase writes", async () => {
+test("local Coffee and Christ rehearsal loads sheet riders without Supabase writes", async () => {
   const calls = [];
   const app = await loadApp(async (url, options = {}) => {
     calls.push({ url, options });
@@ -856,105 +954,62 @@ test("local Sunday rehearsal loads sheet riders without Supabase writes", async 
   await app.loadDrivers();
 
   assert.equal(calls.length, 0, "rehearsal mode must not call Supabase while loading");
-  assert.equal(app.state.planDate, "2026-08-16");
-  assert.equal(app.state.plan.title, "August 16 Rehearsal");
-  assert.equal(app.state.destination.label, "UH Hilton");
+  assert.equal(app.state.planDate, "2026-08-27");
+  assert.equal(app.state.plan.title, "Coffee and Christ");
+  assert.equal(app.state.destination.label, "UH Science & Engineering Classroom 102");
   assert.equal(app.state.drivers.length, 11);
-  assert.ok(app.state.drivers.some((driver) => driver.slug === "blue" && driver.displayName === "Blu"));
-  assert.ok(app.state.drivers.some((driver) => driver.slug === "dolapo" && driver.displayName === "Dolapo"));
-  assert.ok(app.state.drivers.some((driver) => driver.slug === "danny-p" && driver.displayName === "P. Danny"));
-  assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "dolapo") < app.state.drivers.findIndex((driver) => driver.slug === "albert"));
-  assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "danny-p") < app.state.drivers.findIndex((driver) => driver.slug === "albert"));
-  assert.equal(app.state.drivers.at(-3).slug, "albert");
-  assert.equal(app.state.drivers.at(-2).slug, "joojo");
-  assert.equal(app.state.drivers.at(-1).slug, "naa");
-  assert.equal(app.state.adminDraftStops.length, 23);
-  assert.equal(app.state.admin.people.length, 23);
-  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "john-mark").length, 4);
-  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "dq").length, 2);
-  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "annie").length, 4);
+  assert.ok(app.state.drivers.some((driver) => driver.slug === "naa" && driver.displayName === "Naa"));
+  assert.ok(app.state.drivers.some((driver) => driver.slug === "joojo" && driver.displayName === "Joojo"));
+  assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "joojo") < app.state.drivers.findIndex((driver) => driver.slug === "blue"));
+  assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "naa") < app.state.drivers.findIndex((driver) => driver.slug === "blue"));
+  assert.equal(app.state.adminDraftStops.length, 7);
+  assert.equal(app.state.admin.people.length, 7);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "naa").length, 2);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "joojo").length, 2);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "precious").length, 1);
   assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "dawson").length, 1);
-  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "blue").length, 6);
-  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "precious").length, 3);
-  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "dolapo").length, 2);
-  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "danny-p").length, 1);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Simi + siblings").driverSlug, "blue");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Simi + siblings").stopOrder, 1);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Simi + siblings").pickupTime, "10:00 AM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nora").driverSlug, "blue");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nora").stopOrder, 2);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nora").pickupTime, "10:10 AM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Uforo").driverSlug, "blue");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Uforo").stopOrder, 3);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Uforo").pickupTime, "11:45 AM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Aniyah").driverSlug, "blue");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Aniyah").pickupTime, "11:45 AM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Simone").pickupTime, "12:00 PM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tobechi").driverSlug, "blue");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tobechi").pickupTime, "1:15 PM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Siah").driverSlug, "john-mark");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Siah").pickupTime, "11:40 AM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Amari").driverSlug, "john-mark");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Amari").pickupTime, "11:42 AM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Terrance").driverSlug, "john-mark");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Terrance").pickupTime, "11:20 AM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tae").driverSlug, "john-mark");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tae").stopOrder, 2);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Tae").pickupTime, "11:30 AM");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Tae").address, /2424 Montgomery Rd/);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "A’lena").driverSlug, "annie");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Christopher L").driverSlug, "annie");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nicholas Montiel").driverSlug, "annie");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Michelle").driverSlug, "annie");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Sherese").driverSlug, "dq");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Vera").driverSlug, "dq");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Vera").stopOrder, 2);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Amanda").driverSlug, "dawson");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Amanda").pickupTime, "12:00 PM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Kayla Williams").driverSlug, "dolapo");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Kayla Williams").pickupTime, "11:40 AM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zara").driverSlug, "dolapo");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zara").pickupTime, "12:20 PM");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zoe").driverSlug, "danny-p");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zoe").pickupTime, "8:45 AM");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Zoe").address, /5502 Mustang Ridge Ln/);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Nadia"), undefined);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zarah"), undefined);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "blue").length, 1);
+  assert.equal(app.state.adminDraftStops.filter((stop) => !stop.driverSlug).length, 0);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Owen").driverSlug, "naa");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Fabio").driverSlug, "naa");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Fabio").address, /North American University/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zarah").driverSlug, "joojo");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Zarah").phone, /936/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Emanuel").driverSlug, "joojo");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Emanuel").address, /1805 Valentine St/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Precious car").driverSlug, "precious");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Precious car").notes, /Sito, Chyna, Monae/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Dawson car").driverSlug, "dawson");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Dawson car").notes, /Makayla/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "William Andrews").driverSlug, "blue");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "William Andrews").address, /3221 Oakdale Street/);
   assert.equal(
-    JSON.stringify(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "blue").map((stop) => stop.name)),
-    JSON.stringify(["Simi + siblings", "Nora", "Uforo", "Aniyah", "Simone", "Tobechi"])
+    JSON.stringify(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "naa").map((stop) => stop.name)),
+    JSON.stringify(["Owen", "Fabio"])
   );
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "De Silva").address, /9796 Windwater Dr/);
 
   const html = app.adminView();
   assert.match(html, /Local rehearsal/);
-  assert.match(html, /23<\/strong><span>assigned/);
-  assert.match(html, /23 changes pending/);
-  assert.match(html, /Blu/);
-  assert.match(html, /Dolapo/);
-  assert.match(html, /P\. Danny/);
+  assert.match(html, /7<\/strong><span>event riders/);
+  assert.match(html, /7 changes pending/);
+  assert.match(html, /William Andrews/);
+  assert.match(html, /Assigned to Blu/);
+  assert.match(html, /Ashton group - Precious car/);
+  assert.match(html, /Ashton group - Dawson car/);
   assert.match(html, /data-action="adminReviewChanges"/);
-  assert.match(app.adminReviewView(), /Publish route changes \(23\)/);
+  assert.match(app.adminReviewView(), /Publish route changes \(7\)/);
 
   app.state.adminActiveTab = "people";
   const peopleHtml = app.adminView();
-  assert.match(peopleHtml, /PeopleData · 23 people stored/);
-  assert.match(peopleHtml, /A’lena/);
-  assert.match(peopleHtml, /Christopher L/);
-  assert.doesNotMatch(peopleHtml, /Owen/);
-  assert.match(peopleHtml, /Michelle/);
-  assert.match(peopleHtml, /Sherese/);
-  assert.match(peopleHtml, /Simi \+ siblings/);
-  assert.match(peopleHtml, /Nora/);
-  assert.match(peopleHtml, /Tae/);
-  assert.match(peopleHtml, /Tobechi/);
-  assert.match(peopleHtml, /Amanda/);
-  assert.match(peopleHtml, /Kayla Williams/);
-  assert.match(peopleHtml, /Zara/);
-  assert.match(peopleHtml, /Zoe/);
+  assert.match(peopleHtml, /PeopleData · 7 people stored/);
+  assert.match(peopleHtml, /Zarah/);
+  assert.match(peopleHtml, /Owen/);
+  assert.match(peopleHtml, /Fabio/);
+  assert.match(peopleHtml, /Emanuel/);
+  assert.match(peopleHtml, /William Andrews/);
 });
 
-test("local Sunday rehearsal shows data warnings and simulates driver alerts", async () => {
+test("local Coffee and Christ rehearsal shows route cards and simulates driver alerts", async () => {
   const calls = [];
   const app = await loadApp(async (url, options = {}) => {
     calls.push({ url, options });
@@ -965,108 +1020,62 @@ test("local Sunday rehearsal shows data warnings and simulates driver alerts", a
   }, { search: "?rehearsal=sheet" });
   await app.loadDrivers();
 
-  const siah = app.state.admin.people.find((person) => person.name === "Siah");
-  const amari = app.state.admin.people.find((person) => person.name === "Amari");
-  assert.equal(app.adminDuplicateCandidates(siah).length, 0);
-  assert.equal(app.adminDuplicateCandidates(amari).length, 0);
+  const owen = app.state.admin.people.find((person) => person.name === "Owen");
+  const fabio = app.state.admin.people.find((person) => person.name === "Fabio");
+  assert.equal(app.adminDuplicateCandidates(owen).length, 0);
+  assert.equal(app.adminDuplicateCandidates(fabio).length, 0);
 
-  app.state.adminExpandedDriverSlug = "john-mark";
-  const routeHtml = app.adminView();
-  assert.match(routeHtml, /Terrance/);
-  assert.match(routeHtml, /Tae/);
-  assert.match(routeHtml, /2424 Montgomery Rd/);
-  assert.match(routeHtml, /11:20 AM/);
-  assert.match(routeHtml, /11:42 AM/);
-  assert.doesNotMatch(routeHtml, /Siah: pickup time missing/);
-  assert.doesNotMatch(routeHtml, /Terrance: pickup time missing/);
-  assert.match(routeHtml, /Tae: phone missing/);
-  assert.doesNotMatch(routeHtml, /Route timing paused/);
+  app.state.adminActiveTab = "drivers";
+  app.state.adminExpandedDriverSlug = "naa";
+  const naaHtml = app.adminView();
+  assert.match(naaHtml, /Naa/);
+  assert.match(naaHtml, /Owen/);
+  assert.match(naaHtml, /Fabio/);
+  assert.match(naaHtml, /North American University/);
+  assert.match(naaHtml, /Owen: phone missing/);
+  assert.doesNotMatch(naaHtml, /Route time unavailable/);
 
-  app.state.adminExpandedDriverSlug = "dq";
-  const dqHtml = app.adminView();
-  assert.match(dqHtml, /Sherese/);
-  assert.match(dqHtml, /Vera/);
-  assert.match(dqHtml, /DQ route/);
-  assert.doesNotMatch(dqHtml, /No riders assigned/);
-  assert.doesNotMatch(dqHtml, /Route time unavailable/);
+  app.state.adminExpandedDriverSlug = "joojo";
+  const joojoHtml = app.adminView();
+  assert.match(joojoHtml, /Joojo/);
+  assert.match(joojoHtml, /Zarah/);
+  assert.match(joojoHtml, /Emanuel/);
+  assert.match(joojoHtml, /1221 Highland Row/);
+  assert.doesNotMatch(joojoHtml, /Zarah: phone missing/);
 
   app.state.adminExpandedDriverSlug = "dawson";
   const dawsonHtml = app.adminView();
   assert.match(dawsonHtml, /Dawson/);
-  assert.match(dawsonHtml, /Amanda/);
-  assert.match(dawsonHtml, /9700 Leawood Blvd/);
-  assert.match(dawsonHtml, /12:00 PM/);
-  assert.doesNotMatch(dawsonHtml, /Amanda: pickup time missing/);
-
-  app.state.adminExpandedDriverSlug = "annie";
-  const annieHtml = app.adminView();
-  assert.match(annieHtml, /A’lena/);
-  assert.match(annieHtml, /Christopher L/);
-  assert.match(annieHtml, /Nicholas Montiel/);
-  assert.match(annieHtml, /Michelle/);
-  assert.match(annieHtml, /10:35 AM/);
+  assert.match(dawsonHtml, /Ashton group - Dawson car/);
+  assert.match(dawsonHtml, /UH Clear Lake/);
+  assert.match(dawsonHtml, /635 Bayou Rd E/);
 
   app.state.adminExpandedDriverSlug = "precious";
   const preciousHtml = app.adminView();
-  assert.match(preciousHtml, /Emmanuel Mitch/);
-  assert.match(preciousHtml, /Christopher R/);
-  assert.doesNotMatch(preciousHtml, /Sherese/);
-  assert.doesNotMatch(preciousHtml, /Vera/);
+  assert.match(preciousHtml, /Precious/);
+  assert.match(preciousHtml, /Ashton group - Precious car/);
+  assert.match(preciousHtml, /Sito, Chyna, Monae/);
+  assert.equal(app.routeTimingForDriver("precious").status, "ready");
 
   app.state.adminExpandedDriverSlug = "blue";
   const blueHtml = app.adminView();
   assert.match(blueHtml, /Blu/);
-  assert.match(blueHtml, /Simi \+ siblings/);
-  assert.match(blueHtml, /Nora/);
-  assert.match(blueHtml, /Uforo/);
-  assert.match(blueHtml, /Aniyah/);
-  assert.match(blueHtml, /Simone/);
-  assert.match(blueHtml, /Tobechi/);
-  assert.match(blueHtml, /10:00 AM/);
-  assert.match(blueHtml, /11:45 AM/);
-  assert.match(blueHtml, /1:15 PM/);
-  assert.doesNotMatch(blueHtml, /Tobechi: pickup time missing/);
-  assert.doesNotMatch(blueHtml, /Owen/);
-  assert.doesNotMatch(blueHtml, /Nadia/);
-  assert.doesNotMatch(blueHtml, /Siah/);
+  assert.match(blueHtml, /William Andrews/);
+  assert.match(blueHtml, /3221 Oakdale Street/);
   assert.equal(app.routeTimingForDriver("blue").status, "ready");
-  assert.equal(app.routeTimingForDriver("blue").durationText, "Timing pending");
-
-  app.state.adminExpandedDriverSlug = "dolapo";
-  const dolapoHtml = app.adminView();
-  assert.match(dolapoHtml, /Dolapo/);
-  assert.match(dolapoHtml, /Kayla Williams/);
-  assert.match(dolapoHtml, /Zara/);
-  assert.match(dolapoHtml, /Houston Christian University/);
-  assert.match(dolapoHtml, /11:40 AM/);
-  assert.match(dolapoHtml, /12:20 PM/);
-  assert.doesNotMatch(dolapoHtml, /Kayla Williams: pickup time missing/);
-  assert.equal(app.routeTimingForDriver("dolapo").status, "ready");
-
-  app.state.adminExpandedDriverSlug = "danny-p";
-  const dannyHtml = app.adminView();
-  assert.match(dannyHtml, /P\. Danny/);
-  assert.match(dannyHtml, /Zoe/);
-  assert.match(dannyHtml, /5502 Mustang Ridge Ln/);
-  assert.match(dannyHtml, /8:45 AM/);
-  assert.doesNotMatch(dannyHtml, /Zoe: pickup time missing/);
-  assert.equal(app.routeTimingForDriver("danny-p").status, "ready");
-
-  const joojoTiming = app.routeTimingForDriver("joojo");
-  assert.equal(joojoTiming.status, "empty");
 
   assert.equal(typeof app.openRehearsalDriverRoute, "function");
-  app.openRehearsalDriverRoute("blue");
+  app.openRehearsalDriverRoute("joojo");
   const driverHtml = app.driverHomeView();
   assert.match(driverHtml, /Total route: /);
-  assert.match(driverHtml, /Suggested order: Simi \+ siblings, Nora, Uforo, Aniyah, Simone, Tobechi/);
+  assert.match(driverHtml, /Suggested order: Zarah, Emanuel/);
   assert.doesNotMatch(driverHtml, /Live timing unavailable/);
 
   assert.equal(typeof app.publishAdminDraft, "function");
   await app.publishAdminDraft();
   assert.equal(calls.length, 0, "local publish must not call Supabase");
-  assert.equal(app.state.adminNotifyDraft.driverSlugs.length, 8);
-  assert.match(app.adminView(), /8 drivers need alerts/);
+  assert.equal(app.state.adminNotifyDraft.driverSlugs.length, 5);
+  assert.match(app.adminView(), /5 drivers need alerts/);
 
   assert.equal(typeof app.sendAdminRouteNotifications, "function");
   await app.sendAdminRouteNotifications();

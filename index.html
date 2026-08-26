@@ -783,6 +783,12 @@
       object-position: center;
     }
 
+    .home-art.event-cover {
+      height: auto;
+      aspect-ratio: 4 / 3;
+      background: #078da1;
+    }
+
     .route-scene {
       height: 226px;
       margin-top: 14px;
@@ -1258,7 +1264,7 @@
     }
 
     .admin-control-screen {
-      gap: 22px;
+      gap: 24px;
       padding-top: 24px;
     }
 
@@ -1294,12 +1300,12 @@
     }
 
     .admin-close-button {
-      width: 64px;
-      height: 64px;
-      border: 1px solid #f0f1f3;
-      color: #050505;
-      background: #ffffff;
-      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.10);
+      width: 58px;
+      height: 58px;
+      border: 0;
+      color: #ffffff;
+      background: #000000;
+      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.18);
     }
 
     .admin-icon-button.admin-close-button svg {
@@ -1341,7 +1347,7 @@
 
     .admin-tabs {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 5px;
       padding: 4px;
       border-radius: 12px;
@@ -1362,28 +1368,6 @@
       cursor: pointer;
     }
 
-    .admin-control-tabs {
-      min-height: 44px;
-      gap: 0;
-      padding: 2px;
-      border: 1px solid #dadce1;
-      border-radius: 14px;
-      background: #f7f7f8;
-      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
-    }
-
-    .admin-control-tabs .admin-tab {
-      min-height: 40px;
-      border-radius: 12px;
-      font-size: 17px;
-      font-weight: 650;
-    }
-
-    .admin-control-tabs .admin-tab.active {
-      font-weight: 750;
-      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.07);
-    }
-
     .admin-tab.active {
       color: #050505;
       background: #ffffff;
@@ -1397,7 +1381,7 @@
     }
 
     .admin-control-stats {
-      gap: 9px;
+      gap: 14px;
     }
 
     .admin-stat,
@@ -1412,15 +1396,22 @@
     }
 
     .admin-stat {
+      position: relative;
       min-height: 76px;
       padding: 12px;
+      display: block;
+      width: 100%;
+      border: 1px solid var(--line);
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
     }
 
     .admin-control-stats .admin-stat {
-      min-height: 94px;
-      padding: 19px 18px 16px;
-      border-radius: 14px;
-      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.045);
+      min-height: 118px;
+      padding: 22px 18px 18px;
+      border-radius: 20px;
+      box-shadow: 0 16px 34px rgba(0, 0, 0, 0.06);
     }
 
     .admin-stat strong {
@@ -1450,8 +1441,90 @@
 
     .admin-control-stats .admin-stat span {
       margin-top: 12px;
+      max-width: 86px;
       font-size: 17px;
+      line-height: 1.12;
       font-weight: 500;
+    }
+
+    .admin-stat-glyph {
+      position: absolute;
+      top: 24px;
+      right: 20px;
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      color: #050505;
+      background: #f3f3f4;
+    }
+
+    .admin-stat-glyph .people-detail-svg {
+      width: 25px;
+      height: 25px;
+    }
+
+    .admin-section-head {
+      display: grid;
+      gap: 12px;
+    }
+
+    .admin-section-title-row {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .admin-section-copy {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .admin-section-copy strong {
+      color: #050505;
+      font-size: 26px;
+      line-height: 1.08;
+      font-weight: 850;
+    }
+
+    .admin-section-copy span {
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.25;
+      font-weight: 400;
+    }
+
+    .admin-search-wrap {
+      position: relative;
+    }
+
+    .admin-search-wrap .admin-search-input {
+      min-height: 60px;
+      padding-left: 58px;
+      border-radius: 18px;
+      font-size: 18px;
+      font-weight: 400;
+    }
+
+    .admin-search-icon {
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: grid;
+      place-items: center;
+      width: 25px;
+      height: 25px;
+      color: #050505;
+      pointer-events: none;
+    }
+
+    .admin-search-icon .people-detail-svg {
+      width: 25px;
+      height: 25px;
     }
 
     .admin-route-list,
@@ -1675,6 +1748,68 @@
       padding: 12px;
       display: grid;
       gap: 10px;
+    }
+
+    .admin-sunday-rider-card {
+      width: 100%;
+      min-height: 92px;
+      display: grid;
+      grid-template-columns: 66px minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 13px 16px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      color: inherit;
+      background: #ffffff;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.05);
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .admin-rider-avatar {
+      display: grid;
+      place-items: center;
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      color: #ffffff;
+      background: #000000;
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 850;
+    }
+
+    .admin-sunday-rider-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .admin-sunday-rider-copy strong {
+      color: #050505;
+      font-size: 25px;
+      line-height: 1.08;
+      font-weight: 850;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .admin-sunday-rider-copy span {
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.25;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+
+    .admin-sunday-chevron {
+      color: #6b7280;
+      font-size: 38px;
+      line-height: 1;
+      font-weight: 300;
     }
 
     .admin-rider-row {
@@ -2960,7 +3095,7 @@
   <script>
     const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
     const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
-    const FALLBACK_PLAN_DATE = "2026-08-09";
+    const FALLBACK_PLAN_DATE = "2026-08-27";
     const ADMIN_SESSION_KEY = "ride-admin-session";
     const WEATHER_LOCATION = {
       latitude: "29.7604",
@@ -3021,7 +3156,7 @@
       adminMergeDuplicateId: "",
       adminMergeDraft: null,
       adminEditMode: "edit",
-      adminActiveTab: "routes",
+      adminActiveTab: "riders",
       adminSearch: "",
       adminPeopleSearch: "",
       adminExpandedDriverSlug: "",
@@ -3396,80 +3531,83 @@
     };
 
     const DESTINATION_SUMMARY = {
-      label: "University of Houston Hilton Hotel",
-      address: "4450 University Drive, Houston, TX 77204",
+      label: "UH Science & Engineering Classroom 102",
+      address: "Science & Engineering Classroom 102, University of Houston, Houston, TX 77204",
     };
 
+    const RIDE_PLAN_BRANDING = {
+      title: "Coffee and Christ Ride Plan",
+      homeAriaLabel: "Coffee and Christ ride dashboard",
+      adminSubtitle: "Build Thursday's list",
+      coverSrc: "assets/coffee-and-christ-cover.jpg",
+      coverAlt: "Coffee and Christ cover",
+      summaryDay: "Thursday",
+      ridersLabel: "event riders",
+    };
+
+    function ridePlanTitle() {
+      return RIDE_PLAN_BRANDING.title;
+    }
+
+    function ridePlanAdminSubtitle() {
+      return RIDE_PLAN_BRANDING.adminSubtitle;
+    }
+
+    function ridePlanSummaryDay() {
+      return RIDE_PLAN_BRANDING.summaryDay;
+    }
+
+    function ridePlanRidersLabel() {
+      return RIDE_PLAN_BRANDING.ridersLabel || "Sunday riders";
+    }
+
     const REHEARSAL_PLAN = {
-      date: "2026-08-16",
-      title: "August 16 Rehearsal",
-      serviceDay: "Sunday",
+      date: "2026-08-27",
+      title: "Coffee and Christ",
+      serviceDay: "Thursday",
     };
 
     const REHEARSAL_DESTINATION = {
-      label: "UH Hilton",
-      address: "4450 University Drive, Houston, TX 77204",
+      label: "UH Science & Engineering Classroom 102",
+      address: "Science & Engineering Classroom 102, University of Houston, Houston, TX 77204",
     };
 
     const REHEARSAL_DRIVER_BASE = [
-      { slug: "john-mark", displayName: "John Mark", display_name: "John Mark", initials: "JM", sort_order: 1, routeLabel: "Huntsville / North Houston" },
-      { slug: "dq", displayName: "DQ", display_name: "DQ", initials: "DQ", sort_order: 2, routeLabel: "South Houston" },
-      { slug: "annie", displayName: "Annie", display_name: "Annie", initials: "AK", sort_order: 3, routeLabel: "Campus / West Houston" },
-      { slug: "dawson", displayName: "Dawson", display_name: "Dawson", initials: "DW", sort_order: 4, routeLabel: "Cypress / West Houston" },
-      { slug: "precious", displayName: "Precious", display_name: "Precious", initials: "PR", sort_order: 5, routeLabel: "Central / Southeast Houston" },
-      { slug: "blue", displayName: "Blu", display_name: "Blu", initials: "BLU", sort_order: 6, routeLabel: "Cypress" },
-      { slug: "dolapo", displayName: "Dolapo", display_name: "Dolapo", initials: "DO", sort_order: 7, routeLabel: "Cypress / HCU" },
-      { slug: "danny-p", displayName: "P. Danny", display_name: "P. Danny", initials: "PD", sort_order: 8, routeLabel: "Fulshear" },
-      { slug: "albert", displayName: "Albert", display_name: "Albert", initials: "AL", sort_order: 9, routeLabel: "North Houston" },
-      { slug: "joojo", displayName: "Joojo", display_name: "Joojo", initials: "JP", sort_order: 10, routeLabel: "No pickups assigned" },
-      { slug: "naa", displayName: "Naa", display_name: "Naa", initials: "NA", sort_order: 11, routeLabel: "No pickups assigned" },
+      { slug: "naa", displayName: "Naa", display_name: "Naa", initials: "NA", sort_order: 1, routeLabel: "NAU" },
+      { slug: "joojo", displayName: "Joojo", display_name: "Joojo", initials: "JP", sort_order: 2, routeLabel: "Highland Row / Central Houston" },
+      { slug: "precious", displayName: "Precious", display_name: "Precious", initials: "PR", sort_order: 3, routeLabel: "UH Clear Lake" },
+      { slug: "dawson", displayName: "Dawson", display_name: "Dawson", initials: "DW", sort_order: 4, routeLabel: "UH Clear Lake" },
+      { slug: "john-mark", displayName: "John Mark", display_name: "John Mark", initials: "JM", sort_order: 5, routeLabel: "Huntsville / North Houston" },
+      { slug: "dq", displayName: "DQ", display_name: "DQ", initials: "DQ", sort_order: 6, routeLabel: "South Houston" },
+      { slug: "annie", displayName: "Annie", display_name: "Annie", initials: "AK", sort_order: 7, routeLabel: "Campus / West Houston" },
+      { slug: "blue", displayName: "Blu", display_name: "Blu", initials: "BLU", sort_order: 8, routeLabel: "Cypress" },
+      { slug: "dolapo", displayName: "Dolapo", display_name: "Dolapo", initials: "DO", sort_order: 9, routeLabel: "Cypress / HCU" },
+      { slug: "danny-p", displayName: "P. Danny", display_name: "P. Danny", initials: "PD", sort_order: 10, routeLabel: "Fulshear" },
+      { slug: "albert", displayName: "Albert", display_name: "Albert", initials: "AL", sort_order: 11, routeLabel: "North Houston" },
     ];
 
     const REHEARSAL_STOPS = [
-      { id: "mock-terrance", driverSlug: "john-mark", stopOrder: 1, name: "Terrance", phone: "(346) 628-1165", address: "1615 Sycamore Avenue, Unit 119, Huntsville, TX 77340", area: "Huntsville", pickupTime: "11:20 AM", readyBy: "11:10 AM", routeLabel: "John Mark route", notes: "First John Mark pickup by approximate route toward UH. Scheduled for John Mark to reach church by 1:30 PM." },
-      { id: "mock-tae", driverSlug: "john-mark", stopOrder: 2, name: "Tae", phone: "", address: "2424 Montgomery Rd, Huntsville, TX 77340, United States", area: "Huntsville", pickupTime: "11:30 AM", readyBy: "11:20 AM", routeLabel: "John Mark route", notes: "Added from confirmed August 16 address. Phone not saved yet. Scheduled for John Mark to reach church by 1:30 PM." },
-      { id: "mock-siah", driverSlug: "john-mark", stopOrder: 3, name: "Siah", phone: "(301) 543-7407", address: "2304 Sam Houston Ave, Huntsville, TX", area: "Huntsville", pickupTime: "11:40 AM", readyBy: "11:30 AM", routeLabel: "John Mark route", notes: "Same Sam Houston Ave pickup as Amari. Placed after Tae by approximate route toward UH." },
-      { id: "mock-amari", driverSlug: "john-mark", stopOrder: 4, name: "Amari", phone: "(346) 442-5921", address: "2304 Sam Houston Ave, Huntsville, TX", area: "Huntsville", pickupTime: "11:42 AM", readyBy: "11:32 AM", routeLabel: "John Mark route", notes: "Same Sam Houston Ave pickup as Siah. Scheduled for John Mark to reach church by 1:30 PM." },
-
-      { id: "mock-sherese", driverSlug: "dq", stopOrder: 1, name: "Sherese", phone: "(832) 935-9593", address: "3416 Benfield Dr, Houston, TX", area: "West Houston", pickupTime: "11:35 AM", readyBy: "11:25 AM", routeLabel: "DQ route", notes: "Moved from Precious to DQ per August 16 route update." },
-      { id: "mock-vera", driverSlug: "dq", stopOrder: 2, name: "Vera", phone: "(832) 517-8929", address: "4971 Martin Luther King Blvd, Houston, TX 77021", area: "Southeast Houston", pickupTime: "11:40 AM", readyBy: "11:30 AM", routeLabel: "DQ route", notes: "Moved from Precious to DQ per August 16 route update. PeopleBank match by name, but sheet address differs from saved PeopleData; confirm Sunday pickup address." },
-
-      { id: "mock-alena", driverSlug: "annie", stopOrder: 1, name: "A’lena", phone: "(713) 902-2393", address: "9425 Ashville Dr, Houston, TX", area: "South Houston", pickupTime: "10:35 AM", readyBy: "10:25 AM", routeLabel: "Annie route", notes: "Assigned to Annie per August 16 route cleanup. Same pickup address as Christopher L." },
-      { id: "mock-christopher-l", driverSlug: "annie", stopOrder: 2, name: "Christopher L", phone: "(832) 942-1381", address: "9425 Ashville Dr, Houston, TX", area: "South Houston", pickupTime: "10:37 AM", readyBy: "10:27 AM", routeLabel: "Annie route", notes: "Assigned to Annie per August 16 route cleanup. Same pickup address as A’lena." },
-      { id: "mock-nicholas-montiel", driverSlug: "annie", stopOrder: 3, name: "Nicholas Montiel", phone: "(832) 794-2032", address: "11525 Burdine St, Houston, TX 77035", area: "Westbury", pickupTime: "11:10 AM", readyBy: "11:00 AM", routeLabel: "Annie route", notes: "Assigned to Annie per August 16 route cleanup. This is the saved Montiel record found for the requested Christopher Montiel." },
-      { id: "mock-michelle", driverSlug: "annie", stopOrder: 4, name: "Michelle", phone: "(832) 897-6534", address: "Courtyard, 3525 Blodgett St, Houston, TX 77004", area: "Campus", pickupTime: "11:30 AM", readyBy: "11:20 AM", routeLabel: "Annie route", notes: "Assigned to Annie per August 16 route cleanup. Campus pickup after Westbury." },
-
-      { id: "mock-amanda", driverSlug: "dawson", stopOrder: 1, name: "Amanda", phone: "(346) 373-1969", address: "9700 Leawood Blvd Apt 1004, Houston, TX", area: "Southwest Houston", pickupTime: "12:00 PM", readyBy: "11:50 AM", routeLabel: "Dawson route", notes: "Assigned to Dawson per August 16 route update. Pickup requested for 12 PM." },
-
-      { id: "mock-emmanuel", driverSlug: "precious", stopOrder: 1, name: "Emmanuel Mitch", phone: "(281) 841-8159", address: "1805 Valentine St, Houston, TX", area: "Central Houston", pickupTime: "10:50 AM", readyBy: "10:40 AM", routeLabel: "Precious first pickup", notes: "Precious first pickup group." },
-      { id: "mock-de-silva", driverSlug: "precious", stopOrder: 2, name: "De Silva", phone: "(928) 310-2377", address: "9796 Windwater Dr, Houston, TX", area: "Southeast Houston", pickupTime: "11:05 AM", readyBy: "10:55 AM", routeLabel: "Precious first pickup", notes: "Precious first pickup group. PeopleBank match filled the address missing from the sheet." },
-      { id: "mock-christopher-r", driverSlug: "precious", stopOrder: 3, name: "Christopher R", phone: "(832) 299-0964", address: "2418 Francis St, Houston, TX", area: "Third Ward", pickupTime: "11:20 AM", readyBy: "11:10 AM", routeLabel: "Precious first pickup", notes: "Precious first pickup group." },
-
-      { id: "mock-simi-siblings", driverSlug: "blue", stopOrder: 1, name: "Simi + siblings", phone: "(832) 406-1493", address: "17254 Cricketbriar Ct, Houston, TX", area: "Cypress", pickupTime: "10:00 AM", readyBy: "9:50 AM", routeLabel: "Blu first run", notes: "First Blu pickup group. Includes Simi's siblings. First run should return by 11 AM." },
-      { id: "mock-nora", driverSlug: "blue", stopOrder: 2, name: "Nora", phone: "(281) 704-1697", address: "10819 Tryon Dr, Houston, TX 77065", area: "Cypress", pickupTime: "10:10 AM", readyBy: "10:00 AM", routeLabel: "Blu first run", notes: "Second Blu pickup after Simi + siblings. First run should return by 11 AM." },
-      { id: "mock-uforo", driverSlug: "blue", stopOrder: 3, name: "Uforo", phone: "(832) 759-2981", address: "1903 University Ave, Huntsville, TX 77341", area: "Huntsville", pickupTime: "11:45 AM", readyBy: "11:35 AM", routeLabel: "Blu second run", notes: "Assigned to Blu per August 16 route swap. Same University Ave pickup as Aniyah. Second run should return by 2 PM." },
-      { id: "mock-aniyah", driverSlug: "blue", stopOrder: 4, name: "Aniyah", phone: "Uforo's roomie", address: "1903 University Ave, Huntsville, TX 77341", area: "Huntsville", pickupTime: "11:45 AM", readyBy: "11:35 AM", routeLabel: "Blu second run", notes: "Assigned to Blu per August 16 route swap. Same University Ave pickup as Uforo. Second run should return by 2 PM." },
-      { id: "mock-simone", driverSlug: "blue", stopOrder: 5, name: "Simone", phone: "(254) 458-4737", address: "2523 Avenue M, Huntsville, TX 77340", area: "Huntsville", pickupTime: "12:00 PM", readyBy: "11:50 AM", routeLabel: "Blu second run", notes: "Assigned to Blu per August 16 route swap. Avenue M pickup before Cypress." },
-      { id: "mock-tobechi", driverSlug: "blue", stopOrder: 6, name: "Tobechi", phone: "(346) 254-0815", address: "18111 Ithaca Landing Ln, Cypress, TX 77433", area: "Cypress", pickupTime: "1:15 PM", readyBy: "1:05 PM", routeLabel: "Blu second run", notes: "Assigned to Blu per August 16 route swap. Cypress pickup after Huntsville stops. Second run should return by 2 PM." },
-
-      { id: "mock-kayla-williams", driverSlug: "dolapo", stopOrder: 1, name: "Kayla Williams", phone: "(346) 793-8480", address: "2926 Barker Cypress Rd, Houston, TX", area: "Cypress", pickupTime: "11:40 AM", readyBy: "11:30 AM", routeLabel: "Dolapo route", notes: "Assigned to Dolapo per August 16 route update. Cypress pickup before HCU. Scheduled to return by 1 PM." },
-      { id: "mock-zara", driverSlug: "dolapo", stopOrder: 2, name: "Zara", phone: "(281) 256-5006", address: "Houston Christian University, 7502 Fondren Rd, Houston, TX 77074", area: "HCU", pickupTime: "12:20 PM", readyBy: "12:10 PM", routeLabel: "Dolapo route", notes: "Assigned to Dolapo per August 16 route update. This is the saved Zara record, not Zarah. Scheduled to return by 1 PM." },
-
-      { id: "mock-zoe", driverSlug: "danny-p", stopOrder: 1, name: "Zoe", phone: "(346) 733-3931", address: "5502 Mustang Ridge Ln, Fulshear, TX 77441, USA", area: "Fulshear", pickupTime: "8:45 AM", readyBy: "8:35 AM", routeLabel: "P. Danny route", notes: "Assigned to P. Danny per August 16 route update. Uses the latest confirmed Sunday pickup address. Scheduled for P. Danny to be in service by 10 AM." },
+      { id: "coffee-owen", driverSlug: "naa", stopOrder: 1, name: "Owen", phone: "", address: "North American University, 11801 S Gessner Rd, Houston, TX 77071", area: "NAU", pickupTime: "", readyBy: "", routeLabel: "Naa route", notes: "Assigned to Naa for Coffee and Christ." },
+      { id: "coffee-fabio", driverSlug: "naa", stopOrder: 2, name: "Fabio", phone: "", address: "North American University, 11801 S Gessner Rd, Houston, TX 77071", area: "NAU", pickupTime: "", readyBy: "", routeLabel: "Naa route", notes: "Assigned to Naa for Coffee and Christ." },
+      { id: "coffee-zarah", driverSlug: "joojo", stopOrder: 1, name: "Zarah", phone: "(936) 662-1716", address: "1221 Highland Row Ln, Houston, TX", area: "Highland Row", pickupTime: "", readyBy: "", routeLabel: "Joojo route", notes: "Early pickup from the Coffee and Christ sheet." },
+      { id: "coffee-emanuel", driverSlug: "joojo", stopOrder: 2, name: "Emanuel", phone: "", address: "1805 Valentine St, Houston, TX", area: "Central Houston", pickupTime: "", readyBy: "", routeLabel: "Joojo route", notes: "Assigned to Joojo for Coffee and Christ." },
+      { id: "coffee-ashton-precious", driverSlug: "precious", stopOrder: 1, name: "Ashton group - Precious car", phone: "(763) 951-9448", address: "UH Clear Lake Hunter Hall, 635 Bayou Rd E, Houston, TX 77058", area: "UH Clear Lake", pickupTime: "", readyBy: "", routeLabel: "Precious route", notes: "Split pickup with Dawson for Ashton and friends: Sito, Chyna, Monae. Confirm final seat split at pickup." },
+      { id: "coffee-ashton-dawson", driverSlug: "dawson", stopOrder: 1, name: "Ashton group - Dawson car", phone: "(281) 210-9268", address: "UH Clear Lake Hunter Hall, 635 Bayou Rd E, Houston, TX 77058", area: "UH Clear Lake", pickupTime: "", readyBy: "", routeLabel: "Dawson route", notes: "Split pickup with Precious for Ashton and friends: Makayla +1, Nathalia, Craig, Ma'kylah Emmanuel, Traci. Confirm final seat split at pickup." },
+      { id: "coffee-william-andrews", driverSlug: "blue", stopOrder: 1, name: "William Andrews", phone: "(832) 459-5997", address: "3221 Oakdale Street, Houston, TX", area: "Central Houston", pickupTime: "", readyBy: "", routeLabel: "Blu route", notes: "Assigned to Blu for Coffee and Christ." },
     ];
 
     const REHEARSAL_ROUTE_TIMINGS = {
-      "john-mark": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Terrance", "Tae", "Siah", "Amari"] },
-      "dq": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Sherese", "Vera"] },
-      "annie": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["A’lena", "Christopher L", "Nicholas Montiel", "Michelle"] },
-      "dawson": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Amanda"] },
-      "precious": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Emmanuel Mitch", "De Silva", "Christopher R"] },
-      "blue": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Simi + siblings", "Nora", "Uforo", "Aniyah", "Simone", "Tobechi"] },
+      "naa": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Owen", "Fabio"] },
+      "joojo": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Zarah", "Emanuel"] },
+      "precious": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Ashton group - Precious car"] },
+      "dawson": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Ashton group - Dawson car"] },
+      "john-mark": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
+      "dq": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
+      "annie": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
+      "blue": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["William Andrews"] },
       "albert": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
-      "dolapo": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Kayla Williams", "Zara"] },
-      "danny-p": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Zoe"] },
-      "joojo": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
-      "naa": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
+      "dolapo": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
+      "danny-p": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
     };
 
     function destinationSummary() {
@@ -3484,7 +3622,7 @@
         routeLabel: "West / Campus Route",
       },
       "dawson": {
-        routeLabel: "Cypress / West Route",
+        routeLabel: "UH Clear Lake Route",
       },
       "dolapo": {
         routeLabel: "Cypress / HCU Route",
@@ -3501,7 +3639,7 @@
         routeLabel: "South / NAU Route",
       },
       "precious": {
-        routeLabel: "Central / Southeast Route",
+        routeLabel: "UH Clear Lake Route",
       },
       "blue": {
         routeLabel: "Cypress Route",
@@ -3510,10 +3648,10 @@
         routeLabel: "North Houston Route",
       },
       "joojo": {
-        routeLabel: "No pickups assigned",
+        routeLabel: "Highland Row / Central Houston Route",
       },
       "naa": {
-        routeLabel: "No pickups assigned",
+        routeLabel: "NAU Route",
       },
     };
 
@@ -3528,8 +3666,8 @@
 
     function homeArt() {
       return `
-        <div class="home-art" aria-hidden="true">
-          <img src="assets/home-car.png" alt="">
+        <div class="home-art event-cover">
+          <img src="${escapeHtml(RIDE_PLAN_BRANDING.coverSrc)}" alt="${escapeHtml(RIDE_PLAN_BRANDING.coverAlt)}">
         </div>`;
     }
 
@@ -3953,7 +4091,7 @@
       state.adminMergeDuplicateId = "";
       state.adminMergeDraft = null;
       state.adminEditMode = "edit";
-      state.adminActiveTab = "routes";
+      state.adminActiveTab = "riders";
       state.adminSearch = "";
       state.adminPeopleSearch = "";
       state.adminExpandedDriverSlug = "";
@@ -4287,7 +4425,7 @@
     }
 
     function adminDriverName(slug) {
-      return adminDriverBySlug(slug)?.displayName || slug || "Unassigned";
+      return adminDriverBySlug(slug)?.displayName || slug || "Not assigned";
     }
 
     function adminDriverPickupCount(driver) {
@@ -4544,9 +4682,12 @@
     }
 
     function adminDriverOptionList(selectedSlug) {
-      return adminDrivers().map((driver) => `
+      return `
+        <option value="" ${selectedSlug ? "" : "selected"}>Not assigned yet</option>
+        ${adminDrivers().map((driver) => `
         <option value="${escapeHtml(driver.slug)}" ${driver.slug === selectedSlug ? "selected" : ""}>${escapeHtml(driver.displayName)}</option>
-      `).join("");
+      `).join("")}
+      `;
     }
 
     function openAdminEditor(stopId = "new", mode = "edit") {
@@ -4723,8 +4864,12 @@
         map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
         notes: '<path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4"/><path d="M9 12h6"/><path d="M9 16h4"/>',
         phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.4 19.4 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.4 2.1L8.1 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.6 1.9z"/>',
+        plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
         primary: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2 7.5 14 3 9.6l6.2-.9z"/>',
+        search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
         send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+        sliders: '<path d="M4 7h7"/><path d="M15 7h5"/><path d="M4 17h5"/><path d="M13 17h7"/><circle cx="13" cy="7" r="2"/><circle cx="11" cy="17" r="2"/>',
+        user: '<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>',
         "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
         users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
         warning: '<path d="M10.3 4.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
@@ -4820,7 +4965,7 @@
         const preferredAddress = adminSelectedPersonAddress(seed);
         return {
           id: "",
-          driverSlug: adminDrivers()[0]?.slug || "",
+          driverSlug: "",
           stopOrder: 1,
           name: seed?.name || state.adminRiderQuery || "",
           phone: seed?.phone || "",
@@ -4852,8 +4997,8 @@
         notes: String(formData.get("notes") || "").trim(),
       };
 
-      if (!stop.name || !stop.address || !stop.driverSlug) {
-        state.adminError = "Name, address, and driver are required.";
+      if (!stop.name || !stop.address) {
+        state.adminError = "Name and pickup address are required.";
         render();
         return;
       }
@@ -4874,7 +5019,7 @@
       state.adminEditMode = "edit";
       state.adminMessage = `${stop.name} is ready to publish.`;
       state.adminError = "";
-      state.adminActiveTab = "routes";
+      state.adminActiveTab = "riders";
       state.view = "admin";
       render();
       loadAdminRouteTiming();
@@ -4900,7 +5045,7 @@
       state.adminEditMode = "edit";
       state.adminMessage = `${stop.name} will be removed when you publish.`;
       state.adminError = "";
-      state.adminActiveTab = "routes";
+      state.adminActiveTab = "riders";
       state.view = "admin";
       render();
       loadAdminRouteTiming();
@@ -4936,7 +5081,7 @@
         state.adminRiderQuery = "";
         state.adminSelectedAddressType = "";
         state.adminEditMode = "edit";
-        state.adminActiveTab = "routes";
+        state.adminActiveTab = "riders";
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
@@ -4983,7 +5128,7 @@
         state.adminRiderQuery = "";
         state.adminSelectedAddressType = "";
         state.adminEditMode = "edit";
-        state.adminActiveTab = "routes";
+        state.adminActiveTab = "riders";
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
@@ -5028,7 +5173,7 @@
         state.adminRiderQuery = "";
         state.adminSelectedAddressType = "";
         state.adminEditMode = "edit";
-        state.adminActiveTab = "routes";
+        state.adminActiveTab = "riders";
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
@@ -5176,7 +5321,7 @@
         state.adminRiderQuery = "";
         state.adminSelectedAddressType = "";
         state.adminEditMode = "edit";
-        state.adminActiveTab = "routes";
+        state.adminActiveTab = "drivers";
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
@@ -5407,11 +5552,11 @@
     function homeView() {
       return `
         <div class="stack">
-          <section class="intro-block" aria-label="Sunday ride dashboard">
+          <section class="intro-block" aria-label="${escapeHtml(RIDE_PLAN_BRANDING.homeAriaLabel)}">
             <div class="home-header-row">
               <div>
                 <p class="eyebrow">${escapeHtml(planDateLabel())}</p>
-                <h1>Sunday Ride Plan</h1>
+                <h1>${escapeHtml(ridePlanTitle())}</h1>
                 <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
               </div>
               <button class="admin-entry-button" type="button" data-action="admin" aria-label="Open admin ride control">
@@ -5430,7 +5575,7 @@
             <div>
               <p>Total pickups</p>
               <strong class="count">${state.loading ? "..." : countRiders()}</strong>
-              <p>Sunday · ${escapeHtml(destinationSummary().label)}</p>
+              <p>${escapeHtml(ridePlanSummaryDay())} · ${escapeHtml(destinationSummary().label)}</p>
             </div>
           </section>
 
@@ -5454,7 +5599,7 @@
         <div class="stack">
           <section class="intro-block compact profile-header">
             <p class="eyebrow">${escapeHtml(planDateLabel())}</p>
-            <h1>Sunday Ride Plan</h1>
+            <h1>${escapeHtml(ridePlanTitle())}</h1>
             <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
           </section>
           <section class="driver-list" aria-label="Drivers">
@@ -5486,6 +5631,7 @@
               <strong>${escapeHtml(stop.stopOrder)}. ${escapeHtml(stop.name)}</strong>
               <span>${escapeHtml(stop.address)}</span>
               <span>${escapeHtml(detailLine)}</span>
+              ${options.routeActions && stop.notes ? `<span>${escapeHtml(stop.notes)}</span>` : ""}
             </div>
             <span class="pill">${escapeHtml(routePill)}</span>
           </div>
@@ -5499,7 +5645,7 @@
     }
 
     function adminTabButton(tab, label) {
-      const active = (state.adminActiveTab || "routes") === tab;
+      const active = adminActiveTab() === tab;
       return `<button class="admin-tab ${active ? "active" : ""}" type="button" data-admin-tab="${escapeHtml(tab)}">${escapeHtml(label)}</button>`;
     }
 
@@ -5564,6 +5710,47 @@
       return `<input class="admin-search-input" data-admin-people-search type="search" value="${escapeHtml(state.adminPeopleSearch)}" placeholder="${escapeHtml(placeholder)}" aria-label="Search PeopleData">`;
     }
 
+    function adminActiveTab() {
+      const tab = state.adminActiveTab || "riders";
+      if (tab === "routes") return "drivers";
+      if (tab === "people") return "people";
+      return ["drivers", "riders", "changes"].includes(tab) ? tab : "riders";
+    }
+
+    function adminStatButton(tab, count, label, icon, extraClass = "") {
+      const className = `admin-stat${extraClass ? ` ${extraClass}` : ""}`;
+      return `<button class="${className}" type="button" data-admin-tab="${escapeHtml(tab)}"><strong>${escapeHtml(count)}</strong><span>${escapeHtml(label)}</span><span class="admin-stat-glyph" aria-hidden="true">${peopleDetailIcon(icon)}</span></button>`;
+    }
+
+    function adminRiderInitial(name) {
+      return String(name || "?").trim().replace(/^[^A-Za-z0-9]+/, "").slice(0, 1).toUpperCase() || "?";
+    }
+
+    function adminSundayRiderMeta(stop) {
+      const area = stop.area || stop.routeLabel || "Area pending";
+      const ready = stop.readyBy || stop.pickupTime || "";
+      return ready ? `${area} · Ready ${ready}` : `${area} · Ready time pending`;
+    }
+
+    function adminSundayRiderAssignment(stop) {
+      return stop.driverSlug && adminDriverBySlug(stop.driverSlug)
+        ? `Assigned to ${adminDriverName(stop.driverSlug)}`
+        : "Not assigned";
+    }
+
+    function adminSundayRiderCard(stop) {
+      return `
+        <button class="admin-sunday-rider-card" type="button" data-admin-edit="${escapeHtml(stop.id)}">
+          <span class="admin-rider-avatar" aria-hidden="true">${escapeHtml(adminRiderInitial(stop.name))}</span>
+          <span class="admin-sunday-rider-copy">
+            <strong>${escapeHtml(stop.name || "Unnamed rider")}</strong>
+            <span>${escapeHtml(adminSundayRiderMeta(stop))}</span>
+            <span>${escapeHtml(adminSundayRiderAssignment(stop))}</span>
+          </span>
+          <span class="admin-sunday-chevron" aria-hidden="true">&rsaquo;</span>
+        </button>`;
+    }
+
     function adminPeopleView() {
       return `
         <section class="admin-message">
@@ -5579,15 +5766,57 @@
         </section>`;
     }
 
+    function adminSundayRidersView() {
+      const riders = adminFilteredStops();
+      const ridersLabel = ridePlanRidersLabel();
+      return `
+        <section class="admin-section-head">
+          <div class="admin-section-title-row">
+            <span class="admin-section-copy">
+              <strong>Everyone coming</strong>
+              <span>Assigned and not assigned in one place.</span>
+            </span>
+            <button class="primary-action admin-add-rider-action" type="button" data-action="adminNew">
+              <span class="admin-control-action-icon" data-detail-icon="user-plus">${peopleDetailIcon("user-plus")}</span>
+              <span>Add rider</span>
+            </button>
+          </div>
+          <label class="admin-search-wrap">
+            <span class="admin-search-icon" aria-hidden="true">${peopleDetailIcon("search")}</span>
+            <input class="admin-search-input" data-admin-search type="search" value="${escapeHtml(state.adminSearch)}" placeholder="Search ${escapeHtml(ridersLabel)}" aria-label="Search ${escapeHtml(ridersLabel)}">
+          </label>
+        </section>
+        <section class="admin-rider-list" data-admin-riders-results aria-label="${escapeHtml(ridersLabel)}">
+          ${riders.length ? riders.map(adminSundayRiderCard).join("") : `<section class="empty-card"><p>No ${escapeHtml(ridersLabel)} yet. Add a rider to start this plan.</p></section>`}
+        </section>`;
+    }
+
     function adminRoutesView(drivers) {
       return `
-        <button class="primary-action admin-add-rider-action" type="button" data-action="adminNew">
-          <span class="admin-control-action-icon" data-detail-icon="user-plus">${peopleDetailIcon("user-plus")}</span>
-          <span>Add rider</span>
+        <button class="secondary-action admin-reset-action" type="button" data-action="adminReset">
+          <span class="admin-control-action-icon" data-detail-icon="calendar">${peopleDetailIcon("calendar")}</span>
+          <span>Start New Sunday</span>
         </button>
         <section class="admin-route-list" aria-label="Driver routes">
           ${drivers.map(adminRouteCard).join("")}
         </section>`;
+    }
+
+    function adminChangesView(changed) {
+      const changes = adminChangeList();
+      return `
+        <section class="admin-section-head">
+          <div class="admin-section-title-row">
+            <span class="admin-section-copy">
+              <strong>Review changes</strong>
+              <span>${changes.length ? `${changes.length} ${changes.length === 1 ? "change" : "changes"} waiting before publish.` : "No route changes waiting."}</span>
+            </span>
+          </div>
+        </section>
+        <section class="admin-change-list" aria-label="Pending route changes">
+          ${changes.length ? changes.map(adminChangeCard).join("") : `<section class="empty-card"><p>No changes yet. New edits will show here before publishing.</p></section>`}
+        </section>
+        ${changes.length ? adminPublishButton(changed) : ""}`;
     }
 
     function adminNotifyAlerts(draft) {
@@ -6140,46 +6369,42 @@
       const changed = adminChangedCount();
       const pendingAlertCount = state.adminNotifyDraft?.driverSlugs?.length || 0;
       const visibleChangeCount = pendingAlertCount || changed;
-      const activeTab = ["routes", "people"].includes(state.adminActiveTab) ? state.adminActiveTab : "routes";
-      const activeView = activeTab === "people" ? adminPeopleView() : adminRoutesView(drivers);
+      const activeTab = adminActiveTab();
+      const activeView = activeTab === "people"
+        ? adminPeopleView()
+        : activeTab === "drivers"
+          ? adminRoutesView(drivers)
+          : activeTab === "changes"
+            ? adminChangesView(changed)
+            : adminSundayRidersView();
 
       return `
         <div class="stack admin-control-screen">
           <section class="intro-block compact admin-control-header">
             <div class="admin-top-row">
               <div>
-                <p class="eyebrow">Admin</p>
-                <h1>Ride Control</h1>
-                <p>Sunday · UH Hilton</p>
+                <p class="eyebrow">Today</p>
+                <h1>${escapeHtml(ridePlanTitle())}</h1>
+                <p>${escapeHtml(ridePlanAdminSubtitle())}</p>
               </div>
               <button class="admin-icon-button admin-close-button" type="button" data-action="home" aria-label="Close admin">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+                ${peopleDetailIcon("sliders")}
               </button>
             </div>
           </section>
 
-          <section class="admin-tabs admin-control-tabs" aria-label="Admin sections">
-            ${adminTabButton("routes", "Routes")}
-            ${adminTabButton("people", "People")}
-          </section>
-
           <section class="admin-stats admin-control-stats" aria-label="Ride control stats">
-            <div class="admin-stat"><strong>${drivers.length}</strong><span>drivers</span></div>
-            <div class="admin-stat"><strong>${adminStops().length}</strong><span>assigned</span></div>
-            <div class="admin-stat ${pendingAlertCount ? "is-alert" : ""}"><strong>${visibleChangeCount}</strong><span>changes</span></div>
+            ${adminStatButton("drivers", drivers.length, "drivers available", "users")}
+            ${adminStatButton("riders", adminStops().length, ridePlanRidersLabel(), "user")}
+            ${adminStatButton("changes", visibleChangeCount, "changes today", "edit", pendingAlertCount ? "is-alert" : "")}
           </section>
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
           ${adminNotifyPromptHtml()}
           ${state.adminSession?.access_token ? `<button class="secondary-action" type="button" data-action="adminSignOut">Sign out admin</button>` : ""}
-
-          <button class="secondary-action admin-reset-action" type="button" data-action="adminReset">
-            <span class="admin-control-action-icon" data-detail-icon="calendar">${peopleDetailIcon("calendar")}</span>
-            <span>Start New Sunday</span>
-          </button>
           ${activeView}
-          ${adminReviewBar(changed)}
+          ${activeTab === "changes" ? "" : adminReviewBar(changed)}
         </div>`;
     }
 
@@ -6280,7 +6505,7 @@
             <input type="hidden" name="personId" value="${escapeHtml(state.adminPersonSeed?.id || "")}">
             <label>
               <span>Driver</span>
-              <select name="driverSlug" required>${adminDriverOptionList(stop.driverSlug)}</select>
+              <select name="driverSlug">${adminDriverOptionList(stop.driverSlug)}</select>
             </label>
             <label>
               <span>Stop order</span>
@@ -6962,7 +7187,12 @@
 
       state.adminSearch = searchInput.value;
       const results = screen.querySelector("[data-admin-riders-results]");
-      if (results) results.innerHTML = adminFilteredStops().map((stop) => adminRiderCard(stop, { showDriver: true })).join("");
+      if (results) {
+        const riders = adminFilteredStops();
+        results.innerHTML = riders.length
+          ? riders.map(adminSundayRiderCard).join("")
+          : `<section class="empty-card"><p>No ${escapeHtml(ridePlanRidersLabel())} match that search.</p></section>`;
+      }
     });
 
     screen.addEventListener("submit", (event) => {

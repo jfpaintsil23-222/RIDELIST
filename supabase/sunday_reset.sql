@@ -212,6 +212,7 @@ as $$
 declare
   v_plan record;
   v_drivers jsonb;
+  v_driver_pool jsonb;
   v_stops jsonb;
   v_people jsonb;
   v_total_drivers integer;
@@ -263,6 +264,63 @@ begin
     where d.plan_id = v_plan.id
     group by d.id, d.slug, d.display_name, d.full_name, d.initials, d.subtitle, d.route_notes, d.sort_order
   ) driver_rows;
+
+  with active_driver_rows as (
+    select
+      d.slug,
+      d.display_name,
+      d.full_name,
+      d.initials,
+      d.subtitle,
+      d.route_notes,
+      d.sort_order,
+      count(s.id)::integer as pickup_count
+    from rides_private.ride_drivers d
+    left join rides_private.ride_stops s on s.driver_id = d.id
+    where d.plan_id = v_plan.id
+    group by d.id, d.slug, d.display_name, d.full_name, d.initials, d.subtitle, d.route_notes, d.sort_order
+  ), saved_driver_rows as (
+    select *
+    from (
+      select
+        d.slug,
+        d.display_name,
+        d.full_name,
+        d.initials,
+        d.subtitle,
+        d.route_notes,
+        d.sort_order,
+        row_number() over (
+          partition by d.slug
+          order by case when d.plan_id = v_plan.id then 0 else 1 end, d.updated_at desc
+        ) as row_rank
+      from rides_private.ride_drivers d
+    ) ranked_saved_drivers
+    where ranked_saved_drivers.row_rank = 1
+  )
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'slug', saved_driver_rows.slug,
+        'displayName', coalesce(active_driver_rows.display_name, saved_driver_rows.display_name),
+        'fullName', coalesce(active_driver_rows.full_name, saved_driver_rows.full_name),
+        'initials', coalesce(active_driver_rows.initials, saved_driver_rows.initials),
+        'subtitle', coalesce(active_driver_rows.subtitle, saved_driver_rows.subtitle),
+        'routeNotes', coalesce(active_driver_rows.route_notes, saved_driver_rows.route_notes),
+        'pickupCount', coalesce(active_driver_rows.pickup_count, 0),
+        'sortOrder', coalesce(active_driver_rows.sort_order, saved_driver_rows.sort_order),
+        'active', active_driver_rows.slug is not null
+      )
+      order by
+        case when active_driver_rows.slug is null then 1 else 0 end,
+        coalesce(active_driver_rows.sort_order, saved_driver_rows.sort_order),
+        coalesce(active_driver_rows.display_name, saved_driver_rows.display_name)
+    ),
+    '[]'::jsonb
+  )
+  into v_driver_pool
+  from saved_driver_rows
+  left join active_driver_rows on active_driver_rows.slug = saved_driver_rows.slug;
 
   select coalesce(
     jsonb_agg(
@@ -345,6 +403,7 @@ begin
       'review', 0
     ),
     'drivers', v_drivers,
+    'driverPool', v_driver_pool,
     'stops', v_stops,
     'people', v_people
   );
@@ -728,6 +787,8 @@ begin
       d.display_name,
       d.full_name,
       d.initials,
+      d.subtitle,
+      d.route_notes,
       d.access_code_hash,
       coalesce(ss.selected_order, d.sort_order) as next_sort_order
     from rides_private.ride_drivers d
@@ -761,8 +822,8 @@ begin
     sd.display_name,
     sd.full_name,
     sd.initials,
-    'No pickups assigned',
-    'No pickups assigned yet.',
+    coalesce(nullif(sd.subtitle, ''), 'No pickups assigned'),
+    coalesce(nullif(sd.route_notes, ''), 'No pickups assigned yet.'),
     sd.access_code_hash,
     sd.next_sort_order
   from source_drivers sd
@@ -788,6 +849,177 @@ begin
 end;
 $$;
 
+create or replace function public.ride_admin_update_plan_drivers(
+  p_admin_code text,
+  p_plan_date date default null,
+  p_active_driver_slugs text[] default '{}'::text[]
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan record;
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  select p.id
+  into v_plan
+  from rides_private.ride_plans p
+  where p.plan_date = coalesce(p_plan_date, rides_private.current_ride_plan_date())
+  limit 1;
+
+  if v_plan.id is null then
+    return jsonb_build_object('ok', false, 'error', 'plan_not_found');
+  end if;
+
+  with selected_slugs as (
+    select lower(btrim(slug_value)) as slug, min(ordinality)::integer as selected_order
+    from unnest(coalesce(p_active_driver_slugs, array[]::text[])) with ordinality as input(slug_value, ordinality)
+    where btrim(coalesce(slug_value, '')) <> ''
+    group by lower(btrim(slug_value))
+  ), source_drivers as (
+    select distinct on (d.slug)
+      d.slug,
+      d.display_name,
+      d.full_name,
+      d.initials,
+      d.access_code_hash,
+      coalesce(ss.selected_order, d.sort_order) as next_sort_order
+    from selected_slugs ss
+    join rides_private.ride_drivers d on d.slug = ss.slug
+    order by d.slug, case when d.plan_id = v_plan.id then 0 else 1 end, d.updated_at desc
+  )
+  insert into rides_private.ride_drivers (
+    plan_id,
+    slug,
+    display_name,
+    full_name,
+    initials,
+    subtitle,
+    route_notes,
+    access_code_hash,
+    sort_order
+  )
+  select
+    v_plan.id,
+    sd.slug,
+    sd.display_name,
+    sd.full_name,
+    sd.initials,
+    'No pickups assigned',
+    'No pickups assigned yet.',
+    sd.access_code_hash,
+    sd.next_sort_order
+  from source_drivers sd
+  on conflict (plan_id, slug) do update
+  set display_name = excluded.display_name,
+      full_name = excluded.full_name,
+      initials = excluded.initials,
+      access_code_hash = excluded.access_code_hash,
+      sort_order = excluded.sort_order,
+      updated_at = now();
+
+  update rides_private.ride_drivers d
+  set subtitle = rides_private.rider_names_summary(d.id),
+      updated_at = now()
+  where d.plan_id = v_plan.id;
+
+  return public.ride_admin_snapshot(p_admin_code, coalesce(p_plan_date, rides_private.current_ride_plan_date()));
+end;
+$$;
+
+create or replace function public.ride_admin_add_driver(
+  p_admin_code text,
+  p_plan_date date default null,
+  p_driver jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan record;
+  v_name text := btrim(coalesce(p_driver->>'name', p_driver->>'driverName', ''));
+  v_slug text;
+  v_initials text := upper(btrim(coalesce(p_driver->>'initials', p_driver->>'driverInitials', '')));
+  v_phone text := btrim(coalesce(p_driver->>'phone', p_driver->>'driverPhone', ''));
+  v_passcode text := btrim(coalesce(p_driver->>'passcode', p_driver->>'driverPasscode', 'rides123'));
+  v_sort_order integer;
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  select p.id
+  into v_plan
+  from rides_private.ride_plans p
+  where p.plan_date = coalesce(p_plan_date, rides_private.current_ride_plan_date())
+  limit 1;
+
+  if v_plan.id is null then
+    return jsonb_build_object('ok', false, 'error', 'plan_not_found');
+  end if;
+
+  if v_name = '' or v_initials = '' then
+    return jsonb_build_object('ok', false, 'error', 'driver_name_and_initials_required');
+  end if;
+
+  v_slug := regexp_replace(lower(v_name), '[^a-z0-9]+', '-', 'g');
+  v_slug := regexp_replace(v_slug, '(^-|-$)', '', 'g');
+  v_passcode := coalesce(nullif(v_passcode, ''), 'rides123');
+
+  if v_slug = '' then
+    return jsonb_build_object('ok', false, 'error', 'driver_slug_required');
+  end if;
+
+  if exists (
+    select 1
+    from rides_private.ride_drivers d
+    where d.plan_id = v_plan.id
+      and d.slug = v_slug
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'driver_exists');
+  end if;
+
+  select coalesce(max(d.sort_order), 0) + 1
+  into v_sort_order
+  from rides_private.ride_drivers d
+  where d.plan_id = v_plan.id;
+
+  insert into rides_private.ride_drivers (
+    plan_id,
+    slug,
+    display_name,
+    full_name,
+    initials,
+    subtitle,
+    route_notes,
+    access_code_hash,
+    sort_order
+  )
+  values (
+    v_plan.id,
+    v_slug,
+    v_name,
+    v_name,
+    v_initials,
+    'No pickups assigned',
+    case when v_phone = '' then 'No pickups assigned yet.' else 'Phone: ' || v_phone end,
+    rides_private.hash_driver_code(v_passcode),
+    v_sort_order
+  );
+
+  return public.ride_admin_snapshot(p_admin_code, coalesce(p_plan_date, rides_private.current_ride_plan_date()));
+end;
+$$;
+
 grant execute on function public.ride_app_context() to anon, authenticated;
 grant execute on function public.ride_driver_directory(date) to anon, authenticated;
 grant execute on function public.ride_driver_route(text, text, date) to anon, authenticated;
@@ -796,5 +1028,7 @@ grant execute on function public.ride_admin_publish_plan(text, date, jsonb, text
 grant execute on function public.ride_admin_merge_people(text, uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function public.ride_admin_archive_people(text, uuid) to anon, authenticated;
 grant execute on function public.ride_admin_start_new_sunday(text, date, text[], date, boolean) to anon, authenticated;
+grant execute on function public.ride_admin_update_plan_drivers(text, date, text[]) to anon, authenticated;
+grant execute on function public.ride_admin_add_driver(text, date, jsonb) to anon, authenticated;
 
 notify pgrst, 'reload schema';

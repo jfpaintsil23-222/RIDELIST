@@ -96,6 +96,9 @@ async function loadApp(fetchImpl, options = {}) {
       submitCode: typeof submitCode === "function" ? submitCode : undefined,
       loadDrivers: typeof loadDrivers === "function" ? loadDrivers : undefined,
       publishAdminDraft: typeof publishAdminDraft === "function" ? publishAdminDraft : undefined,
+      saveAdminDriverAvailability: typeof saveAdminDriverAvailability === "function" ? saveAdminDriverAvailability : undefined,
+      saveAdminNewDriver: typeof saveAdminNewDriver === "function" ? saveAdminNewDriver : undefined,
+      adminDriverPool: typeof adminDriverPool === "function" ? adminDriverPool : undefined,
       sendAdminRouteNotifications: typeof sendAdminRouteNotifications === "function" ? sendAdminRouteNotifications : undefined,
       isRehearsalMode: typeof isRehearsalMode === "function" ? isRehearsalMode : undefined,
       openRehearsalDriverRoute: typeof openRehearsalDriverRoute === "function" ? openRehearsalDriverRoute : undefined,
@@ -173,6 +176,20 @@ test("SQL source protects driver push subscriptions", async () => {
   assert.match(sql, /rides_private\.is_ride_admin_code\(p_admin_code\)/);
   assert.match(sql, /rides_private\.hash_driver_code\(p_access_code\)/);
   assert.match(sql, /grant execute on function public\.ride_driver_save_push_subscription/);
+});
+
+test("SQL source supports admin driver availability and add-driver RPCs", async () => {
+  const sql = await readFile(new URL("../supabase/sunday_reset.sql", import.meta.url), "utf8");
+
+  assert.match(sql, /'driverPool', v_driver_pool/);
+  assert.match(sql, /create or replace function public\.ride_admin_update_plan_drivers/);
+  assert.match(sql, /p_active_driver_slugs text\[\]/);
+  assert.match(sql, /rides_private\.is_ride_admin_code\(p_admin_code\)/);
+  assert.match(sql, /create or replace function public\.ride_admin_add_driver/);
+  assert.match(sql, /p_driver jsonb/);
+  assert.match(sql, /rides_private\.hash_driver_code/);
+  assert.match(sql, /grant execute on function public\.ride_admin_update_plan_drivers/);
+  assert.match(sql, /grant execute on function public\.ride_admin_add_driver/);
 });
 
 test("driver route modal stays simple and admin login is passcode-only", async () => {
@@ -569,6 +586,102 @@ test("admin sunday riders tab keeps the icon Add rider action", async () => {
   assert.match(html, /Assigned to John Mark/);
   assert.match(html, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
   assert.match(html, /data-detail-icon="user-plus"/);
+});
+
+test("admin drivers tab shows saved driver availability with add driver action", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [
+      { slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 2, sortOrder: 1 },
+      { slug: "blue", displayName: "Blu", initials: "BLU", pickupCount: 1, sortOrder: 2 },
+    ],
+    driverPool: [
+      { slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 2, sortOrder: 1 },
+      { slug: "blue", displayName: "Blu", initials: "BLU", active: true, pickupCount: 1, sortOrder: 2 },
+      { slug: "naa", displayName: "Naa", initials: "NA", active: false, pickupCount: 0, sortOrder: 3 },
+      { slug: "lou", displayName: "Lou", initials: "LO", active: false, pickupCount: 0, sortOrder: 4 },
+    ],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminActiveTab = "drivers";
+
+  const html = app.adminView();
+
+  assert.match(html, /Driver availability/);
+  assert.match(html, /Check who can drive for this plan/);
+  assert.match(html, /data-action="adminDriverAdd"/);
+  assert.match(html, /aria-label="Add driver"/);
+  assert.match(html, /name="driverSlug" value="joojo" checked disabled/);
+  assert.match(html, /name="driverSlug" value="blue" checked disabled/);
+  assert.match(html, /name="driverSlug" value="naa" data-admin-driver-activate/);
+  assert.match(html, /Naa/);
+  assert.match(html, /Lou/);
+  assert.match(html, /Inactive/);
+  assert.match(html, /Save availability/);
+  assert.match(html, /Start New Sunday/);
+  assert.doesNotMatch(html, /Everyone coming/);
+});
+
+test("saving driver availability activates inactive saved drivers locally", async () => {
+  const app = await loadApp(undefined, { search: "?rehearsal=sheet" });
+
+  app.state.admin = {
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 0, sortOrder: 1 }],
+    driverPool: [
+      { slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 0, sortOrder: 1 },
+      { slug: "naa", displayName: "Naa", initials: "NA", active: false, pickupCount: 0, sortOrder: 2 },
+    ],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [];
+  app.state.drivers = app.state.admin.drivers.map((driver) => ({ ...driver }));
+
+  assert.equal(typeof app.saveAdminDriverAvailability, "function");
+  await app.saveAdminDriverAvailability(["naa"]);
+
+  assert.equal(JSON.stringify(app.state.admin.drivers.map((driver) => driver.slug)), JSON.stringify(["joojo", "naa"]));
+  assert.equal(JSON.stringify(app.state.drivers.map((driver) => driver.slug)), JSON.stringify(["joojo", "naa"]));
+  assert.equal(app.state.admin.driverPool.find((driver) => driver.slug === "naa").active, true);
+  assert.match(app.state.adminMessage, /Naa is active for this plan/);
+});
+
+test("admin add driver form defaults simple passcode and adds active driver locally", async () => {
+  const app = await loadApp(undefined, { search: "?rehearsal=sheet" });
+
+  app.state.admin = {
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 0, sortOrder: 1 }],
+    driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 0, sortOrder: 1 }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminActiveTab = "drivers";
+  app.state.adminDriverAddOpen = true;
+
+  const html = app.adminView();
+  assert.match(html, /Add driver/);
+  assert.match(html, /name="driverName"[^>]*required/);
+  assert.match(html, /name="driverInitials"[^>]*required/);
+  assert.match(html, /name="driverPhone"/);
+  assert.match(html, /name="driverPasscode"[^>]*value="rides123"/);
+  assert.match(html, /data-action="adminDriverAddCancel"/);
+
+  assert.equal(typeof app.saveAdminNewDriver, "function");
+  await app.saveAdminNewDriver({
+    driverName: "Lou",
+    driverInitials: "LO",
+    driverPhone: "",
+    driverPasscode: "rides123",
+  });
+
+  assert.ok(app.state.admin.drivers.some((driver) => driver.slug === "lou" && driver.displayName === "Lou"));
+  assert.ok(app.state.admin.driverPool.some((driver) => driver.slug === "lou" && driver.active === true));
+  assert.equal(app.state.adminDriverAddOpen, false);
+  assert.match(app.state.adminMessage, /Lou is active for this plan/);
 });
 
 test("new Sunday rider form defaults to not assigned and keeps driver optional", async () => {
@@ -980,12 +1093,13 @@ test("local Coffee and Christ rehearsal loads sheet riders without Supabase writ
   assert.ok(app.state.drivers.some((driver) => driver.slug === "joojo" && driver.displayName === "Joojo"));
   assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "joojo") < app.state.drivers.findIndex((driver) => driver.slug === "blue"));
   assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "naa") < app.state.drivers.findIndex((driver) => driver.slug === "blue"));
-  assert.equal(app.state.adminDraftStops.length, 7);
-  assert.equal(app.state.admin.people.length, 7);
+  assert.equal(app.state.adminDraftStops.length, 8);
+  assert.equal(app.state.admin.people.length, 8);
   assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "naa").length, 2);
   assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "joojo").length, 2);
   assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "precious").length, 1);
   assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "dawson").length, 1);
+  assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "annie").length, 1);
   assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "blue").length, 1);
   assert.equal(app.state.adminDraftStops.filter((stop) => !stop.driverSlug).length, 0);
   assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Owen").driverSlug, "naa");
@@ -1001,6 +1115,8 @@ test("local Coffee and Christ rehearsal loads sheet riders without Supabase writ
   assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Dawson car").notes, /Makayla/);
   assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "William Andrews").driverSlug, "blue");
   assert.match(app.state.adminDraftStops.find((stop) => stop.name === "William Andrews").address, /3221 Oakdale Street/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Kadie").driverSlug, "annie");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Kadie").notes, /Need pickup address/);
   assert.equal(
     JSON.stringify(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "naa").map((stop) => stop.name)),
     JSON.stringify(["Owen", "Fabio"])
@@ -1008,23 +1124,26 @@ test("local Coffee and Christ rehearsal loads sheet riders without Supabase writ
 
   const html = app.adminView();
   assert.match(html, /Local rehearsal/);
-  assert.match(html, /7<\/strong><span>event riders/);
-  assert.match(html, /7 changes pending/);
+  assert.match(html, /8<\/strong><span>event riders/);
+  assert.match(html, /8 changes pending/);
   assert.match(html, /William Andrews/);
   assert.match(html, /Assigned to Blu/);
+  assert.match(html, /Kadie/);
+  assert.match(html, /Assigned to Annie/);
   assert.match(html, /Ashton group - Precious car/);
   assert.match(html, /Ashton group - Dawson car/);
   assert.match(html, /data-action="adminReviewChanges"/);
-  assert.match(app.adminReviewView(), /Publish route changes \(7\)/);
+  assert.match(app.adminReviewView(), /Publish route changes \(8\)/);
 
   app.state.adminActiveTab = "people";
   const peopleHtml = app.adminView();
-  assert.match(peopleHtml, /PeopleData · 7 people stored/);
+  assert.match(peopleHtml, /PeopleData · 8 people stored/);
   assert.match(peopleHtml, /Zarah/);
   assert.match(peopleHtml, /Owen/);
   assert.match(peopleHtml, /Fabio/);
   assert.match(peopleHtml, /Emanuel/);
   assert.match(peopleHtml, /William Andrews/);
+  assert.match(peopleHtml, /Kadie/);
 });
 
 test("local Coffee and Christ rehearsal shows route cards and simulates driver alerts", async () => {
@@ -1082,6 +1201,12 @@ test("local Coffee and Christ rehearsal shows route cards and simulates driver a
   assert.match(blueHtml, /3221 Oakdale Street/);
   assert.equal(app.routeTimingForDriver("blue").status, "ready");
 
+  app.state.adminExpandedDriverSlug = "annie";
+  const annieHtml = app.adminView();
+  assert.match(annieHtml, /Annie/);
+  assert.match(annieHtml, /Kadie/);
+  assert.match(annieHtml, /Kadie: pickup address missing/);
+
   assert.equal(typeof app.openRehearsalDriverRoute, "function");
   app.openRehearsalDriverRoute("joojo");
   const driverHtml = app.driverHomeView();
@@ -1092,8 +1217,8 @@ test("local Coffee and Christ rehearsal shows route cards and simulates driver a
   assert.equal(typeof app.publishAdminDraft, "function");
   await app.publishAdminDraft();
   assert.equal(calls.length, 0, "local publish must not call Supabase");
-  assert.equal(app.state.adminNotifyDraft.driverSlugs.length, 5);
-  assert.match(app.adminView(), /5 drivers need alerts/);
+  assert.equal(app.state.adminNotifyDraft.driverSlugs.length, 6);
+  assert.match(app.adminView(), /6 drivers need alerts/);
 
   assert.equal(typeof app.sendAdminRouteNotifications, "function");
   await app.sendAdminRouteNotifications();

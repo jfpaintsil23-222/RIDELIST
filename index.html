@@ -1527,6 +1527,108 @@
       height: 25px;
     }
 
+    .admin-driver-availability {
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-driver-availability-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #ffffff;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.05);
+    }
+
+    .admin-driver-option {
+      display: grid;
+      grid-template-columns: 26px 52px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 70px;
+      padding: 10px 8px;
+      border-bottom: 1px solid #ededed;
+    }
+
+    .admin-driver-option:last-child {
+      border-bottom: 0;
+    }
+
+    .admin-driver-option input {
+      width: 22px;
+      height: 22px;
+      accent-color: #050505;
+    }
+
+    .admin-driver-option input:disabled {
+      opacity: 1;
+    }
+
+    .admin-driver-option .avatar.small {
+      width: 52px;
+      height: 52px;
+      color: #ffffff;
+      background: #000000;
+      border: 0;
+      font-size: 18px;
+      box-shadow: none;
+    }
+
+    .admin-driver-option .avatar.small.three-letter {
+      font-size: 16px;
+    }
+
+    .admin-driver-option-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .admin-driver-option-copy strong {
+      color: #050505;
+      font-size: 20px;
+      line-height: 1.1;
+      font-weight: 750;
+    }
+
+    .admin-driver-option-copy span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.2;
+      font-weight: 400;
+    }
+
+    .admin-driver-add-form {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #ffffff;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.05);
+    }
+
+    .admin-driver-add-title {
+      display: grid;
+      gap: 4px;
+    }
+
+    .admin-driver-add-title strong {
+      color: #050505;
+      font-size: 22px;
+      line-height: 1.12;
+      font-weight: 800;
+    }
+
+    .admin-driver-add-title span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 400;
+    }
+
     .admin-route-list,
     .admin-rider-list,
     .admin-change-list,
@@ -3162,6 +3264,7 @@
       adminExpandedDriverSlug: "",
       adminResetDate: "",
       adminResetDriverSlugs: [],
+      adminDriverAddOpen: false,
       adminMessage: "",
       adminError: "",
       adminLoading: false,
@@ -3593,6 +3696,7 @@
       { id: "coffee-emanuel", driverSlug: "joojo", stopOrder: 2, name: "Emanuel", phone: "", address: "1805 Valentine St, Houston, TX", area: "Central Houston", pickupTime: "", readyBy: "", routeLabel: "Joojo route", notes: "Assigned to Joojo for Coffee and Christ." },
       { id: "coffee-ashton-precious", driverSlug: "precious", stopOrder: 1, name: "Ashton group - Precious car", phone: "(763) 951-9448", address: "UH Clear Lake Hunter Hall, 635 Bayou Rd E, Houston, TX 77058", area: "UH Clear Lake", pickupTime: "", readyBy: "", routeLabel: "Precious route", notes: "Split pickup with Dawson for Ashton and friends: Sito, Chyna, Monae. Confirm final seat split at pickup." },
       { id: "coffee-ashton-dawson", driverSlug: "dawson", stopOrder: 1, name: "Ashton group - Dawson car", phone: "(281) 210-9268", address: "UH Clear Lake Hunter Hall, 635 Bayou Rd E, Houston, TX 77058", area: "UH Clear Lake", pickupTime: "", readyBy: "", routeLabel: "Dawson route", notes: "Split pickup with Precious for Ashton and friends: Makayla +1, Nathalia, Craig, Ma'kylah Emmanuel, Traci. Confirm final seat split at pickup." },
+      { id: "coffee-kadie", driverSlug: "annie", stopOrder: 1, name: "Kadie", phone: "", address: "", area: "Address pending", pickupTime: "", readyBy: "", routeLabel: "Annie route", notes: "Need pickup address before final route timing." },
       { id: "coffee-william-andrews", driverSlug: "blue", stopOrder: 1, name: "William Andrews", phone: "(832) 459-5997", address: "3221 Oakdale Street, Houston, TX", area: "Central Houston", pickupTime: "", readyBy: "", routeLabel: "Blu route", notes: "Assigned to Blu for Coffee and Christ." },
     ];
 
@@ -3603,7 +3707,7 @@
       "dawson": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Ashton group - Dawson car"] },
       "john-mark": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
       "dq": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
-      "annie": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
+      "annie": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Kadie"] },
       "blue": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["William Andrews"] },
       "albert": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
       "dolapo": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
@@ -4056,9 +4160,35 @@
     }
 
     function syncRehearsalDrivers() {
-      const drivers = rehearsalDrivers(adminStops());
+      const baseDrivers = rehearsalDrivers(adminStops());
+      const baseSlugs = new Set(baseDrivers.map((driver) => driver.slug));
+      const extraDrivers = (state.admin?.driverPool || [])
+        .filter((driver) => driver?.active && driver?.slug && !baseSlugs.has(driver.slug))
+        .map((driver, index) => {
+          const driverStops = orderedStops(adminStops().filter((stop) => stop.driverSlug === driver.slug));
+          return normalizeAdminDriver({
+            ...driver,
+            pickupCount: driverStops.length,
+            pickup_count: driverStops.length,
+            subtitle: riderNameList(driverStops),
+            sortOrder: driver.sortOrder || driver.sort_order || baseDrivers.length + index + 1,
+          }, { active: true, index: baseDrivers.length + index });
+        });
+      const drivers = orderDriversForDisplay([...baseDrivers, ...extraDrivers]);
       state.drivers = drivers;
-      if (state.admin) state.admin.drivers = drivers;
+      if (state.admin) {
+        state.admin.drivers = drivers;
+        const activeSlugs = new Set(drivers.map((driver) => driver.slug));
+        const pool = new Map();
+        [...(state.admin.driverPool || []), ...drivers].forEach((driver, index) => {
+          const normalized = normalizeAdminDriver(driver, { active: activeSlugs.has(driver.slug), index });
+          if (normalized.slug) pool.set(normalized.slug, {
+            ...normalized,
+            active: activeSlugs.has(normalized.slug),
+          });
+        });
+        state.admin.driverPool = orderDriversForDisplay(Array.from(pool.values()));
+      }
     }
 
     function loadRehearsalData() {
@@ -4073,6 +4203,7 @@
         plan: { ...REHEARSAL_PLAN },
         destination: { ...REHEARSAL_DESTINATION },
         drivers,
+        driverPool: drivers.map((driver) => ({ ...driver, active: true })),
         stops: [],
         people: rehearsalPeople(stops),
         security: { actor: { type: "rehearsal", label: "Local rehearsal" } },
@@ -4095,6 +4226,7 @@
       state.adminSearch = "";
       state.adminPeopleSearch = "";
       state.adminExpandedDriverSlug = "";
+      state.adminDriverAddOpen = false;
       state.adminNotifyDraft = null;
       state.adminNotifyMode = "prompt";
       state.adminNotifyStatus = "idle";
@@ -4177,6 +4309,71 @@
 
     function adminDrivers() {
       return orderDriversForDisplay(state.admin?.drivers || []);
+    }
+
+    function driverSlugFromName(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    }
+
+    function driverDisplayName(driver) {
+      return driver?.displayName || driver?.display_name || driver?.fullName || driver?.full_name || driver?.slug || "Driver";
+    }
+
+    function normalizeAdminDriver(driver, options = {}) {
+      const displayName = driverDisplayName(driver);
+      const slug = String(driver?.slug || driverSlugFromName(displayName)).trim();
+      const initials = String(driver?.initials || displayName.slice(0, 2).toUpperCase()).trim().toUpperCase();
+      const pickupCount = driverPickupCountValue(driver);
+      return {
+        ...driver,
+        slug,
+        displayName,
+        display_name: displayName,
+        fullName: driver?.fullName || driver?.full_name || displayName,
+        initials,
+        subtitle: driver?.subtitle || "",
+        routeNotes: driver?.routeNotes || driver?.route_notes || "",
+        pickupCount,
+        pickup_count: pickupCount,
+        sortOrder: driverSortOrderValue(driver, options.index || 0),
+        sort_order: driverSortOrderValue(driver, options.index || 0),
+        active: Boolean(options.active ?? driver?.active ?? false),
+      };
+    }
+
+    function adminActiveDriverSlugSet() {
+      return new Set(adminDrivers().map((driver) => driver.slug).filter(Boolean));
+    }
+
+    function adminDriverPool() {
+      const activeSlugs = adminActiveDriverSlugSet();
+      const bySlug = new Map();
+      const addDriver = (driver, active, index) => {
+        const normalized = normalizeAdminDriver(driver, { active, index });
+        if (!normalized.slug) return;
+        const existing = bySlug.get(normalized.slug);
+        bySlug.set(normalized.slug, {
+          ...(existing || {}),
+          ...normalized,
+          active: Boolean(active || normalized.active || existing?.active),
+          pickupCount: Math.max(driverPickupCountValue(existing), driverPickupCountValue(normalized)),
+          pickup_count: Math.max(driverPickupCountValue(existing), driverPickupCountValue(normalized)),
+        });
+      };
+
+      (state.admin?.driverPool || state.admin?.allDrivers || []).forEach((driver, index) => {
+        addDriver(driver, activeSlugs.has(driver?.slug) || driver?.active === true, index);
+      });
+
+      adminDrivers().forEach((driver, index) => {
+        addDriver(driver, true, index);
+      });
+
+      return orderDriversForDisplay(Array.from(bySlug.values()));
     }
 
     function adminStops() {
@@ -5073,7 +5270,12 @@
         state.planDate = snapshot.plan?.date || activePlanDate();
         state.plan = snapshot.plan || state.plan;
         state.destination = snapshot.destination || state.destination;
-        state.admin = { ...snapshot, drivers, security: snapshot.security || security };
+        state.admin = {
+          ...snapshot,
+          drivers,
+          driverPool: orderDriversForDisplay(snapshot.driverPool || snapshot.allDrivers || drivers),
+          security: snapshot.security || security,
+        };
         await loadAdminActivity();
         state.adminDraftStops = cloneStops(snapshot.stops);
         state.adminDeletedStopIds = [];
@@ -5086,6 +5288,7 @@
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
+        state.adminDriverAddOpen = false;
         state.adminMessage = "";
         state.view = "admin";
         closeCodeModal();
@@ -5118,6 +5321,7 @@
           plan: { ...REHEARSAL_PLAN },
           destination: { ...REHEARSAL_DESTINATION },
           drivers: state.drivers,
+          driverPool: state.admin?.driverPool || state.drivers.map((driver) => ({ ...driver, active: true })),
           stops: cloneStops(adminStops()),
           people: rehearsalPeople(adminStops()),
           security: { actor: { type: "rehearsal", label: "Local rehearsal" } },
@@ -5133,6 +5337,7 @@
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
+        state.adminDriverAddOpen = false;
         state.adminNotifyDraft = notifyDraft;
         state.adminNotifyMode = "prompt";
         state.adminNotifyStatus = "idle";
@@ -5163,7 +5368,12 @@
           throw new Error(published?.error || "publish_failed");
         }
 
-        state.admin = { ...published, drivers: orderDriversForDisplay(published.drivers || []) };
+        const publishedDrivers = orderDriversForDisplay(published.drivers || []);
+        state.admin = {
+          ...published,
+          drivers: publishedDrivers,
+          driverPool: orderDriversForDisplay(published.driverPool || published.allDrivers || publishedDrivers),
+        };
         state.planDate = published.plan?.date || activePlanDate();
         state.plan = published.plan || state.plan;
         state.destination = published.destination || state.destination;
@@ -5178,6 +5388,7 @@
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
+        state.adminDriverAddOpen = false;
         state.adminNotifyDraft = notifyDraft;
         state.adminNotifyMode = "prompt";
         state.adminNotifyStatus = "idle";
@@ -5313,7 +5524,12 @@
         state.planDate = created.plan?.date || planDate;
         state.plan = created.plan || null;
         state.destination = created.destination || state.destination;
-        state.admin = { ...created, drivers: orderDriversForDisplay(created.drivers || []) };
+        const createdDrivers = orderDriversForDisplay(created.drivers || []);
+        state.admin = {
+          ...created,
+          drivers: createdDrivers,
+          driverPool: orderDriversForDisplay(created.driverPool || created.allDrivers || createdDrivers),
+        };
         await loadAdminActivity();
         state.adminDraftStops = cloneStops(created.stops);
         state.adminDeletedStopIds = [];
@@ -5326,6 +5542,7 @@
         state.adminSearch = "";
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
+        state.adminDriverAddOpen = false;
         state.adminResetDate = "";
         state.adminResetDriverSlugs = [];
         state.adminMessage = `New Sunday created for ${planDateLabel(state.planDate)}. Routes are blank.`;
@@ -5336,6 +5553,198 @@
         state.adminError = error.message === "sunday_date_required"
           ? "Choose a Sunday date."
           : "Could not start the new Sunday.";
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
+    function adminDriverSlugsFromAvailabilityForm(form) {
+      return [...form.querySelectorAll("input[name='driverSlug']:checked")]
+        .map((input) => input.value)
+        .filter(Boolean);
+    }
+
+    function adminDriverActivationMessage(drivers) {
+      const names = drivers.map((driver) => driver.displayName).filter(Boolean);
+      if (!names.length) return "Driver availability is already up to date.";
+      if (names.length === 1) return `${names[0]} is active for this plan.`;
+      if (names.length === 2) return `${names[0]} and ${names[1]} are active for this plan.`;
+      return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)} are active for this plan.`;
+    }
+
+    function applyAdminDriverActivation(selectedSlugs = []) {
+      if (!state.admin) return [];
+      const activeSlugs = adminActiveDriverSlugSet();
+      const newSlugs = new Set((selectedSlugs || []).map((slug) => String(slug || "").trim()).filter(Boolean));
+      const allActiveSlugs = new Set([...activeSlugs, ...newSlugs]);
+      const pool = adminDriverPool();
+      const nextDrivers = pool
+        .filter((driver) => allActiveSlugs.has(driver.slug))
+        .map((driver) => ({ ...driver, active: true }));
+      const activated = pool.filter((driver) => newSlugs.has(driver.slug) && !activeSlugs.has(driver.slug));
+
+      state.admin.drivers = orderDriversForDisplay(nextDrivers);
+      state.drivers = orderDriversForDisplay(nextDrivers);
+      state.admin.driverPool = orderDriversForDisplay(pool.map((driver) => ({
+        ...driver,
+        active: allActiveSlugs.has(driver.slug),
+      })));
+      return activated;
+    }
+
+    async function saveAdminDriverAvailability(selectedSlugs = []) {
+      if (isRehearsalMode()) {
+        const activated = applyAdminDriverActivation(selectedSlugs);
+        state.adminDriverAddOpen = false;
+        state.adminActiveTab = "drivers";
+        state.adminMessage = adminDriverActivationMessage(activated);
+        state.adminError = "";
+        render();
+        return;
+      }
+
+      if (!state.adminCode && !state.adminSession?.access_token) {
+        state.adminError = "Admin access expired. Sign in again before changing drivers.";
+        render();
+        return;
+      }
+
+      const activeSlugs = Array.from(new Set([
+        ...adminDrivers().map((driver) => driver.slug),
+        ...(selectedSlugs || []),
+      ].map((slug) => String(slug || "").trim()).filter(Boolean)));
+
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const saved = await rpc("ride_admin_update_plan_drivers", {
+          p_admin_code: state.adminCode,
+          p_plan_date: activePlanDate(),
+          p_active_driver_slugs: activeSlugs,
+        }, adminRpcOptions());
+
+        if (!saved?.ok) throw new Error(saved?.error || "driver_save_failed");
+        const drivers = orderDriversForDisplay(saved.drivers || []);
+        state.admin = {
+          ...saved,
+          drivers,
+          driverPool: orderDriversForDisplay(saved.driverPool || saved.allDrivers || drivers),
+        };
+        state.drivers = drivers;
+        state.adminDraftStops = cloneStops(saved.stops);
+        state.adminDeletedStopIds = [];
+        state.adminDriverAddOpen = false;
+        state.adminActiveTab = "drivers";
+        state.adminMessage = "Driver availability saved.";
+        loadAdminRouteTiming();
+      } catch (error) {
+        state.adminError = "Could not save driver availability.";
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
+    function adminDriverDraftFromSource(source) {
+      const getValue = (name) => {
+        if (source && typeof source.get === "function") return source.get(name);
+        return source?.[name];
+      };
+      const driverName = String(getValue("driverName") || "").trim();
+      return {
+        driverName,
+        driverInitials: String(getValue("driverInitials") || "").trim().toUpperCase(),
+        driverPhone: String(getValue("driverPhone") || "").trim(),
+        driverPasscode: String(getValue("driverPasscode") || "rides123").trim() || "rides123",
+        driverSlug: driverSlugFromName(driverName),
+      };
+    }
+
+    async function saveAdminNewDriver(source) {
+      const draft = adminDriverDraftFromSource(source);
+      if (!draft.driverName || !draft.driverInitials) {
+        state.adminError = "Driver name and initials are required.";
+        render();
+        return;
+      }
+
+      const existing = adminDriverPool().find((driver) => driver.slug === draft.driverSlug);
+      if (existing?.active) {
+        state.adminError = `${existing.displayName} is already active.`;
+        render();
+        return;
+      }
+
+      if (isRehearsalMode()) {
+        const pool = adminDriverPool();
+        const nextDriver = normalizeAdminDriver({
+          slug: draft.driverSlug,
+          displayName: draft.driverName,
+          fullName: draft.driverName,
+          initials: draft.driverInitials,
+          subtitle: "No pickups assigned",
+          routeNotes: draft.driverPhone ? `Phone: ${draft.driverPhone}` : "No pickups assigned yet.",
+          pickupCount: 0,
+          sortOrder: pool.length + 1,
+          active: true,
+        }, { active: true, index: pool.length });
+
+        state.admin.driverPool = orderDriversForDisplay([
+          ...pool.filter((driver) => driver.slug !== nextDriver.slug),
+          nextDriver,
+        ]);
+        const activated = applyAdminDriverActivation([nextDriver.slug]);
+        state.adminDriverAddOpen = false;
+        state.adminActiveTab = "drivers";
+        state.adminMessage = adminDriverActivationMessage(activated.length ? activated : [nextDriver]);
+        state.adminError = "";
+        render();
+        return;
+      }
+
+      if (!state.adminCode && !state.adminSession?.access_token) {
+        state.adminError = "Admin access expired. Sign in again before adding a driver.";
+        render();
+        return;
+      }
+
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const saved = await rpc("ride_admin_add_driver", {
+          p_admin_code: state.adminCode,
+          p_plan_date: activePlanDate(),
+          p_driver: {
+            name: draft.driverName,
+            initials: draft.driverInitials,
+            phone: draft.driverPhone,
+            passcode: draft.driverPasscode,
+          },
+        }, adminRpcOptions());
+
+        if (!saved?.ok) throw new Error(saved?.error || "driver_add_failed");
+        const drivers = orderDriversForDisplay(saved.drivers || []);
+        state.admin = {
+          ...saved,
+          drivers,
+          driverPool: orderDriversForDisplay(saved.driverPool || saved.allDrivers || drivers),
+        };
+        state.drivers = drivers;
+        state.adminDraftStops = cloneStops(saved.stops);
+        state.adminDeletedStopIds = [];
+        state.adminDriverAddOpen = false;
+        state.adminActiveTab = "drivers";
+        state.adminMessage = `${draft.driverName} is active for this plan.`;
+        loadAdminRouteTiming();
+      } catch (error) {
+        state.adminError = "Could not add this driver.";
         console.error(error);
       } finally {
         state.adminLoading = false;
@@ -5792,8 +6201,78 @@
         </section>`;
     }
 
+    function adminDriverAvailabilityRow(driver) {
+      const active = Boolean(driver.active);
+      const avatarClass = String(driver.initials || "").length > 2 ? "avatar small three-letter" : "avatar small";
+      const status = active ? escapeHtml(pickupCountLabel(driverPickupCountValue(driver))) : "Inactive";
+      return `
+        <label class="admin-driver-option">
+          <input type="checkbox" name="driverSlug" value="${escapeHtml(driver.slug)}" ${active ? "checked disabled" : "data-admin-driver-activate"}>
+          <span class="${avatarClass}">${escapeHtml(driver.initials || "?")}</span>
+          <span class="admin-driver-option-copy">
+            <strong>${escapeHtml(driver.displayName)}</strong>
+            <span>${active ? "Active for this plan" : "Saved driver"}</span>
+          </span>
+          <span class="pill ${active ? "" : "gray"}">${status}</span>
+        </label>`;
+    }
+
+    function adminDriverAddForm() {
+      return `
+        <form class="admin-driver-add-form" data-admin-form="driver-add">
+          <span class="admin-driver-add-title">
+            <strong>Add driver</strong>
+            <span>They can use the simple driver passcode after saving.</span>
+          </span>
+          <label>
+            <span>Name</span>
+            <input name="driverName" required>
+          </label>
+          <label>
+            <span>Initials</span>
+            <input name="driverInitials" maxlength="4" required>
+          </label>
+          <label>
+            <span>Phone or note</span>
+            <input name="driverPhone">
+          </label>
+          <label>
+            <span>Passcode</span>
+            <input name="driverPasscode" value="rides123" required>
+          </label>
+          <div class="admin-form-actions">
+            <button class="secondary-action" type="button" data-action="adminDriverAddCancel">Cancel</button>
+            <button class="primary-action" type="submit">${state.adminLoading ? "Saving..." : "Save driver"}</button>
+          </div>
+        </form>`;
+    }
+
+    function adminDriverAvailabilityView() {
+      const pool = adminDriverPool();
+      return `
+        <section class="admin-section-head">
+          <div class="admin-section-title-row">
+            <span class="admin-section-copy">
+              <strong>Driver availability</strong>
+              <span>Check who can drive for this plan.</span>
+            </span>
+            <button class="admin-icon-button" type="button" data-action="adminDriverAdd" aria-label="Add driver">
+              ${peopleDetailIcon("plus")}
+            </button>
+          </div>
+        </section>
+        ${state.adminDriverAddOpen ? adminDriverAddForm() : ""}
+        <form class="admin-driver-availability" data-admin-form="driver-availability">
+          <section class="admin-driver-availability-card" aria-label="Saved drivers">
+            ${pool.length ? pool.map(adminDriverAvailabilityRow).join("") : `<section class="empty-card"><p>No saved drivers yet. Add a driver to start.</p></section>`}
+          </section>
+          <button class="secondary-action" type="submit">${state.adminLoading ? "Saving..." : "Save availability"}</button>
+        </form>`;
+    }
+
     function adminRoutesView(drivers) {
       return `
+        ${adminDriverAvailabilityView()}
         <button class="secondary-action admin-reset-action" type="button" data-action="adminReset">
           <span class="admin-control-action-icon" data-detail-icon="calendar">${peopleDetailIcon("calendar")}</span>
           <span>Start New Sunday</span>
@@ -7015,6 +7494,16 @@
         render();
       }
       if (action === "adminReset") openAdminReset();
+      if (action === "adminDriverAdd") {
+        state.adminDriverAddOpen = true;
+        state.adminError = "";
+        render();
+      }
+      if (action === "adminDriverAddCancel") {
+        state.adminDriverAddOpen = false;
+        state.adminError = "";
+        render();
+      }
       if (action === "adminNotifyReview") openAdminNotifyReview();
       if (action === "adminNotifyCancel") cancelAdminNotify();
       if (action === "adminNotifySend") sendAdminRouteNotifications();
@@ -7201,6 +7690,20 @@
       if (resetForm) {
         event.preventDefault();
         startNewSundayFromForm(resetForm);
+        return;
+      }
+
+      const driverAvailabilityForm = event.target.closest("[data-admin-form='driver-availability']");
+      if (driverAvailabilityForm) {
+        event.preventDefault();
+        saveAdminDriverAvailability(adminDriverSlugsFromAvailabilityForm(driverAvailabilityForm));
+        return;
+      }
+
+      const driverAddForm = event.target.closest("[data-admin-form='driver-add']");
+      if (driverAddForm) {
+        event.preventDefault();
+        saveAdminNewDriver(new FormData(driverAddForm));
         return;
       }
 

@@ -192,6 +192,23 @@ test("SQL source supports admin driver availability and add-driver RPCs", async 
   assert.match(sql, /grant execute on function public\.ride_admin_add_driver/);
 });
 
+test("SQL publish allows address-pending riders without blocking other route changes", async () => {
+  const sqlFiles = [
+    "../supabase/sunday_reset.sql",
+    "../supabase/admin_ride_control.sql",
+  ];
+
+  for (const sqlFile of sqlFiles) {
+    const sql = await readFile(new URL(sqlFile, import.meta.url), "utf8");
+    const publishFunction = sql.match(/create or replace function public\.ride_admin_publish_plan\([\s\S]*?grant execute on function public\.ride_admin_publish_plan/)?.[0] || "";
+
+    assert.match(publishFunction, /if v_name = '' then/);
+    assert.match(publishFunction, /'rider_name_required'/);
+    assert.doesNotMatch(publishFunction, /if v_name = '' or v_address = '' then/);
+    assert.doesNotMatch(publishFunction, /'rider_name_and_address_required'/);
+  }
+});
+
 test("driver route modal stays simple and admin login is passcode-only", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const driverModal = html.match(/async function openCodeModal[\s\S]*?function openAdminCodeModal/)?.[0] || "";

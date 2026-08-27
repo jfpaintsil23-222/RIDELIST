@@ -458,8 +458,8 @@ begin
       v_name := btrim(coalesce(v_stop->>'name', ''));
       v_address := btrim(coalesce(v_stop->>'address', ''));
 
-      if v_name = '' or v_address = '' then
-        return jsonb_build_object('ok', false, 'error', 'rider_name_and_address_required');
+      if v_name = '' then
+        return jsonb_build_object('ok', false, 'error', 'rider_name_required');
       end if;
 
       select d.id, d.slug

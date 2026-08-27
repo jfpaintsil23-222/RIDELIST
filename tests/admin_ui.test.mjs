@@ -520,6 +520,24 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
   assert.doesNotMatch(html, /No riders assigned[\s\S]*Add riders before final route timing/);
 });
 
+test("admin changes stat uses the cleaned Figma pencil icon", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminActiveTab = "riders";
+
+  const html = app.adminView();
+  assert.match(html, /data-admin-tab="changes"/);
+  assert.match(html, /M5 19l3\.8-\.9L18\.8 8\.1/);
+  assert.doesNotMatch(html, /M12 20h9/);
+  assert.doesNotMatch(html, /m16\.5 3\.5 4 4L8 20H4v-4z/);
+});
+
 test("admin sunday riders tab keeps the icon Add rider action", async () => {
   const app = await loadApp();
 

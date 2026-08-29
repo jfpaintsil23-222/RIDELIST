@@ -1299,18 +1299,161 @@
       font-weight: 400;
     }
 
-    .admin-close-button {
+    .admin-menu-button {
       width: 58px;
       height: 58px;
-      border: 0;
-      color: #ffffff;
-      background: #000000;
-      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.18);
+      border: 1px solid #eceff3;
+      color: #050505;
+      background: #ffffff;
+      box-shadow: 0 18px 34px rgba(16, 24, 40, 0.14);
     }
 
-    .admin-icon-button.admin-close-button svg {
+    .admin-icon-button.admin-menu-button svg {
       width: 28px;
       height: 28px;
+    }
+
+    .admin-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      background: rgba(5, 5, 5, 0.28);
+      animation: adminMenuFade 160ms ease-out;
+    }
+
+    .admin-menu-scrim {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .admin-menu-panel {
+      position: relative;
+      margin-left: auto;
+      width: min(86vw, 370px);
+      min-height: 100dvh;
+      padding: calc(18px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom));
+      display: grid;
+      align-content: start;
+      gap: 20px;
+      border-left: 1px solid #e7ebef;
+      background: #ffffff;
+      box-shadow: -22px 0 46px rgba(16, 24, 40, 0.18);
+      animation: adminMenuSlide 220ms cubic-bezier(0.22, 0.72, 0.2, 1);
+    }
+
+    .admin-menu-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .admin-menu-title {
+      display: grid;
+      gap: 4px;
+    }
+
+    .admin-menu-title strong {
+      color: #050505;
+      font-size: 26px;
+      line-height: 1.06;
+      font-weight: 800;
+    }
+
+    .admin-menu-title span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.2;
+      font-weight: 400;
+    }
+
+    .admin-menu-close {
+      width: 46px;
+      height: 46px;
+      border: 0;
+      color: #050505;
+      background: #f3f3f4;
+      box-shadow: none;
+    }
+
+    .admin-menu-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-menu-row {
+      width: 100%;
+      min-height: 74px;
+      display: grid;
+      grid-template-columns: 48px 1fr auto;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      border: 1px solid #e2e5ea;
+      border-radius: 18px;
+      color: #050505;
+      background: #ffffff;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .admin-menu-row:disabled {
+      cursor: default;
+      opacity: 0.58;
+    }
+
+    .admin-menu-row-icon {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      color: #050505;
+      background: #f2f2f4;
+    }
+
+    .admin-menu-row-icon .people-detail-svg {
+      width: 25px;
+      height: 25px;
+    }
+
+    .admin-menu-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .admin-menu-copy strong {
+      color: #050505;
+      font-size: 20px;
+      line-height: 1.1;
+      font-weight: 750;
+    }
+
+    .admin-menu-copy span {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.22;
+      font-weight: 400;
+    }
+
+    .admin-menu-chevron {
+      color: #050505;
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    @keyframes adminMenuFade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes adminMenuSlide {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
     }
 
     .admin-reset-action,
@@ -3273,6 +3416,7 @@
       adminMergeDraft: null,
       adminEditMode: "edit",
       adminActiveTab: "riders",
+      adminMenuOpen: false,
       adminSearch: "",
       adminPeopleSearch: "",
       adminExpandedDriverSlug: "",
@@ -3594,6 +3738,7 @@
       state.adminSession = null;
       state.admin = null;
       state.adminCode = "";
+      state.adminMenuOpen = false;
       state.adminMessage = "";
       state.view = "home";
       render();
@@ -4284,6 +4429,7 @@
       state.adminMergeDraft = null;
       state.adminEditMode = "edit";
       state.adminActiveTab = "riders";
+      state.adminMenuOpen = false;
       state.adminSearch = "";
       state.adminPeopleSearch = "";
       state.adminExpandedDriverSlug = "";
@@ -5120,7 +5266,9 @@
         eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
         home: '<path d="m3 11 9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
         info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+        "log-out": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
         map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/>',
+        menu: '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
         notes: '<path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4"/><path d="M9 12h6"/><path d="M9 16h4"/>',
         phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.4 19.4 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.4 2.1L8.1 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.6 1.9z"/>',
         plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
@@ -5132,6 +5280,7 @@
         "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
         users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
         warning: '<path d="M10.3 4.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+        x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
       };
       return `<svg class="people-detail-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ""}</g></svg>`;
     }
@@ -6008,6 +6157,7 @@
       state.driverAccessCode = "";
       state.pushStatus = "idle";
       state.pushMessage = "";
+      state.adminMenuOpen = false;
       setView("home");
     }
 
@@ -6181,11 +6331,64 @@
       return `<input class="admin-search-input" data-admin-people-search type="search" value="${escapeHtml(state.adminPeopleSearch)}" placeholder="${escapeHtml(placeholder)}" aria-label="Search PeopleData">`;
     }
 
+    function adminMenuRow(page, title, detail, icon) {
+      return `
+        <button class="admin-menu-row" type="button" data-admin-menu-page="${escapeHtml(page)}">
+          <span class="admin-menu-row-icon" aria-hidden="true">${peopleDetailIcon(icon)}</span>
+          <span class="admin-menu-copy">
+            <strong>${escapeHtml(title)}</strong>
+            <span>${escapeHtml(detail)}</span>
+          </span>
+          <span class="admin-menu-chevron" aria-hidden="true">&rsaquo;</span>
+        </button>`;
+    }
+
+    function adminMenuDrawerHtml() {
+      if (!state.adminMenuOpen) return "";
+
+      return `
+        <div class="admin-menu-backdrop is-open" aria-label="Admin menu">
+          <button class="admin-menu-scrim" type="button" data-action="adminMenuClose" aria-label="Close admin menu"></button>
+          <aside class="admin-menu-panel" role="dialog" aria-modal="true" aria-label="Admin menu" data-admin-menu-panel>
+            <header class="admin-menu-head">
+              <span class="admin-menu-title">
+                <strong>Admin menu</strong>
+                <span>${escapeHtml(ridePlanTitle())}</span>
+              </span>
+              <button class="admin-icon-button admin-menu-close" type="button" data-action="adminMenuClose" aria-label="Close admin menu">
+                ${peopleDetailIcon("x")}
+              </button>
+            </header>
+            <section class="admin-menu-list" aria-label="Admin tools">
+              ${adminMenuRow("people", "People Bank", "Saved riders and details", "user")}
+              ${adminMenuRow("drivers", "Driver list", "Availability and add driver", "users")}
+              ${adminMenuRow("settings", "Settings", "Event setup", "sliders")}
+              <button class="admin-menu-row" type="button" data-action="adminSignOut">
+                <span class="admin-menu-row-icon" aria-hidden="true">${peopleDetailIcon("log-out")}</span>
+                <span class="admin-menu-copy">
+                  <strong>Sign out</strong>
+                  <span>Leave admin mode</span>
+                </span>
+                <span class="admin-menu-chevron" aria-hidden="true">&rsaquo;</span>
+              </button>
+            </section>
+          </aside>
+        </div>`;
+    }
+
+    function openAdminMenuPage(page) {
+      const nextTab = ["people", "drivers", "settings"].includes(page) ? page : "riders";
+      state.adminActiveTab = nextTab;
+      state.adminMenuOpen = false;
+      state.adminError = "";
+      render();
+    }
+
     function adminActiveTab() {
       const tab = state.adminActiveTab || "riders";
       if (tab === "routes") return "drivers";
       if (tab === "people") return "people";
-      return ["drivers", "riders", "changes"].includes(tab) ? tab : "riders";
+      return ["drivers", "riders", "changes", "settings"].includes(tab) ? tab : "riders";
     }
 
     function adminStatButton(tab, count, label, icon, extraClass = "") {
@@ -6340,6 +6543,27 @@
         </button>
         <section class="admin-route-list" aria-label="Driver routes">
           ${drivers.map(adminRouteCard).join("")}
+        </section>`;
+    }
+
+    function adminSettingsView() {
+      return `
+        <section class="admin-section-head">
+          <div class="admin-section-title-row">
+            <span class="admin-section-copy">
+              <strong>Settings</strong>
+              <span>Sunday mode is active.</span>
+            </span>
+          </div>
+        </section>
+        <section class="admin-driver-availability-card" aria-label="Admin settings">
+          <article class="admin-driver-option">
+            <span class="admin-menu-row-icon" aria-hidden="true">${peopleDetailIcon("calendar")}</span>
+            <span class="admin-driver-option-copy">
+              <strong>${escapeHtml(ridePlanTitle())}</strong>
+              <span>${escapeHtml(ridePlanAdminSubtitle())}</span>
+            </span>
+          </article>
         </section>`;
     }
 
@@ -6919,7 +7143,9 @@
           ? adminRoutesView(drivers)
           : activeTab === "changes"
             ? adminChangesView(changed)
-            : adminSundayRidersView();
+            : activeTab === "settings"
+              ? adminSettingsView()
+              : adminSundayRidersView();
 
       return `
         <div class="stack admin-control-screen">
@@ -6930,8 +7156,8 @@
                 <h1>${escapeHtml(ridePlanTitle())}</h1>
                 <p>${escapeHtml(ridePlanAdminSubtitle())}</p>
               </div>
-              <button class="admin-icon-button admin-close-button" type="button" data-action="home" aria-label="Close admin">
-                ${peopleDetailIcon("sliders")}
+              <button class="admin-icon-button admin-menu-button" type="button" data-action="adminMenuOpen" aria-label="Open admin menu">
+                ${peopleDetailIcon("menu")}
               </button>
             </div>
           </section>
@@ -6945,9 +7171,9 @@
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
           ${adminNotifyPromptHtml()}
-          ${state.adminSession?.access_token ? `<button class="secondary-action" type="button" data-action="adminSignOut">Sign out admin</button>` : ""}
           ${activeView}
           ${activeTab === "changes" ? "" : adminReviewBar(changed)}
+          ${adminMenuDrawerHtml()}
         </div>`;
     }
 
@@ -7707,7 +7933,14 @@
       const adminTabButton = event.target.closest("[data-admin-tab]");
       if (adminTabButton) {
         state.adminActiveTab = adminTabButton.dataset.adminTab;
+        state.adminMenuOpen = false;
         render();
+        return;
+      }
+
+      const adminMenuPageButton = event.target.closest("[data-admin-menu-page]");
+      if (adminMenuPageButton) {
+        openAdminMenuPage(adminMenuPageButton.dataset.adminMenuPage);
         return;
       }
 
@@ -7738,6 +7971,14 @@
       if (action === "enableRouteAlerts") enableDriverRouteAlerts();
       if (action === "admin") openAdminCodeModal();
       if (action === "adminSignOut") signOutAdmin();
+      if (action === "adminMenuOpen") {
+        state.adminMenuOpen = true;
+        render();
+      }
+      if (action === "adminMenuClose") {
+        state.adminMenuOpen = false;
+        render();
+      }
       if (action === "adminPersonAddBack") {
         returnToAdminPersonDetailFromAdd();
         return;

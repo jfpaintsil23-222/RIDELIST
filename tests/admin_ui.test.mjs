@@ -69,6 +69,7 @@ async function loadApp(fetchImpl, options = {}) {
     globalThis.__app = {
       state,
       adminView,
+      openAdminMenuPage: typeof openAdminMenuPage === "function" ? openAdminMenuPage : undefined,
       adminReviewView: typeof adminReviewView === "function" ? adminReviewView : undefined,
       adminResetView: typeof adminResetView === "function" ? adminResetView : undefined,
       adminEditView,
@@ -556,7 +557,10 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
   const html = app.adminView();
   assert.match(html, /class="stack admin-control-screen"/);
   assert.match(html, /class="[^"]*admin-control-header[^"]*"/);
-  assert.match(html, /class="[^"]*admin-close-button[^"]*"/);
+  assert.match(html, /class="[^"]*admin-menu-button[^"]*"/);
+  assert.match(html, /data-action="adminMenuOpen"/);
+  assert.match(html, /aria-label="Open admin menu"/);
+  assert.doesNotMatch(html, /admin-close-button/);
   assert.doesNotMatch(html, /admin-control-tabs/);
   assert.match(html, /class="[^"]*admin-control-stats[^"]*"/);
   assert.match(html, /<p class="eyebrow">Today<\/p>/);
@@ -577,6 +581,43 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
   assert.doesNotMatch(html, /admin-security-message/);
   assert.doesNotMatch(html, /Passcode fallback active/);
   assert.doesNotMatch(html, /No riders assigned[\s\S]*Add riders before final route timing/);
+});
+
+test("admin hamburger drawer exposes secondary admin tools without notifications", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "john-mark", displayName: "John Mark", initials: "JM" }],
+    stops: [],
+    people: [{ id: "person-1", name: "Zarah", phone: "", homeAddress: "1221 Highland Row Ln, Houston, TX" }],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminActiveTab = "riders";
+  app.state.adminMenuOpen = true;
+
+  const html = app.adminView();
+  assert.match(html, /class="admin-menu-backdrop is-open"/);
+  assert.match(html, /Admin menu/);
+  assert.match(html, /data-action="adminMenuClose"/);
+  assert.match(html, /data-admin-menu-page="people"/);
+  assert.match(html, /People Bank/);
+  assert.match(html, /data-admin-menu-page="drivers"/);
+  assert.match(html, /Driver list/);
+  assert.match(html, /Settings/);
+  assert.match(html, /Sign out/);
+  assert.doesNotMatch(html, /Notifications/);
+
+  assert.equal(typeof app.openAdminMenuPage, "function");
+  app.openAdminMenuPage("people");
+  assert.equal(app.state.adminActiveTab, "people");
+  assert.equal(app.state.adminMenuOpen, false);
+  assert.match(app.adminView(), /PeopleData/);
+
+  app.state.adminMenuOpen = true;
+  app.openAdminMenuPage("drivers");
+  assert.equal(app.state.adminActiveTab, "drivers");
+  assert.equal(app.state.adminMenuOpen, false);
+  assert.match(app.adminView(), /Driver availability/);
 });
 
 test("admin changes stat uses the cleaned Figma pencil icon", async () => {

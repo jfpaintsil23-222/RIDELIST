@@ -3197,7 +3197,7 @@
   <script>
     const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
     const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
-    const FALLBACK_PLAN_DATE = "2026-08-27";
+    const FALLBACK_PLAN_DATE = "2026-08-30";
     const ADMIN_SESSION_KEY = "ride-admin-session";
     const WEATHER_LOCATION = {
       latitude: "29.7604",
@@ -3634,11 +3634,21 @@
     };
 
     const DESTINATION_SUMMARY = {
-      label: "UH Science & Engineering Classroom 102",
-      address: "Science & Engineering Classroom 102, University of Houston, Houston, TX 77204",
+      label: "UH Hilton",
+      address: "University of Houston Hilton, Houston, TX",
     };
 
     const RIDE_PLAN_BRANDING = {
+      title: "Sunday Ride Plan",
+      homeAriaLabel: "Sunday ride dashboard",
+      adminSubtitle: "Build this Sunday's list",
+      coverSrc: "assets/home-car.png",
+      coverAlt: "Church ride car",
+      summaryDay: "Sunday",
+      ridersLabel: "Sunday riders",
+    };
+
+    const REHEARSAL_BRANDING = {
       title: "Coffee and Christ Ride Plan",
       homeAriaLabel: "Coffee and Christ ride dashboard",
       adminSubtitle: "Build Thursday's list",
@@ -3648,20 +3658,24 @@
       ridersLabel: "event riders",
     };
 
+    function activeRideBranding() {
+      return isRehearsalMode() ? REHEARSAL_BRANDING : RIDE_PLAN_BRANDING;
+    }
+
     function ridePlanTitle() {
-      return RIDE_PLAN_BRANDING.title;
+      return activeRideBranding().title;
     }
 
     function ridePlanAdminSubtitle() {
-      return RIDE_PLAN_BRANDING.adminSubtitle;
+      return activeRideBranding().adminSubtitle;
     }
 
     function ridePlanSummaryDay() {
-      return RIDE_PLAN_BRANDING.summaryDay;
+      return activeRideBranding().summaryDay;
     }
 
     function ridePlanRidersLabel() {
-      return RIDE_PLAN_BRANDING.ridersLabel || "Sunday riders";
+      return activeRideBranding().ridersLabel || "Sunday riders";
     }
 
     const REHEARSAL_PLAN = {
@@ -3769,9 +3783,10 @@
     }
 
     function homeArt() {
+      const branding = activeRideBranding();
       return `
         <div class="home-art event-cover">
-          <img src="${escapeHtml(RIDE_PLAN_BRANDING.coverSrc)}" alt="${escapeHtml(RIDE_PLAN_BRANDING.coverAlt)}">
+          <img src="${escapeHtml(branding.coverSrc)}" alt="${escapeHtml(branding.coverAlt)}">
         </div>`;
     }
 
@@ -5962,7 +5977,7 @@
     function homeView() {
       return `
         <div class="stack">
-          <section class="intro-block" aria-label="${escapeHtml(RIDE_PLAN_BRANDING.homeAriaLabel)}">
+          <section class="intro-block" aria-label="${escapeHtml(activeRideBranding().homeAriaLabel)}">
             <div class="home-header-row">
               <div>
                 <p class="eyebrow">${escapeHtml(planDateLabel())}</p>

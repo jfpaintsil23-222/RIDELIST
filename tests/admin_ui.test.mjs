@@ -134,7 +134,7 @@ test("app contains admin ride control entry points", async () => {
   assert.match(html, /ride_admin_activity/);
   assert.match(html, /ride_admin_publish_plan/);
   assert.match(html, /ride_admin_start_new_sunday/);
-  assert.match(html, /const FALLBACK_PLAN_DATE = "2026-08-27"/);
+  assert.match(html, /const FALLBACK_PLAN_DATE = "2026-08-30"/);
   assert.match(html, /function adminView/);
   assert.match(html, /function adminResetView/);
   assert.match(html, /function adminEditView/);
@@ -249,9 +249,9 @@ test("app exposes home screen icon metadata", async () => {
   await access(new URL("../assets/app-icon-512.png", import.meta.url));
 });
 
-test("Coffee and Christ event branding updates home and admin cover copy", async () => {
+test("Sunday branding updates home and admin cover copy", async () => {
   const app = await loadApp();
-  await access(new URL("../assets/coffee-and-christ-cover.jpg", import.meta.url));
+  await access(new URL("../assets/home-car.png", import.meta.url));
 
   app.state.loading = false;
   app.state.drivers = [
@@ -259,12 +259,12 @@ test("Coffee and Christ event branding updates home and admin cover copy", async
   ];
 
   const homeHtml = app.homeView();
-  assert.match(homeHtml, /aria-label="Coffee and Christ ride dashboard"/);
-  assert.match(homeHtml, /Coffee and Christ Ride Plan/);
-  assert.match(homeHtml, /assets\/coffee-and-christ-cover\.jpg/);
-  assert.match(homeHtml, /Coffee and Christ cover/);
+  assert.match(homeHtml, /aria-label="Sunday ride dashboard"/);
+  assert.match(homeHtml, /Sunday Ride Plan/);
+  assert.match(homeHtml, /assets\/home-car\.png/);
+  assert.match(homeHtml, /Church ride car/);
   assert.match(homeHtml, /1 drivers assigned/);
-  assert.doesNotMatch(homeHtml, /Sunday Ride Plan/);
+  assert.doesNotMatch(homeHtml, /Coffee and Christ Ride Plan/);
 
   app.state.admin = {
     drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ" }],
@@ -276,8 +276,8 @@ test("Coffee and Christ event branding updates home and admin cover copy", async
   app.state.adminActiveTab = "riders";
 
   const adminHtml = app.adminView();
-  assert.match(adminHtml, /<h1>Coffee and Christ Ride Plan<\/h1>/);
-  assert.match(adminHtml, /Build Thursday(?:'|&#39;)s list/);
+  assert.match(adminHtml, /<h1>Sunday Ride Plan<\/h1>/);
+  assert.match(adminHtml, /Build this Sunday(?:'|&#39;)s list/);
 });
 
 test("app includes a root push service worker", async () => {
@@ -395,9 +395,9 @@ test("admin uses drivers sunday riders and changes tabs with rider assignment st
   assert.match(routesHtml, /data-admin-tab="drivers"/);
   assert.match(routesHtml, /data-admin-tab="riders"/);
   assert.match(routesHtml, /data-admin-tab="changes"/);
-  assert.match(routesHtml, /Coffee and Christ Ride Plan/);
-  assert.match(routesHtml, /Build Thursday(?:'|&#39;)s list/);
-  assert.match(routesHtml, /event riders/);
+  assert.match(routesHtml, /Sunday Ride Plan/);
+  assert.match(routesHtml, /Build this Sunday(?:'|&#39;)s list/);
+  assert.match(routesHtml, /Sunday riders/);
   assert.match(routesHtml, /changes today/);
   assert.doesNotMatch(routesHtml, /data-admin-tab="routes"/);
   assert.doesNotMatch(routesHtml, /data-admin-tab="data"/);
@@ -535,12 +535,12 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
   assert.doesNotMatch(html, /admin-control-tabs/);
   assert.match(html, /class="[^"]*admin-control-stats[^"]*"/);
   assert.match(html, /<p class="eyebrow">Today<\/p>/);
-  assert.match(html, /<h1>Coffee and Christ Ride Plan<\/h1>/);
-  assert.match(html, /Build Thursday(?:'|&#39;)s list/);
+  assert.match(html, /<h1>Sunday Ride Plan<\/h1>/);
+  assert.match(html, /Build this Sunday(?:'|&#39;)s list/);
   assert.doesNotMatch(html, /admin-stat-icon/);
   assert.doesNotMatch(html, /admin-stat-svg/);
   assert.match(html, /<button class="admin-stat[^"]*" type="button" data-admin-tab="drivers"><strong>3<\/strong><span>drivers available<\/span>/);
-  assert.match(html, /<button class="admin-stat[^"]*" type="button" data-admin-tab="riders"><strong>1<\/strong><span>event riders<\/span>/);
+  assert.match(html, /<button class="admin-stat[^"]*" type="button" data-admin-tab="riders"><strong>1<\/strong><span>Sunday riders<\/span>/);
   assert.match(html, /<button class="admin-stat[^"]*" type="button" data-admin-tab="changes"><strong>0<\/strong><span>changes today<\/span>/);
   assert.match(html, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
   assert.match(html, /data-detail-icon="user-plus"/);

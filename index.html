@@ -2351,8 +2351,13 @@
       display: none;
     }
 
+    .admin-place-suggestions {
+      margin-top: 0;
+    }
+
     .admin-person-option,
-    .admin-new-rider-option {
+    .admin-new-rider-option,
+    .admin-place-option {
       width: 100%;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -2370,7 +2375,8 @@
     }
 
     .admin-person-option strong,
-    .admin-new-rider-option strong {
+    .admin-new-rider-option strong,
+    .admin-place-option strong {
       display: block;
       font-size: 14px;
       line-height: 1.2;
@@ -2378,13 +2384,21 @@
     }
 
     .admin-person-option span,
-    .admin-new-rider-option span {
+    .admin-new-rider-option span,
+    .admin-place-option span {
       display: block;
       margin-top: 3px;
       color: var(--muted);
       font-size: 12px;
       line-height: 1.35;
       overflow-wrap: anywhere;
+    }
+
+    .admin-place-hint {
+      padding: 8px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
     }
 
     .admin-address-options {
@@ -3268,6 +3282,16 @@
       adminMessage: "",
       adminError: "",
       adminLoading: false,
+      adminPlaceAutocomplete: {
+        field: "",
+        query: "",
+        sessionToken: "",
+        suggestions: [],
+        status: "idle",
+        error: "",
+        requestId: 0,
+      },
+      adminPlaceTimer: null,
       adminNotifyDraft: null,
       adminNotifyMode: "prompt",
       adminNotifyStatus: "idle",
@@ -3395,6 +3419,28 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(data?.error || "push_request_failed");
+      }
+      return data;
+    }
+
+    async function placeAutocompleteRequest(payload = {}) {
+      const headers = {
+        "apikey": SUPABASE_KEY,
+        "content-type": "application/json",
+      };
+      if (state.adminSession?.access_token) {
+        headers.authorization = "Bearer " + state.adminSession.access_token;
+      }
+
+      const response = await fetch(SUPABASE_URL + "/functions/v1/ride-place-autocomplete", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...payload, adminCode: state.adminCode || "" }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "place_autocomplete_failed");
       }
       return data;
     }
@@ -6582,12 +6628,14 @@
             </label>
             <label>
               <span>Campus address</span>
-              <input name="campusAddress" value="${escapeHtml(draft.campusAddress)}">
+              <input name="campusAddress" value="${escapeHtml(draft.campusAddress)}" autocomplete="off" data-place-autocomplete="person-campus">
             </label>
+            ${adminPlaceSuggestionsHtml("person-campus")}
             <label>
               <span>Home address</span>
-              <input name="homeAddress" value="${escapeHtml(draft.homeAddress)}">
+              <input name="homeAddress" value="${escapeHtml(draft.homeAddress)}" autocomplete="off" data-place-autocomplete="person-home">
             </label>
+            ${adminPlaceSuggestionsHtml("person-home")}
             <section class="admin-field-group">
               <span class="admin-field-label">Primary address</span>
               <div class="admin-address-options">
@@ -6937,6 +6985,199 @@
       return `<section class="admin-person-suggestions" data-admin-person-suggestions ${items ? "" : "hidden"}>${items}</section>`;
     }
 
+    function adminPlaceState(field) {
+      const current = state.adminPlaceAutocomplete || {};
+      if (current.field !== field) {
+        return {
+          field,
+          query: "",
+          sessionToken: "",
+          suggestions: [],
+          status: "idle",
+          error: "",
+          requestId: 0,
+        };
+      }
+      return current;
+    }
+
+    function adminPlaceSuggestionItemsHtml(field) {
+      const placeState = adminPlaceState(field);
+      if (placeState.status === "loading") {
+        return `<p class="admin-place-hint">Finding addresses...</p>`;
+      }
+      if (placeState.status === "error") {
+        return `<p class="admin-place-hint">Address suggestions are unavailable right now.</p>`;
+      }
+
+      const suggestions = Array.isArray(placeState.suggestions) ? placeState.suggestions : [];
+      return suggestions.map((suggestion) => `
+        <button class="admin-place-option" type="button" data-place-select="${escapeHtml(field)}" data-place-id="${escapeHtml(suggestion.placeId)}" data-place-text="${escapeHtml(suggestion.text)}">
+          <span>
+            <strong>${escapeHtml(suggestion.mainText || suggestion.text)}</strong>
+            <span>${escapeHtml(suggestion.secondaryText || "Tap to use this address")}</span>
+          </span>
+          <span aria-hidden="true">&rsaquo;</span>
+        </button>`).join("");
+    }
+
+    function adminPlaceSuggestionsHtml(field) {
+      const items = adminPlaceSuggestionItemsHtml(field);
+      return `<section class="admin-person-suggestions admin-place-suggestions" data-place-suggestions="${escapeHtml(field)}" ${items ? "" : "hidden"}>${items}</section>`;
+    }
+
+    function createPlaceSessionToken() {
+      return globalThis.crypto?.randomUUID?.() || `place-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function placeSessionTokenFor(field) {
+      const current = adminPlaceState(field);
+      if (current.sessionToken) return current.sessionToken;
+
+      const sessionToken = createPlaceSessionToken();
+      state.adminPlaceAutocomplete = {
+        ...current,
+        field,
+        sessionToken,
+      };
+      return sessionToken;
+    }
+
+    function updatePlaceSuggestionsDom(field) {
+      const suggestions = screen.querySelector(`[data-place-suggestions="${field}"]`);
+      if (!suggestions) return;
+
+      const items = adminPlaceSuggestionItemsHtml(field);
+      suggestions.innerHTML = items;
+      suggestions.hidden = !items;
+    }
+
+    async function requestAdminPlaceSuggestions(field, input) {
+      const query = String(input || "").trim();
+      const current = adminPlaceState(field);
+      if (query.length < 3) {
+        state.adminPlaceAutocomplete = {
+          ...current,
+          field,
+          query,
+          suggestions: [],
+          status: "idle",
+          error: "",
+        };
+        updatePlaceSuggestionsDom(field);
+        return { ok: true, suggestions: [] };
+      }
+
+      const sessionToken = placeSessionTokenFor(field);
+      const requestId = Number(state.adminPlaceAutocomplete.requestId || 0) + 1;
+      state.adminPlaceAutocomplete = {
+        ...state.adminPlaceAutocomplete,
+        field,
+        query,
+        sessionToken,
+        suggestions: [],
+        status: "loading",
+        error: "",
+        requestId,
+      };
+      updatePlaceSuggestionsDom(field);
+
+      try {
+        const data = await placeAutocompleteRequest({
+          mode: "suggest",
+          input: query,
+          sessionToken,
+        });
+        if (state.adminPlaceAutocomplete.field !== field || state.adminPlaceAutocomplete.requestId !== requestId) return data;
+        state.adminPlaceAutocomplete = {
+          ...state.adminPlaceAutocomplete,
+          suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+          status: "ready",
+          error: "",
+        };
+        updatePlaceSuggestionsDom(field);
+        return data;
+      } catch (error) {
+        if (state.adminPlaceAutocomplete.field === field && state.adminPlaceAutocomplete.requestId === requestId) {
+          state.adminPlaceAutocomplete = {
+            ...state.adminPlaceAutocomplete,
+            suggestions: [],
+            status: "error",
+            error: error.message || "place_autocomplete_failed",
+          };
+          updatePlaceSuggestionsDom(field);
+        }
+        return { ok: false, error: error.message || "place_autocomplete_failed" };
+      }
+    }
+
+    function queueAdminPlaceSuggestions(field, input) {
+      if (state.adminPlaceTimer) {
+        const cancelTimer = typeof window.clearTimeout === "function" ? window.clearTimeout.bind(window) : globalThis.clearTimeout;
+        if (cancelTimer) cancelTimer(state.adminPlaceTimer);
+      }
+
+      const run = () => requestAdminPlaceSuggestions(field, input);
+      if (String(input || "").trim().length < 3) {
+        state.adminPlaceTimer = null;
+        run();
+        return;
+      }
+
+      const delay = typeof window.setTimeout === "function" ? window.setTimeout.bind(window) : globalThis.setTimeout;
+      state.adminPlaceTimer = delay ? delay(run, 250) : null;
+      if (!delay) run();
+    }
+
+    async function selectAdminPlaceSuggestion(button) {
+      const field = button.dataset.placeSelect || "";
+      const placeId = button.dataset.placeId || "";
+      const fallbackText = button.dataset.placeText || "";
+      if (!field || !placeId) return;
+
+      const input = screen.querySelector(`[data-place-autocomplete="${field}"]`);
+      if (input && fallbackText) input.value = fallbackText;
+
+      const current = adminPlaceState(field);
+      const sessionToken = current.sessionToken || placeSessionTokenFor(field);
+      state.adminPlaceAutocomplete = {
+        ...current,
+        field,
+        suggestions: [],
+        status: "loading",
+        error: "",
+      };
+      updatePlaceSuggestionsDom(field);
+
+      try {
+        const data = await placeAutocompleteRequest({
+          mode: "details",
+          placeId,
+          sessionToken,
+        });
+        const formattedAddress = data?.place?.formattedAddress || fallbackText;
+        if (input && formattedAddress) input.value = formattedAddress;
+        state.adminPlaceAutocomplete = {
+          field,
+          query: formattedAddress,
+          sessionToken: "",
+          suggestions: [],
+          status: "idle",
+          error: "",
+          requestId: 0,
+        };
+      } catch (error) {
+        state.adminPlaceAutocomplete = {
+          ...current,
+          field,
+          suggestions: [],
+          status: "error",
+          error: error.message || "place_details_failed",
+        };
+      }
+      updatePlaceSuggestionsDom(field);
+    }
+
     function adminAddressFieldHtml(stop) {
       const person = state.adminPersonSeed;
       const options = adminAddressOptionsForPerson(person);
@@ -6944,8 +7185,9 @@
         return `
           <label>
             <span>Pickup address</span>
-            <input name="address" value="${escapeHtml(stop.address || "")}" required>
-          </label>`;
+            <input name="address" value="${escapeHtml(stop.address || "")}" autocomplete="off" data-place-autocomplete="ride-address" required>
+          </label>
+          ${adminPlaceSuggestionsHtml("ride-address")}`;
       }
 
       const selectedType = state.adminSelectedAddressType || normalizedPreferredAddressType(person) || options[0].type;
@@ -7469,6 +7711,12 @@
         return;
       }
 
+      const placeSuggestionButton = event.target.closest("[data-place-select]");
+      if (placeSuggestionButton) {
+        selectAdminPlaceSuggestion(placeSuggestionButton);
+        return;
+      }
+
       const adminDriverToggle = event.target.closest("[data-admin-driver-toggle]");
       if (adminDriverToggle) {
         const slug = adminDriverToggle.dataset.adminDriverToggle;
@@ -7665,6 +7913,12 @@
           suggestions.innerHTML = items;
           suggestions.hidden = !items;
         }
+        return;
+      }
+
+      const placeInput = event.target.closest("[data-place-autocomplete]");
+      if (placeInput) {
+        queueAdminPlaceSuggestions(placeInput.dataset.placeAutocomplete || "", placeInput.value);
         return;
       }
 

@@ -93,6 +93,7 @@ async function loadApp(fetchImpl, options = {}) {
       driverRouteSummary,
       routeTimingForDriver: typeof routeTimingForDriver === "function" ? routeTimingForDriver : undefined,
       secureRouteTimingRequest: typeof secureRouteTimingRequest === "function" ? secureRouteTimingRequest : undefined,
+      placeAutocompleteRequest: typeof placeAutocompleteRequest === "function" ? placeAutocompleteRequest : undefined,
       submitCode: typeof submitCode === "function" ? submitCode : undefined,
       loadDrivers: typeof loadDrivers === "function" ? loadDrivers : undefined,
       publishAdminDraft: typeof publishAdminDraft === "function" ? publishAdminDraft : undefined,
@@ -207,6 +208,30 @@ test("SQL publish allows address-pending riders without blocking other route cha
     assert.doesNotMatch(publishFunction, /if v_name = '' or v_address = '' then/);
     assert.doesNotMatch(publishFunction, /'rider_name_and_address_required'/);
   }
+});
+
+test("admin address autocomplete is proxied through a Supabase Edge Function", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  let source = "";
+  try {
+    source = await readFile(new URL("../supabase/functions/ride-place-autocomplete/index.ts", import.meta.url), "utf8");
+  } catch {
+    source = "";
+  }
+
+  assert.match(html, /\/functions\/v1\/ride-place-autocomplete/);
+  assert.doesNotMatch(html, /places\.googleapis\.com/);
+  assert.doesNotMatch(html, /GOOGLE_PLACES_API_KEY|GOOGLE_ROUTES_API_KEY|AIza/);
+  assert.match(source, /places:autocomplete/);
+  assert.match(source, /GOOGLE_PLACES_API_KEY/);
+  assert.match(source, /GOOGLE_ROUTES_API_KEY/);
+  assert.match(source, /sessionToken/);
+  assert.match(source, /locationRestriction/);
+  assert.match(source, /low:\s*{/);
+  assert.match(source, /high:\s*{/);
+  assert.doesNotMatch(source, /locationBias/);
+  assert.match(source, /ride_admin_snapshot/);
+  assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
 test("driver route modal stays simple and admin login is passcode-only", async () => {
@@ -723,6 +748,88 @@ test("new Sunday rider form defaults to not assigned and keeps driver optional",
   assert.match(html, /<select name="driverSlug">/);
   assert.match(html, /<input name="name"[^>]*required/);
   assert.match(html, /<input name="address"[^>]*required/);
+});
+
+test("admin address fields show place suggestions on rider and People Bank forms", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ" }],
+    stops: [],
+    people: [
+      {
+        id: "person-1",
+        name: "Zarah",
+        phone: "",
+        campusAddress: "University of Houston, Houston, TX",
+        homeAddress: "1221 Highland Row Ln, Houston, TX",
+        preferredAddressType: "home",
+      },
+    ],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminSelectedStopId = "new";
+  app.state.adminSelectedPersonId = "person-1";
+  app.state.adminPersonDraft = {
+    id: "person-1",
+    name: "Zarah",
+    phone: "",
+    campusAddress: "University of Houston, Houston, TX",
+    homeAddress: "1221 Highland Row Ln, Houston, TX",
+    preferredAddressType: "home",
+    preferredAddress: "1221 Highland Row Ln, Houston, TX",
+    sourceLabel: "PeopleData",
+    notes: "",
+  };
+
+  const riderHtml = app.adminEditView();
+  assert.match(riderHtml, /data-place-autocomplete="ride-address"/);
+  assert.match(riderHtml, /data-place-suggestions="ride-address"/);
+
+  const personHtml = app.adminPersonEditView();
+  assert.match(personHtml, /data-place-autocomplete="person-campus"/);
+  assert.match(personHtml, /data-place-suggestions="person-campus"/);
+  assert.match(personHtml, /data-place-autocomplete="person-home"/);
+  assert.match(personHtml, /data-place-suggestions="person-home"/);
+});
+
+test("admin place autocomplete request calls Supabase without exposing Google keys", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (!String(url).includes("/functions/v1/ride-place-autocomplete")) {
+      return {
+        ok: true,
+        json: async () => [],
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, suggestions: [] }),
+    };
+  });
+
+  app.state.adminCode = "admin123";
+  assert.equal(typeof app.placeAutocompleteRequest, "function");
+  const payload = await app.placeAutocompleteRequest({
+    mode: "suggest",
+    input: "4200 Uni",
+    sessionToken: "session-1",
+  });
+
+  assert.equal(payload.ok, true);
+  const call = calls.find((item) => String(item.url).includes("/functions/v1/ride-place-autocomplete"));
+  assert.ok(call, "address autocomplete should call the Supabase Edge Function");
+  assert.match(call.url, /\/functions\/v1\/ride-place-autocomplete$/);
+  assert.equal(call.options.method, "POST");
+  assert.match(call.options.headers.apikey, /^sb_publishable_/);
+  assert.deepEqual(JSON.parse(call.options.body), {
+    mode: "suggest",
+    input: "4200 Uni",
+    sessionToken: "session-1",
+    adminCode: "admin123",
+  });
+  assert.doesNotMatch(JSON.stringify(call), /places\.googleapis\.com|X-Goog-Api-Key|GOOGLE_PLACES_API_KEY|GOOGLE_ROUTES_API_KEY|AIza/);
 });
 
 test("people detail values use a softer text weight", async () => {

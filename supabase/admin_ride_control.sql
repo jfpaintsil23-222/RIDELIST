@@ -738,6 +738,7 @@ declare
   v_stop_order integer;
   v_name text;
   v_address text;
+  v_driver_slug text;
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
@@ -765,20 +766,35 @@ begin
     for v_stop in select value from jsonb_array_elements(p_stops) loop
       v_name := btrim(coalesce(v_stop->>'name', ''));
       v_address := btrim(coalesce(v_stop->>'address', ''));
+      v_driver_slug := lower(btrim(coalesce(v_stop->>'driverSlug', '')));
 
       if v_name = '' then
         return jsonb_build_object('ok', false, 'error', 'rider_name_required');
+      end if;
+
+      if v_driver_slug = '' then
+        return jsonb_build_object(
+          'ok', false,
+          'error', 'driver_required',
+          'riderName', v_name,
+          'driverSlug', v_driver_slug
+        );
       end if;
 
       select d.id, d.slug
       into v_driver
       from rides_private.ride_drivers d
       where d.plan_id = v_plan.id
-        and d.slug = lower(btrim(coalesce(v_stop->>'driverSlug', '')))
+        and d.slug = v_driver_slug
       limit 1;
 
       if v_driver.id is null then
-        return jsonb_build_object('ok', false, 'error', 'driver_not_found');
+        return jsonb_build_object(
+          'ok', false,
+          'error', 'driver_not_found',
+          'riderName', v_name,
+          'driverSlug', v_driver_slug
+        );
       end if;
 
       begin

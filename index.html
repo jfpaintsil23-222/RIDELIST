@@ -1926,6 +1926,10 @@
       cursor: pointer;
     }
 
+    .admin-driver-toggle:disabled {
+      cursor: default;
+    }
+
     .admin-control-screen .admin-driver-toggle {
       grid-template-columns: 58px minmax(0, 1fr) auto;
       gap: 14px;
@@ -2143,6 +2147,60 @@
       color: #050505;
       font-size: 13px;
       font-weight: 750;
+    }
+
+    .admin-publish-blockers,
+    .admin-draft-restore {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      font-weight: 500;
+    }
+
+    .admin-publish-blockers {
+      border-color: #f0d3a7;
+      border-left: 4px solid #fb8500;
+      background: #fff8ed;
+    }
+
+    .admin-publish-blockers strong,
+    .admin-draft-restore strong {
+      color: #050505;
+      font-size: 16px;
+      line-height: 1.2;
+      font-weight: 780;
+    }
+
+    .admin-publish-blockers span,
+    .admin-draft-restore span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 500;
+    }
+
+    .admin-publish-issue-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .admin-publish-issue-list li {
+      display: grid;
+      gap: 2px;
+    }
+
+    .admin-draft-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .admin-draft-actions .secondary-action {
+      min-height: 44px;
+      font-size: 14px;
     }
 
     .rehearsal-message {
@@ -3356,6 +3414,7 @@
     const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
     const FALLBACK_PLAN_DATE = "2026-08-30";
     const ADMIN_SESSION_KEY = "ride-admin-session";
+    const ADMIN_DRAFT_BACKUP_PREFIX = "ride-admin-draft";
     const WEATHER_LOCATION = {
       latitude: "29.7604",
       longitude: "-95.3698",
@@ -3404,6 +3463,8 @@
       adminActivity: [],
       adminDraftStops: [],
       adminDeletedStopIds: [],
+      adminDraftBackup: null,
+      adminDraftSavedAt: "",
       adminSelectedStopId: null,
       adminPersonSeed: null,
       adminRiderQuery: "",
@@ -3516,6 +3577,7 @@
         error.code = payload.code || "";
         error.details = payload.details || "";
         error.hint = payload.hint || "";
+        error.payload = payload;
         error.raw = message;
         throw error;
       }
@@ -4693,8 +4755,13 @@
       return orderedStops(adminStops().filter((stop) => stop.driverSlug === slug));
     }
 
+    function adminDriverHasStops(slug) {
+      return adminStopsForDriver(slug).length > 0;
+    }
+
     function adminRouteWarnings(driver, stops = [], timing = null) {
       const warnings = [];
+      if (!stops.length) return warnings;
       const add = (key, label, level = "normal", detail = {}) => {
         if (warnings.some((warning) => warning.key === key || warning.label === label)) return;
         warnings.push({
@@ -4858,6 +4925,168 @@
 
     function adminChangedCount() {
       return adminChangeList().length;
+    }
+
+    function adminDraftStorageKey(planDate = activePlanDate()) {
+      return `${ADMIN_DRAFT_BACKUP_PREFIX}:${String(planDate || FALLBACK_PLAN_DATE)}`;
+    }
+
+    function adminDraftSnapshot(stops = adminStops(), deletedStopIds = state.adminDeletedStopIds) {
+      const sortedStops = cloneStops(stops)
+        .map(adminComparableStop)
+        .sort((a, b) => (
+          a.id.localeCompare(b.id)
+          || a.driverSlug.localeCompare(b.driverSlug)
+          || a.name.localeCompare(b.name)
+          || a.address.localeCompare(b.address)
+        ));
+      const deleted = Array.from(new Set((deletedStopIds || []).map((id) => String(id || "").trim()).filter(Boolean))).sort();
+      return { stops: sortedStops, deletedStopIds: deleted };
+    }
+
+    function adminDraftBackupsMatch(backup) {
+      if (!backup) return true;
+      return JSON.stringify(adminDraftSnapshot(backup.stops, backup.deletedStopIds))
+        === JSON.stringify(adminDraftSnapshot());
+    }
+
+    function readAdminDraftBackup(planDate = activePlanDate()) {
+      try {
+        const raw = localStorage.getItem(adminDraftStorageKey(planDate));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.planDate !== String(planDate || FALLBACK_PLAN_DATE) || !Array.isArray(parsed.stops)) return null;
+        return {
+          version: 1,
+          planDate: parsed.planDate,
+          savedAt: parsed.savedAt || "",
+          reason: parsed.reason || "",
+          stops: cloneStops(parsed.stops),
+          deletedStopIds: Array.isArray(parsed.deletedStopIds)
+            ? parsed.deletedStopIds.map((id) => String(id || "").trim()).filter(Boolean)
+            : [],
+        };
+      } catch (error) {
+        console.warn(error);
+        return null;
+      }
+    }
+
+    function saveAdminDraftBackup(reason = "draft") {
+      if (!state.admin || !adminChangedCount()) return null;
+      const planDate = activePlanDate();
+      const backup = {
+        version: 1,
+        planDate,
+        savedAt: new Date().toISOString(),
+        reason,
+        stops: cloneStops(adminStops()),
+        deletedStopIds: Array.from(new Set((state.adminDeletedStopIds || []).map((id) => String(id || "").trim()).filter(Boolean))),
+      };
+      try {
+        localStorage.setItem(adminDraftStorageKey(planDate), JSON.stringify(backup));
+        state.adminDraftSavedAt = backup.savedAt;
+      } catch (error) {
+        console.warn(error);
+      }
+      return backup;
+    }
+
+    function clearAdminDraftBackup(planDate = activePlanDate()) {
+      try {
+        localStorage.removeItem(adminDraftStorageKey(planDate));
+      } catch (error) {
+        console.warn(error);
+      }
+      state.adminDraftBackup = null;
+      state.adminDraftSavedAt = "";
+    }
+
+    function loadAdminDraftBackupNotice() {
+      const backup = readAdminDraftBackup();
+      state.adminDraftBackup = backup && !adminDraftBackupsMatch(backup) ? backup : null;
+      state.adminDraftSavedAt = backup?.savedAt || "";
+    }
+
+    function restoreAdminDraftBackup() {
+      const backup = state.adminDraftBackup || readAdminDraftBackup();
+      if (!backup) return;
+      state.adminDraftStops = cloneStops(backup.stops);
+      state.adminDeletedStopIds = [...backup.deletedStopIds];
+      normalizeAdminDraftStops();
+      state.adminDraftBackup = null;
+      state.adminDraftSavedAt = backup.savedAt || "";
+      state.adminMessage = "Unpublished draft restored.";
+      state.adminError = "";
+      state.adminActiveTab = "riders";
+      state.view = "admin";
+      render();
+      loadAdminRouteTiming();
+    }
+
+    function discardAdminDraftBackup() {
+      clearAdminDraftBackup();
+      state.adminMessage = "Unpublished draft backup discarded.";
+      state.adminError = "";
+      render();
+    }
+
+    function adminPublishIssues() {
+      const activeSlugs = new Set(adminDrivers().map((driver) => driver.slug).filter(Boolean));
+      const issues = [];
+      adminStops().forEach((stop, index) => {
+        const name = String(stop.name || "").trim() || `Rider ${index + 1}`;
+        const driverSlug = String(stop.driverSlug || "").trim();
+        if (!String(stop.name || "").trim()) {
+          issues.push({
+            title: "Rider name is missing",
+            detail: "Add a rider name before publishing.",
+          });
+        }
+        if (!driverSlug) {
+          issues.push({
+            title: `${name} is not assigned to a driver`,
+            detail: "Choose a driver before publishing the live plan.",
+          });
+        } else if (!activeSlugs.has(driverSlug)) {
+          issues.push({
+            title: `${name} is assigned to ${adminDriverName(driverSlug)}, but that driver is not active`,
+            detail: "Turn that driver on or move this rider to an active driver.",
+          });
+        }
+      });
+      return issues;
+    }
+
+    function adminPublishIssueMessage(issues = adminPublishIssues()) {
+      if (!issues.length) return "";
+      const suffix = issues.length > 1 ? ` (${issues.length} things need attention.)` : "";
+      return `${issues[0].title}.${suffix} Your draft is saved on this device.`;
+    }
+
+    function adminPublishErrorMessage(error) {
+      const payload = error?.payload || {};
+      const code = payload.error || error?.code || error?.message || "publish_failed";
+      const riderName = payload.riderName || payload.rider_name || "One rider";
+      const driverSlug = payload.driverSlug || payload.driver_slug || "";
+
+      if (code === "invalid_admin_code") {
+        return "Admin login expired or did not match. Your draft is saved on this device.";
+      }
+      if (code === "driver_required") {
+        return `${riderName} is not assigned to a driver. Your draft is saved on this device.`;
+      }
+      if (code === "driver_not_found") {
+        const driverName = driverSlug ? adminDriverName(driverSlug) : "the selected driver";
+        return `${riderName} is assigned to ${driverName}, but that driver is not active for this plan. Your draft is saved on this device.`;
+      }
+      if (code === "rider_name_required") {
+        return "One rider is missing a name. Your draft is saved on this device.";
+      }
+      if (code === "plan_not_found") {
+        return "This Sunday plan could not be found. Your draft is saved on this device.";
+      }
+      return "Could not publish changes. Your draft is saved on this device.";
     }
 
     function adminChangeList() {
@@ -5420,6 +5649,7 @@
         syncRehearsalDrivers();
         if (state.admin) state.admin.people = rehearsalPeople(adminStops());
       }
+      saveAdminDraftBackup("rider-saved");
       state.adminSelectedStopId = null;
       state.adminPersonSeed = null;
       state.adminRiderQuery = "";
@@ -5446,6 +5676,7 @@
         syncRehearsalDrivers();
         if (state.admin) state.admin.people = rehearsalPeople(adminStops());
       }
+      saveAdminDraftBackup("rider-removed");
       state.adminSelectedStopId = null;
       state.adminPersonSeed = null;
       state.adminRiderQuery = "";
@@ -5499,6 +5730,7 @@
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
         state.adminDriverAddOpen = false;
+        loadAdminDraftBackupNotice();
         state.adminMessage = "";
         state.view = "admin";
         closeCodeModal();
@@ -5520,6 +5752,17 @@
 
     async function publishAdminDraft() {
       if (!state.adminCode && !state.adminSession?.access_token) return;
+      state.adminError = "";
+      const publishIssues = adminPublishIssues();
+      saveAdminDraftBackup("before-publish");
+      if (publishIssues.length) {
+        state.adminError = adminPublishIssueMessage(publishIssues);
+        state.adminActiveTab = "changes";
+        state.view = "adminReview";
+        render();
+        return;
+      }
+
       const affectedDriverSlugs = adminAffectedDriverSlugs();
       const notifyDraft = affectedDriverSlugs.length ? adminRouteAlertDraft(affectedDriverSlugs) : null;
 
@@ -5555,6 +5798,7 @@
         state.adminError = "";
         state.view = "admin";
         state.routeTimings = rehearsalRouteTimingMap();
+        clearAdminDraftBackup();
         render();
         return;
       }
@@ -5575,7 +5819,9 @@
         }, adminRpcOptions());
 
         if (!published?.ok) {
-          throw new Error(published?.error || "publish_failed");
+          const error = new Error(published?.error || "publish_failed");
+          error.payload = published || {};
+          throw error;
         }
 
         const publishedDrivers = orderDriversForDisplay(published.drivers || []);
@@ -5603,13 +5849,16 @@
         state.adminNotifyMode = "prompt";
         state.adminNotifyStatus = "idle";
         state.adminMessage = "Route changes published.";
+        clearAdminDraftBackup();
         await loadAdminActivity();
         state.view = "admin";
         state.drivers = orderDriversForDisplay(await rpc("ride_driver_directory", { p_plan_date: activePlanDate() }));
         loadAdminRouteTiming();
       } catch (error) {
-        state.adminError = "Could not publish changes.";
-        console.error(error);
+        saveAdminDraftBackup("publish-failed");
+        state.adminError = adminPublishErrorMessage(error);
+        state.adminActiveTab = "changes";
+        state.view = "adminReview";
       } finally {
         state.adminLoading = false;
         render();
@@ -5777,38 +6026,53 @@
     }
 
     function adminDriverActivationMessage(drivers) {
-      const names = drivers.map((driver) => driver.displayName).filter(Boolean);
-      if (!names.length) return "Driver availability is already up to date.";
-      if (names.length === 1) return `${names[0]} is active for this plan.`;
-      if (names.length === 2) return `${names[0]} and ${names[1]} are active for this plan.`;
-      return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)} are active for this plan.`;
+      const activated = Array.isArray(drivers) ? drivers : drivers?.activated || [];
+      const deactivated = Array.isArray(drivers) ? [] : drivers?.deactivated || [];
+      const activeNames = activated.map((driver) => driver.displayName).filter(Boolean);
+      const inactiveNames = deactivated.map((driver) => driver.displayName).filter(Boolean);
+      if (activeNames.length && inactiveNames.length) return "Driver availability updated.";
+      if (inactiveNames.length === 1) return `${inactiveNames[0]} is off for this plan.`;
+      if (inactiveNames.length === 2) return `${inactiveNames[0]} and ${inactiveNames[1]} are off for this plan.`;
+      if (inactiveNames.length > 2) return `${inactiveNames.slice(0, -1).join(", ")}, and ${inactiveNames.at(-1)} are off for this plan.`;
+      if (!activeNames.length) return "Driver availability is already up to date.";
+      if (activeNames.length === 1) return `${activeNames[0]} is active for this plan.`;
+      if (activeNames.length === 2) return `${activeNames[0]} and ${activeNames[1]} are active for this plan.`;
+      return `${activeNames.slice(0, -1).join(", ")}, and ${activeNames.at(-1)} are active for this plan.`;
+    }
+
+    function adminAvailabilityActiveSlugs(selectedSlugs = []) {
+      const selected = (selectedSlugs || []).map((slug) => String(slug || "").trim()).filter(Boolean);
+      const driversWithStops = adminDrivers()
+        .filter((driver) => adminDriverHasStops(driver.slug))
+        .map((driver) => driver.slug);
+      return Array.from(new Set([...selected, ...driversWithStops]));
     }
 
     function applyAdminDriverActivation(selectedSlugs = []) {
       if (!state.admin) return [];
       const activeSlugs = adminActiveDriverSlugSet();
-      const newSlugs = new Set((selectedSlugs || []).map((slug) => String(slug || "").trim()).filter(Boolean));
-      const allActiveSlugs = new Set([...activeSlugs, ...newSlugs]);
+      const selectedActiveSlugs = new Set(adminAvailabilityActiveSlugs(selectedSlugs));
       const pool = adminDriverPool();
       const nextDrivers = pool
-        .filter((driver) => allActiveSlugs.has(driver.slug))
+        .filter((driver) => selectedActiveSlugs.has(driver.slug))
         .map((driver) => ({ ...driver, active: true }));
-      const activated = pool.filter((driver) => newSlugs.has(driver.slug) && !activeSlugs.has(driver.slug));
+      const activated = pool.filter((driver) => selectedActiveSlugs.has(driver.slug) && !activeSlugs.has(driver.slug));
+      const deactivated = pool.filter((driver) => activeSlugs.has(driver.slug) && !selectedActiveSlugs.has(driver.slug));
 
       state.admin.drivers = orderDriversForDisplay(nextDrivers);
       state.drivers = orderDriversForDisplay(nextDrivers);
       state.admin.driverPool = orderDriversForDisplay(pool.map((driver) => ({
         ...driver,
-        active: allActiveSlugs.has(driver.slug),
+        active: selectedActiveSlugs.has(driver.slug),
       })));
-      return activated;
+      return { activated, deactivated };
     }
 
     async function saveAdminDriverAvailability(selectedSlugs = []) {
       if (isRehearsalMode()) {
         const activated = applyAdminDriverActivation(selectedSlugs);
         state.adminDriverAddOpen = false;
-        state.adminActiveTab = "drivers";
+        state.adminActiveTab = "driver-list";
         state.adminMessage = adminDriverActivationMessage(activated);
         state.adminError = "";
         render();
@@ -5821,10 +6085,7 @@
         return;
       }
 
-      const activeSlugs = Array.from(new Set([
-        ...adminDrivers().map((driver) => driver.slug),
-        ...(selectedSlugs || []),
-      ].map((slug) => String(slug || "").trim()).filter(Boolean)));
+      const activeSlugs = adminAvailabilityActiveSlugs(selectedSlugs);
 
       state.adminLoading = true;
       state.adminError = "";
@@ -5848,7 +6109,7 @@
         state.adminDraftStops = cloneStops(saved.stops);
         state.adminDeletedStopIds = [];
         state.adminDriverAddOpen = false;
-        state.adminActiveTab = "drivers";
+        state.adminActiveTab = "driver-list";
         state.adminMessage = "Driver availability saved.";
         loadAdminRouteTiming();
       } catch (error) {
@@ -6271,17 +6532,21 @@
     }
 
     function adminPublishButton(changed) {
-      return `<button class="primary-action" type="button" data-action="adminPublish" ${changed ? "" : "disabled"}>${state.adminLoading ? "Publishing..." : `Publish route changes${changed ? ` (${changed})` : ""}`}</button>`;
+      const blocked = adminPublishIssues().length > 0;
+      const disabled = changed && !blocked ? "" : "disabled";
+      const label = blocked ? "Fix blockers before publishing" : `Publish route changes${changed ? ` (${changed})` : ""}`;
+      return `<button class="primary-action" type="button" data-action="adminPublish" ${disabled}>${state.adminLoading ? "Publishing..." : label}</button>`;
     }
 
     function adminRouteCard(driver) {
       const stops = adminStopsForDriver(driver.slug);
-      const isOpen = state.adminExpandedDriverSlug === driver.slug;
+      const hasStops = stops.length > 0;
+      const isOpen = hasStops && state.adminExpandedDriverSlug === driver.slug;
       const avatarClass = String(driver.initials || "").length > 2 ? "avatar small three-letter" : "avatar small";
       const header = adminRouteHeaderSummary(driver, stops);
       return `
         <section class="admin-route-card ${isOpen ? "is-open" : ""}">
-          <button class="admin-driver-toggle" type="button" data-admin-driver-toggle="${escapeHtml(driver.slug)}" aria-expanded="${isOpen ? "true" : "false"}">
+          <button class="admin-driver-toggle" type="button" ${hasStops ? `data-admin-driver-toggle="${escapeHtml(driver.slug)}"` : "disabled"} aria-expanded="${isOpen ? "true" : "false"}">
             <span class="${avatarClass}">${escapeHtml(driver.initials)}</span>
             <span class="admin-route-copy">
               <strong>${escapeHtml(driver.displayName)}</strong>
@@ -6290,7 +6555,7 @@
             </span>
             <span class="admin-route-toggle-copy">
               <span class="pill">${escapeHtml(pickupCountLabel(stops.length))}</span>
-              <span class="admin-route-arrow" aria-hidden="true">&rsaquo;</span>
+              ${hasStops ? `<span class="admin-route-arrow" aria-hidden="true">&rsaquo;</span>` : ""}
             </span>
           </button>
           ${adminRouteWarningsHtml(driver, stops, { isOpen })}
@@ -6361,7 +6626,7 @@
             </header>
             <section class="admin-menu-list" aria-label="Admin tools">
               ${adminMenuRow("people", "People Bank", "Saved riders and details", "user")}
-              ${adminMenuRow("drivers", "Driver list", "Availability and add driver", "users")}
+              ${adminMenuRow("driver-list", "Driver list", "Availability and add driver", "users")}
               ${adminMenuRow("settings", "Settings", "Event setup", "sliders")}
               <button class="admin-menu-row" type="button" data-action="adminSignOut">
                 <span class="admin-menu-row-icon" aria-hidden="true">${peopleDetailIcon("log-out")}</span>
@@ -6377,7 +6642,7 @@
     }
 
     function openAdminMenuPage(page) {
-      const nextTab = ["people", "drivers", "settings"].includes(page) ? page : "riders";
+      const nextTab = ["people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
       state.adminActiveTab = nextTab;
       state.adminMenuOpen = false;
       state.adminError = "";
@@ -6388,7 +6653,7 @@
       const tab = state.adminActiveTab || "riders";
       if (tab === "routes") return "drivers";
       if (tab === "people") return "people";
-      return ["drivers", "riders", "changes", "settings"].includes(tab) ? tab : "riders";
+      return ["drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
     }
 
     function adminStatButton(tab, count, label, icon, extraClass = "") {
@@ -6467,15 +6732,17 @@
 
     function adminDriverAvailabilityRow(driver) {
       const active = Boolean(driver.active);
+      const locked = active && adminDriverHasStops(driver.slug);
       const avatarClass = String(driver.initials || "").length > 2 ? "avatar small three-letter" : "avatar small";
       const status = active ? escapeHtml(pickupCountLabel(driverPickupCountValue(driver))) : "Inactive";
+      const stateCopy = active && locked ? "Move pickups before turning off" : active ? "Active for this plan" : "Saved driver";
       return `
         <label class="admin-driver-option">
-          <input type="checkbox" name="driverSlug" value="${escapeHtml(driver.slug)}" ${active ? "checked disabled" : "data-admin-driver-activate"}>
+          <input type="checkbox" name="driverSlug" value="${escapeHtml(driver.slug)}" ${active ? `checked${locked ? " disabled" : ""}` : "data-admin-driver-activate"}>
           <span class="${avatarClass}">${escapeHtml(driver.initials || "?")}</span>
           <span class="admin-driver-option-copy">
             <strong>${escapeHtml(driver.displayName)}</strong>
-            <span>${active ? "Active for this plan" : "Saved driver"}</span>
+            <span>${escapeHtml(stateCopy)}</span>
           </span>
           <span class="pill ${active ? "" : "gray"}">${status}</span>
         </label>`;
@@ -6535,14 +6802,14 @@
     }
 
     function adminRoutesView(drivers) {
+      const routedDrivers = drivers.filter((driver) => adminStopsForDriver(driver.slug).length);
       return `
-        ${adminDriverAvailabilityView()}
         <button class="secondary-action admin-reset-action" type="button" data-action="adminReset">
           <span class="admin-control-action-icon" data-detail-icon="calendar">${peopleDetailIcon("calendar")}</span>
           <span>Start New Sunday</span>
         </button>
         <section class="admin-route-list" aria-label="Driver routes">
-          ${drivers.map(adminRouteCard).join("")}
+          ${routedDrivers.map(adminRouteCard).join("")}
         </section>`;
     }
 
@@ -6720,6 +6987,42 @@
         </section>`;
     }
 
+    function adminPublishIssuesHtml() {
+      const issues = adminPublishIssues();
+      if (!issues.length) return "";
+      return `
+        <section class="admin-message admin-publish-blockers">
+          <strong>Cannot publish yet</strong>
+          <span>Your draft is saved on this device before publishing.</span>
+          <ul class="admin-publish-issue-list">
+            ${issues.map((issue) => `
+              <li>
+                <strong>${escapeHtml(issue.title)}</strong>
+                <span>${escapeHtml(issue.detail)}</span>
+              </li>
+            `).join("")}
+          </ul>
+        </section>`;
+    }
+
+    function adminDraftRestoreHtml() {
+      const backup = state.adminDraftBackup;
+      if (!backup) return "";
+      const stopCount = backup.stops?.length || 0;
+      const deletedCount = backup.deletedStopIds?.length || 0;
+      const draftCount = stopCount + deletedCount;
+      const countCopy = draftCount === 1 ? "1 saved change" : `${draftCount} saved changes`;
+      return `
+        <section class="admin-message admin-draft-restore">
+          <strong>Unpublished draft saved</strong>
+          <span>${escapeHtml(countCopy)} are available for this plan. Restore it before starting over.</span>
+          <div class="admin-draft-actions">
+            <button class="secondary-action" type="button" data-action="adminDraftRestore">Restore draft</button>
+            <button class="secondary-action" type="button" data-action="adminDraftDiscard">Discard</button>
+          </div>
+        </section>`;
+    }
+
     function adminReviewView() {
       const changed = adminChangedCount();
       const changes = adminChangeList();
@@ -6740,6 +7043,8 @@
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+          ${adminDraftRestoreHtml()}
+          ${adminPublishIssuesHtml()}
 
           <section class="admin-change-list" aria-label="Unpublished changes">
             ${changes.length ? changes.map(adminChangeCard).join("") : `<section class="empty-card"><p>No unpublished changes.</p></section>`}
@@ -7143,9 +7448,11 @@
           ? adminRoutesView(drivers)
           : activeTab === "changes"
             ? adminChangesView(changed)
-            : activeTab === "settings"
-              ? adminSettingsView()
-              : adminSundayRidersView();
+            : activeTab === "driver-list"
+              ? adminDriverAvailabilityView()
+              : activeTab === "settings"
+                ? adminSettingsView()
+                : adminSundayRidersView();
 
       return `
         <div class="stack admin-control-screen">
@@ -7170,6 +7477,7 @@
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+          ${adminDraftRestoreHtml()}
           ${adminNotifyPromptHtml()}
           ${activeView}
           ${activeTab === "changes" ? "" : adminReviewBar(changed)}
@@ -8044,6 +8352,8 @@
       }
       if (action === "adminNew") openAdminEditor("new");
       if (action === "adminPublish") publishAdminDraft();
+      if (action === "adminDraftRestore") restoreAdminDraftBackup();
+      if (action === "adminDraftDiscard") discardAdminDraftBackup();
 
       const adminEditButton = event.target.closest("[data-admin-edit]");
       if (adminEditButton) openAdminEditor(adminEditButton.dataset.adminEdit);

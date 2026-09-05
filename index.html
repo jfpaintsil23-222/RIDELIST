@@ -3315,13 +3315,6 @@
       font-weight: 800;
     }
 
-    .admin-profile-copy span {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.2;
-      font-weight: 650;
-    }
-
     .modal-close-button {
       position: absolute;
       top: 16px;
@@ -3498,8 +3491,8 @@
     const HOME_COVER_MAX_BYTES = 5 * 1024 * 1024;
     const HOME_COVER_TYPES = ["image/png", "image/jpeg", "image/webp"];
     const ADMIN_PROFILES = [
-      { slug: "joojo", label: "Joojo", initials: "JJ", helper: "Main admin" },
-      { slug: "faith", label: "Faith", initials: "FA", helper: "Ride admin" },
+      { slug: "joojo", label: "Joojo", initials: "JJ" },
+      { slug: "faith", label: "Faith", initials: "FA" },
     ];
     const WEATHER_LOCATION = {
       latitude: "29.7604",
@@ -3653,7 +3646,6 @@
           <span class="admin-profile-avatar" aria-hidden="true">${escapeHtml(profile.initials)}</span>
           <span class="admin-profile-copy">
             <strong>${escapeHtml(profile.label)}</strong>
-            <span>${escapeHtml(profile.helper)}</span>
           </span>
         </button>`).join("");
     }

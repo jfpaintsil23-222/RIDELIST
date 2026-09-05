@@ -498,11 +498,14 @@ test("admin profile login requests a backend session for the selected admin", as
 
 test("admin profile picker labels Joojo correctly", async () => {
   const app = await loadApp();
+  const html = app.adminProfileOptionsHtml();
 
   assert.equal(app.adminProfileBySlug("joojo")?.label, "Joojo");
   assert.equal(app.adminProfileBySlug("jojo")?.label, "Joojo");
-  assert.match(app.adminProfileOptionsHtml(), /Joojo/);
-  assert.doesNotMatch(app.adminProfileOptionsHtml(), />Jojo</);
+  assert.match(html, /Joojo/);
+  assert.match(html, /Faith/);
+  assert.doesNotMatch(html, />Jojo</);
+  assert.doesNotMatch(html, /Main admin|Ride admin/);
 });
 
 test("joojo profile keeps legacy admin passcode fallback if profile RPC is missing", async () => {

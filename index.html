@@ -2532,9 +2532,22 @@
       font-weight: 650;
     }
 
+    .admin-form-card input:disabled {
+      color: var(--muted);
+      background: #f4f4f5;
+      cursor: not-allowed;
+    }
+
     .admin-form-card textarea {
       min-height: 82px;
       resize: vertical;
+    }
+
+    .admin-upload-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 650;
     }
 
     .admin-person-suggestions {
@@ -3245,6 +3258,70 @@
       font-weight: 850;
     }
 
+    .admin-profile-choices {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .admin-profile-choices[hidden] {
+      display: none;
+    }
+
+    .admin-profile-option {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: #050505;
+      background: #ffffff;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .admin-profile-option[aria-pressed="true"] {
+      border-color: #050505;
+      box-shadow: inset 0 0 0 1px #050505;
+    }
+
+    .admin-profile-avatar,
+    .admin-activity-badge {
+      display: inline-grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      color: #ffffff;
+      background: #050505;
+      font-size: 14px;
+      line-height: 1;
+      font-weight: 850;
+    }
+
+    .admin-profile-copy {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .admin-profile-copy strong {
+      color: #050505;
+      font-size: 15px;
+      line-height: 1.15;
+      font-weight: 800;
+    }
+
+    .admin-profile-copy span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+      font-weight: 650;
+    }
+
     .modal-close-button {
       position: absolute;
       top: 16px;
@@ -3395,6 +3472,7 @@
             <h2 id="modalTitle">Passcode</h2>
             <p id="modalDriver"></p>
           </div>
+          <div id="adminProfileChoices" class="admin-profile-choices" hidden></div>
           <label class="modal-passcode-field">
             <span id="codeLabel" class="modal-field-label">Passcode</span>
             <input id="driverCode" type="password" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="Passcode" aria-label="Passcode">
@@ -3415,6 +3493,14 @@
     const FALLBACK_PLAN_DATE = "2026-08-30";
     const ADMIN_SESSION_KEY = "ride-admin-session";
     const ADMIN_DRAFT_BACKUP_PREFIX = "ride-admin-draft";
+    const HOME_ASSETS_BUCKET = "ride-app-assets";
+    const HOME_COVER_FOLDER = "home-covers";
+    const HOME_COVER_MAX_BYTES = 5 * 1024 * 1024;
+    const HOME_COVER_TYPES = ["image/png", "image/jpeg", "image/webp"];
+    const ADMIN_PROFILES = [
+      { slug: "joojo", label: "Joojo", initials: "JJ", helper: "Main admin" },
+      { slug: "faith", label: "Faith", initials: "FA", helper: "Ride admin" },
+    ];
     const WEATHER_LOCATION = {
       latitude: "29.7604",
       longitude: "-95.3698",
@@ -3447,6 +3533,7 @@
       planDate: FALLBACK_PLAN_DATE,
       plan: null,
       destination: null,
+      appSettings: null,
       drivers: [],
       selectedDriver: null,
       route: null,
@@ -3457,14 +3544,19 @@
       pushPublicKey: "",
       codeMode: "driver",
       adminLoginMode: "code",
+      selectedAdminProfileSlug: "joojo",
+      adminProfileLogin: null,
       adminSession: readAdminSession(),
       adminCode: "",
       admin: null,
       adminActivity: [],
+      adminActivityFilter: "all",
       adminDraftStops: [],
       adminDeletedStopIds: [],
       adminDraftBackup: null,
       adminDraftSavedAt: "",
+      adminServerDraftStatus: "idle",
+      adminPublishFailed: false,
       adminSelectedStopId: null,
       adminPersonSeed: null,
       adminRiderQuery: "",
@@ -3519,6 +3611,7 @@
     const codeModal = document.querySelector("#codeModal");
     const codeForm = document.querySelector("#codeForm");
     const driverCode = document.querySelector("#driverCode");
+    const adminProfileChoices = document.querySelector("#adminProfileChoices");
     const modalKicker = document.querySelector("#modalKicker");
     const modalClose = document.querySelector("#modalClose");
     const modalDriver = document.querySelector("#modalDriver");
@@ -3533,6 +3626,50 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
+
+    function normalizeAdminProfileSlug(slug) {
+      const normalized = String(slug || "").trim().toLowerCase();
+      return normalized === "jojo" ? "joojo" : normalized;
+    }
+
+    function adminProfileBySlug(slug) {
+      const normalized = normalizeAdminProfileSlug(slug);
+      return ADMIN_PROFILES.find((profile) => profile.slug === normalized) || ADMIN_PROFILES[0];
+    }
+
+    function adminProfileActor(profile) {
+      return {
+        type: "profile",
+        profileSlug: profile.slug,
+        label: profile.label,
+        initials: profile.initials,
+      };
+    }
+
+    function adminProfileOptionsHtml() {
+      const selected = adminProfileBySlug(state.selectedAdminProfileSlug).slug;
+      return ADMIN_PROFILES.map((profile) => `
+        <button class="admin-profile-option" type="button" data-admin-profile="${escapeHtml(profile.slug)}" aria-pressed="${profile.slug === selected ? "true" : "false"}">
+          <span class="admin-profile-avatar" aria-hidden="true">${escapeHtml(profile.initials)}</span>
+          <span class="admin-profile-copy">
+            <strong>${escapeHtml(profile.label)}</strong>
+            <span>${escapeHtml(profile.helper)}</span>
+          </span>
+        </button>`).join("");
+    }
+
+    function renderAdminProfileChoices() {
+      if (!adminProfileChoices) return;
+      state.selectedAdminProfileSlug = adminProfileBySlug(state.selectedAdminProfileSlug).slug;
+      adminProfileChoices.innerHTML = adminProfileOptionsHtml();
+      adminProfileChoices.hidden = false;
+    }
+
+    function hideAdminProfileChoices() {
+      if (!adminProfileChoices) return;
+      adminProfileChoices.hidden = true;
+      adminProfileChoices.innerHTML = "";
+    }
 
     const encodeAddress = (address) => encodeURIComponent(address || "");
     const googleMaps = (address) => "https://www.google.com/maps/search/?api=1&query=" + encodeAddress(address);
@@ -3550,6 +3687,79 @@
 
     function adminRpcOptions() {
       return state.adminSession?.access_token ? { accessToken: state.adminSession.access_token } : {};
+    }
+
+    function signedInAdminCanUploadHomeCover() {
+      return Boolean(state.adminSession?.access_token && state.admin?.security?.actor?.type === "user");
+    }
+
+    function storageObjectUrl(bucket, path) {
+      return `${SUPABASE_URL}/storage/v1/object/${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`;
+    }
+
+    function storagePublicUrl(bucket, path) {
+      return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path.split("/").map(encodeURIComponent).join("/")}`;
+    }
+
+    function homeCoverExtension(file) {
+      const type = String(file?.type || "").toLowerCase();
+      if (type === "image/png") return "png";
+      if (type === "image/webp") return "webp";
+      return "jpg";
+    }
+
+    function homeCoverStoragePath(file) {
+      const rawName = String(file?.name || "home-cover").toLowerCase();
+      const cleanName = rawName
+        .replace(/\.[a-z0-9]{2,5}$/i, "")
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 70) || "home-cover";
+      return `${HOME_COVER_FOLDER}/${Date.now()}-${cleanName}.${homeCoverExtension(file)}`;
+    }
+
+    function selectedHomeCoverFile(form) {
+      const input = form?.querySelector?.("[data-admin-home-cover-file]");
+      const file = input?.files?.[0] || null;
+      if (!file || (!file.name && !file.size)) return null;
+      return file;
+    }
+
+    async function uploadAdminHomeCover(file) {
+      if (!signedInAdminCanUploadHomeCover()) {
+        throw new Error("signed_in_admin_required");
+      }
+
+      const fileType = String(file?.type || "").toLowerCase();
+      const fileSize = Number(file?.size || 0);
+      if (!HOME_COVER_TYPES.includes(fileType)) {
+        throw new Error("home_cover_file_type");
+      }
+      if (!Number.isFinite(fileSize) || fileSize <= 0) {
+        throw new Error("home_cover_file_empty");
+      }
+      if (fileSize > HOME_COVER_MAX_BYTES) {
+        throw new Error("home_cover_file_too_large");
+      }
+
+      const path = homeCoverStoragePath(file);
+      const response = await fetch(storageObjectUrl(HOME_ASSETS_BUCKET, path), {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "authorization": "Bearer " + state.adminSession.access_token,
+          "content-type": fileType,
+        },
+        body: file,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || payload?.message || "home_cover_upload_failed");
+      }
+      return {
+        path,
+        publicUrl: storagePublicUrl(HOME_ASSETS_BUCKET, path),
+      };
     }
 
     async function rpc(name, body, options = {}) {
@@ -3800,6 +4010,7 @@
       state.adminSession = null;
       state.admin = null;
       state.adminCode = "";
+      state.adminProfileLogin = null;
       state.adminMenuOpen = false;
       state.adminMessage = "";
       state.view = "home";
@@ -3808,6 +4019,60 @@
 
     async function loadAdminSecurityContext(adminCode = state.adminCode) {
       return rpc("ride_admin_security_context", { p_admin_code: adminCode }, adminRpcOptions());
+    }
+
+    function missingAdminProfileRpc(error) {
+      return error?.code === "PGRST202"
+        || /ride_admin_profile_login|schema cache|could not find the function/i.test([
+          error?.message,
+          error?.details,
+          error?.hint,
+          error?.raw,
+        ].filter(Boolean).join(" "));
+    }
+
+    function mergedAdminSecurity(snapshotSecurity, loadedSecurity) {
+      const security = snapshotSecurity || loadedSecurity || {};
+      const profileActor = state.adminProfileLogin?.actor;
+      if (profileActor && (!security.actor || security.actor.type === "code")) {
+        return {
+          ...security,
+          actor: profileActor,
+        };
+      }
+      return security;
+    }
+
+    async function loginAdminProfile(profileSlug, password) {
+      const profile = adminProfileBySlug(profileSlug);
+      try {
+        const login = await rpc("ride_admin_profile_login", {
+          p_profile_slug: profile.slug,
+          p_password: password,
+        }, adminRpcOptions());
+
+        if (!login?.ok || !login.adminCode) {
+          const error = new Error(login?.error || "invalid_admin_code");
+          error.payload = login || {};
+          throw error;
+        }
+
+        state.adminProfileLogin = {
+          ...login,
+          actor: login.actor || adminProfileActor(profile),
+        };
+        return login.adminCode;
+      } catch (error) {
+        if (profile.slug === "joojo" && missingAdminProfileRpc(error)) {
+          state.adminProfileLogin = {
+            ok: true,
+            adminCode: password,
+            actor: adminProfileActor(profile),
+          };
+          return password;
+        }
+        throw error;
+      }
     }
 
     async function loadAdminActivity() {
@@ -3847,6 +4112,7 @@
       state.planDate = context.plan?.date || FALLBACK_PLAN_DATE;
       state.plan = context.plan || null;
       state.destination = context.destination || null;
+      state.appSettings = normalizeAppSettings(context.appSettings || {});
     }
 
     async function loadDrivers() {
@@ -3911,12 +4177,56 @@
       ridersLabel: "event riders",
     };
 
+    function normalizeAppSettings(settings = {}) {
+      return {
+        homeTitle: String(settings?.homeTitle ?? settings?.home_title ?? "").trim(),
+        homeSubtitle: String(settings?.homeSubtitle ?? settings?.home_subtitle ?? "").trim(),
+        homeCoverUrl: String(settings?.homeCoverUrl ?? settings?.home_cover_url ?? "").trim(),
+        homeCoverAlt: String(settings?.homeCoverAlt ?? settings?.home_cover_alt ?? "").trim(),
+      };
+    }
+
+    function weekdayLabel(dateValue = activePlanDate()) {
+      const date = new Date(`${dateValue || FALLBACK_PLAN_DATE}T12:00:00`);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toLocaleDateString(undefined, { weekday: "long" });
+    }
+
+    function possessiveDay(day) {
+      const value = String(day || "").trim();
+      if (!value) return "Sunday's";
+      return `${value}${/s$/i.test(value) ? "'" : "'s"}`;
+    }
+
+    function currentServiceDay() {
+      return state.plan?.serviceDay || weekdayLabel() || RIDE_PLAN_BRANDING.summaryDay;
+    }
+
+    function currentPlanTitle() {
+      return state.plan?.title || RIDE_PLAN_BRANDING.title;
+    }
+
     function activeRideBranding() {
-      return isRehearsalMode() ? REHEARSAL_BRANDING : RIDE_PLAN_BRANDING;
+      if (isRehearsalMode()) return REHEARSAL_BRANDING;
+      const settings = normalizeAppSettings(state.appSettings || {});
+      const serviceDay = currentServiceDay();
+      const title = settings.homeTitle || currentPlanTitle();
+      const customHomeTitle = Boolean(settings.homeTitle || state.plan?.title);
+      return {
+        ...RIDE_PLAN_BRANDING,
+        title,
+        homeSubtitle: settings.homeSubtitle,
+        homeAriaLabel: customHomeTitle ? `${title} dashboard` : RIDE_PLAN_BRANDING.homeAriaLabel,
+        adminSubtitle: `Build this ${possessiveDay(serviceDay)} list`,
+        coverSrc: settings.homeCoverUrl || RIDE_PLAN_BRANDING.coverSrc,
+        coverAlt: settings.homeCoverAlt || RIDE_PLAN_BRANDING.coverAlt,
+        summaryDay: serviceDay,
+        ridersLabel: /^sunday$/i.test(serviceDay) ? "Sunday riders" : "event riders",
+      };
     }
 
     function ridePlanTitle() {
-      return activeRideBranding().title;
+      return isRehearsalMode() ? REHEARSAL_BRANDING.title : currentPlanTitle();
     }
 
     function ridePlanAdminSubtitle() {
@@ -4465,6 +4775,7 @@
       state.planDate = REHEARSAL_PLAN.date;
       state.plan = { ...REHEARSAL_PLAN };
       state.destination = { ...REHEARSAL_DESTINATION };
+      state.appSettings = null;
       state.drivers = drivers;
       state.admin = {
         ok: true,
@@ -4950,22 +5261,42 @@
         === JSON.stringify(adminDraftSnapshot());
     }
 
+    function normalizeAdminDraftBackup(raw, source = "local", planDate = activePlanDate()) {
+      if (!raw || !Array.isArray(raw.stops)) return null;
+      const expectedPlanDate = String(planDate || FALLBACK_PLAN_DATE);
+      const rawPlanDate = String(raw.planDate || raw.plan_date || expectedPlanDate);
+      if (planDate && rawPlanDate !== expectedPlanDate) return null;
+      const deletedStopIds = raw.deletedStopIds || raw.deleted_stop_ids || [];
+      return {
+        version: 1,
+        source: String(raw.source || source),
+        planDate: rawPlanDate,
+        savedAt: String(raw.savedAt || raw.saved_at || ""),
+        reason: String(raw.reason || ""),
+        stops: cloneStops(raw.stops),
+        deletedStopIds: Array.isArray(deletedStopIds)
+          ? deletedStopIds.map((id) => String(id || "").trim()).filter(Boolean)
+          : [],
+      };
+    }
+
+    function adminDraftTimestamp(backup) {
+      const timestamp = Date.parse(backup?.savedAt || "");
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    }
+
+    function newestAdminDraft(localDraft, serverDraft) {
+      return [localDraft, serverDraft]
+        .filter(Boolean)
+        .sort((a, b) => adminDraftTimestamp(a) - adminDraftTimestamp(b))
+        .at(-1) || null;
+    }
+
     function readAdminDraftBackup(planDate = activePlanDate()) {
       try {
         const raw = localStorage.getItem(adminDraftStorageKey(planDate));
         if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (!parsed || parsed.planDate !== String(planDate || FALLBACK_PLAN_DATE) || !Array.isArray(parsed.stops)) return null;
-        return {
-          version: 1,
-          planDate: parsed.planDate,
-          savedAt: parsed.savedAt || "",
-          reason: parsed.reason || "",
-          stops: cloneStops(parsed.stops),
-          deletedStopIds: Array.isArray(parsed.deletedStopIds)
-            ? parsed.deletedStopIds.map((id) => String(id || "").trim()).filter(Boolean)
-            : [],
-        };
+        return normalizeAdminDraftBackup(JSON.parse(raw), "local", planDate);
       } catch (error) {
         console.warn(error);
         return null;
@@ -4977,6 +5308,7 @@
       const planDate = activePlanDate();
       const backup = {
         version: 1,
+        source: "local",
         planDate,
         savedAt: new Date().toISOString(),
         reason,
@@ -4985,11 +5317,89 @@
       };
       try {
         localStorage.setItem(adminDraftStorageKey(planDate), JSON.stringify(backup));
+        state.adminDraftBackup = backup;
         state.adminDraftSavedAt = backup.savedAt;
       } catch (error) {
         console.warn(error);
       }
       return backup;
+    }
+
+    function canUseAdminServerDrafts() {
+      return Boolean(!isRehearsalMode() && state.admin && (state.adminCode || state.adminSession?.access_token));
+    }
+
+    async function saveAdminServerDraft(reason = "draft", backup = null) {
+      if (!canUseAdminServerDrafts()) return null;
+      const draft = normalizeAdminDraftBackup(
+        backup || state.adminDraftBackup || readAdminDraftBackup() || saveAdminDraftBackup(reason),
+        "local",
+        activePlanDate()
+      );
+      if (!draft) return null;
+
+      try {
+        const saved = await rpc("ride_admin_save_draft", {
+          p_admin_code: state.adminCode,
+          p_plan_date: activePlanDate(),
+          p_draft: {
+            version: 1,
+            reason,
+            stops: cloneStops(draft.stops),
+            deletedStopIds: [...(draft.deletedStopIds || [])],
+          },
+        }, adminRpcOptions());
+        if (!saved?.ok) throw new Error(saved?.error || "draft_save_failed");
+        const serverDraft = normalizeAdminDraftBackup(saved.draft, "server", activePlanDate());
+        if (serverDraft) {
+          state.adminDraftBackup = serverDraft;
+          state.adminDraftSavedAt = serverDraft.savedAt || state.adminDraftSavedAt;
+        }
+        state.adminServerDraftStatus = "saved";
+        return serverDraft;
+      } catch {
+        state.adminServerDraftStatus = "error";
+        return null;
+      }
+    }
+
+    async function loadAdminServerDraftNotice() {
+      if (!canUseAdminServerDrafts()) return null;
+      try {
+        const result = await rpc("ride_admin_get_draft", {
+          p_admin_code: state.adminCode,
+          p_plan_date: activePlanDate(),
+        }, adminRpcOptions());
+        if (!result?.ok) throw new Error(result?.error || "draft_load_failed");
+        const localDraft = state.adminDraftBackup || readAdminDraftBackup();
+        const serverDraft = normalizeAdminDraftBackup(result.draft, "server", activePlanDate());
+        const newestDraft = newestAdminDraft(localDraft, serverDraft);
+        state.adminDraftBackup = newestDraft && !adminDraftBackupsMatch(newestDraft) ? newestDraft : null;
+        state.adminDraftSavedAt = newestDraft?.savedAt || localDraft?.savedAt || serverDraft?.savedAt || "";
+        state.adminServerDraftStatus = serverDraft ? "loaded" : "empty";
+        return newestDraft;
+      } catch (error) {
+        console.warn(error);
+        state.adminServerDraftStatus = "error";
+        return null;
+      }
+    }
+
+    async function clearAdminServerDraft(planDate = activePlanDate()) {
+      if (!canUseAdminServerDrafts()) return null;
+      try {
+        const result = await rpc("ride_admin_clear_draft", {
+          p_admin_code: state.adminCode,
+          p_plan_date: planDate,
+        }, adminRpcOptions());
+        if (!result?.ok) throw new Error(result?.error || "draft_clear_failed");
+        state.adminServerDraftStatus = "cleared";
+        return result;
+      } catch (error) {
+        console.warn(error);
+        state.adminServerDraftStatus = "error";
+        return null;
+      }
     }
 
     function clearAdminDraftBackup(planDate = activePlanDate()) {
@@ -5000,6 +5410,8 @@
       }
       state.adminDraftBackup = null;
       state.adminDraftSavedAt = "";
+      state.adminServerDraftStatus = "idle";
+      state.adminPublishFailed = false;
     }
 
     function loadAdminDraftBackupNotice() {
@@ -5018,6 +5430,7 @@
       state.adminDraftSavedAt = backup.savedAt || "";
       state.adminMessage = "Unpublished draft restored.";
       state.adminError = "";
+      state.adminPublishFailed = false;
       state.adminActiveTab = "riders";
       state.view = "admin";
       render();
@@ -5028,6 +5441,7 @@
       clearAdminDraftBackup();
       state.adminMessage = "Unpublished draft backup discarded.";
       state.adminError = "";
+      state.adminPublishFailed = false;
       render();
     }
 
@@ -5058,6 +5472,60 @@
       return issues;
     }
 
+    function adminPublishStopsPayload() {
+      return adminStops().map((stop) => ({
+        ...stop,
+        id: String(stop.id || "").startsWith("temp-") ? null : stop.id,
+      }));
+    }
+
+    function normalizeAdminServerPublishIssue(issue = {}) {
+      const code = String(issue.error || issue.code || "");
+      const riderName = String(issue.riderName || issue.rider_name || "One rider");
+      const driverSlug = String(issue.driverSlug || issue.driver_slug || "");
+      if (code === "driver_required") {
+        return {
+          title: `${riderName} is not assigned to a driver`,
+          detail: "Choose a driver before publishing the live plan.",
+        };
+      }
+      if (code === "driver_not_found") {
+        return {
+          title: issue.title || `${riderName} is assigned to ${adminDriverName(driverSlug)}, but that driver is not active`,
+          detail: "Turn that driver on or move this rider to an active driver.",
+        };
+      }
+      if (code === "rider_name_required") {
+        return {
+          title: "Rider name is missing",
+          detail: "Add a rider name before publishing.",
+        };
+      }
+      return {
+        title: String(issue.title || "One rider needs attention before publishing"),
+        detail: String(issue.detail || "Review this rider before publishing the live plan."),
+      };
+    }
+
+    async function dryRunAdminPublish(stopsPayload = adminPublishStopsPayload()) {
+      const dryRun = await rpc("ride_admin_publish_plan_dry_run", {
+        p_admin_code: state.adminCode,
+        p_plan_date: activePlanDate(),
+        p_stops: stopsPayload,
+        p_deleted_stop_ids: state.adminDeletedStopIds,
+      }, adminRpcOptions());
+
+      if (!dryRun?.ok) {
+        const error = new Error(dryRun?.error || "publish_dry_run_failed");
+        error.payload = dryRun || {};
+        throw error;
+      }
+
+      return Array.isArray(dryRun.issues)
+        ? dryRun.issues.map(normalizeAdminServerPublishIssue)
+        : [];
+    }
+
     function adminPublishIssueMessage(issues = adminPublishIssues()) {
       if (!issues.length) return "";
       const suffix = issues.length > 1 ? ` (${issues.length} things need attention.)` : "";
@@ -5086,7 +5554,13 @@
       if (code === "plan_not_found") {
         return "This Sunday plan could not be found. Your draft is saved on this device.";
       }
-      return "Could not publish changes. Your draft is saved on this device.";
+      if (code === "PGRST202" || /schema cache|could not find the function/i.test(error?.message || "")) {
+        return "App backend needs an update before publishing. Your draft is saved on this device. Nothing was lost.";
+      }
+      if (/failed to fetch|network|load failed/i.test(error?.message || "")) {
+        return "Could not reach Supabase. Your draft is saved on this device. Nothing was lost.";
+      }
+      return "Could not publish right now. Your draft is saved on this device. Nothing was lost.";
     }
 
     function adminChangeList() {
@@ -5649,7 +6123,8 @@
         syncRehearsalDrivers();
         if (state.admin) state.admin.people = rehearsalPeople(adminStops());
       }
-      saveAdminDraftBackup("rider-saved");
+      const backup = saveAdminDraftBackup("rider-saved");
+      void saveAdminServerDraft("rider-saved", backup);
       state.adminSelectedStopId = null;
       state.adminPersonSeed = null;
       state.adminRiderQuery = "";
@@ -5658,6 +6133,7 @@
       state.adminMessage = `${stop.name} is ready to publish.`;
       state.adminError = "";
       state.adminActiveTab = "riders";
+      state.adminPublishFailed = false;
       state.view = "admin";
       render();
       loadAdminRouteTiming();
@@ -5676,7 +6152,8 @@
         syncRehearsalDrivers();
         if (state.admin) state.admin.people = rehearsalPeople(adminStops());
       }
-      saveAdminDraftBackup("rider-removed");
+      const backup = saveAdminDraftBackup("rider-removed");
+      void saveAdminServerDraft("rider-removed", backup);
       state.adminSelectedStopId = null;
       state.adminPersonSeed = null;
       state.adminRiderQuery = "";
@@ -5685,6 +6162,7 @@
       state.adminMessage = `${stop.name} will be removed when you publish.`;
       state.adminError = "";
       state.adminActiveTab = "riders";
+      state.adminPublishFailed = false;
       state.view = "admin";
       render();
       loadAdminRouteTiming();
@@ -5711,11 +6189,12 @@
         state.planDate = snapshot.plan?.date || activePlanDate();
         state.plan = snapshot.plan || state.plan;
         state.destination = snapshot.destination || state.destination;
+        state.appSettings = normalizeAppSettings(snapshot.appSettings || state.appSettings || {});
         state.admin = {
           ...snapshot,
           drivers,
           driverPool: orderDriversForDisplay(snapshot.driverPool || snapshot.allDrivers || drivers),
-          security: snapshot.security || security,
+          security: mergedAdminSecurity(snapshot.security, security),
         };
         await loadAdminActivity();
         state.adminDraftStops = cloneStops(snapshot.stops);
@@ -5730,7 +6209,9 @@
         state.adminPeopleSearch = "";
         state.adminExpandedDriverSlug = "";
         state.adminDriverAddOpen = false;
+        state.adminPublishFailed = false;
         loadAdminDraftBackupNotice();
+        await loadAdminServerDraftNotice();
         state.adminMessage = "";
         state.view = "admin";
         closeCodeModal();
@@ -5753,8 +6234,10 @@
     async function publishAdminDraft() {
       if (!state.adminCode && !state.adminSession?.access_token) return;
       state.adminError = "";
+      state.adminPublishFailed = false;
       const publishIssues = adminPublishIssues();
-      saveAdminDraftBackup("before-publish");
+      const beforePublishBackup = saveAdminDraftBackup("before-publish");
+      await saveAdminServerDraft("before-publish", beforePublishBackup);
       if (publishIssues.length) {
         state.adminError = adminPublishIssueMessage(publishIssues);
         state.adminActiveTab = "changes";
@@ -5796,9 +6279,11 @@
         state.adminNotifyStatus = "idle";
         state.adminMessage = "Rehearsal route published locally. No Supabase records changed.";
         state.adminError = "";
+        state.adminPublishFailed = false;
         state.view = "admin";
         state.routeTimings = rehearsalRouteTimingMap();
         clearAdminDraftBackup();
+        await clearAdminServerDraft();
         render();
         return;
       }
@@ -5808,13 +6293,20 @@
       render();
 
       try {
+        const stopsPayload = adminPublishStopsPayload();
+        const backendIssues = await dryRunAdminPublish(stopsPayload);
+        if (backendIssues.length) {
+          state.adminError = adminPublishIssueMessage(backendIssues);
+          state.adminPublishFailed = true;
+          state.adminActiveTab = "changes";
+          state.view = "adminReview";
+          return;
+        }
+
         const published = await rpc("ride_admin_publish_plan", {
           p_admin_code: state.adminCode,
           p_plan_date: activePlanDate(),
-          p_stops: adminStops().map((stop) => ({
-            ...stop,
-            id: String(stop.id || "").startsWith("temp-") ? null : stop.id,
-          })),
+          p_stops: stopsPayload,
           p_deleted_stop_ids: state.adminDeletedStopIds,
         }, adminRpcOptions());
 
@@ -5849,14 +6341,18 @@
         state.adminNotifyMode = "prompt";
         state.adminNotifyStatus = "idle";
         state.adminMessage = "Route changes published.";
+        state.adminPublishFailed = false;
         clearAdminDraftBackup();
+        await clearAdminServerDraft();
         await loadAdminActivity();
         state.view = "admin";
         state.drivers = orderDriversForDisplay(await rpc("ride_driver_directory", { p_plan_date: activePlanDate() }));
         loadAdminRouteTiming();
       } catch (error) {
-        saveAdminDraftBackup("publish-failed");
+        const failedBackup = saveAdminDraftBackup("publish-failed");
+        await saveAdminServerDraft("publish-failed", failedBackup);
         state.adminError = adminPublishErrorMessage(error);
+        state.adminPublishFailed = true;
         state.adminActiveTab = "changes";
         state.view = "adminReview";
       } finally {
@@ -5924,7 +6420,7 @@
 
     function openAdminReset() {
       if (isRehearsalMode()) {
-        state.adminMessage = "Start New Sunday is disabled in local rehearsal. No live plan changed.";
+        state.adminMessage = "Create ride list is disabled in local rehearsal. No live plan changed.";
         state.adminError = "";
         state.view = "admin";
         render();
@@ -5941,7 +6437,7 @@
     async function startNewSundayFromForm(form) {
       if (!state.adminCode && !state.adminSession?.access_token) return;
       if (isRehearsalMode()) {
-        state.adminMessage = "Start New Sunday is disabled in local rehearsal. No live plan changed.";
+        state.adminMessage = "Create ride list is disabled in local rehearsal. No live plan changed.";
         state.adminError = "";
         state.view = "admin";
         render();
@@ -5952,7 +6448,7 @@
       const driverSlugs = formData.getAll("driverSlug").map(String).filter(Boolean);
 
       if (!planDate) {
-        state.adminError = "Choose the new Sunday date.";
+        state.adminError = "Choose the service date.";
         render();
         return;
       }
@@ -6004,14 +6500,100 @@
         state.adminDriverAddOpen = false;
         state.adminResetDate = "";
         state.adminResetDriverSlugs = [];
-        state.adminMessage = `New Sunday created for ${planDateLabel(state.planDate)}. Routes are blank.`;
+        state.adminMessage = `Ride list created for ${planDateLabel(state.planDate)}. Routes are blank.`;
         state.view = "admin";
         state.drivers = orderDriversForDisplay(await rpc("ride_driver_directory", { p_plan_date: activePlanDate() }));
         loadAdminRouteTiming();
       } catch (error) {
-        state.adminError = error.message === "sunday_date_required"
-          ? "Choose a Sunday date."
-          : "Could not start the new Sunday.";
+        state.adminError = error.message === "plan_date_required"
+          ? "Choose the service date."
+          : "Could not create the ride list.";
+        console.error(error);
+      } finally {
+        state.adminLoading = false;
+        render();
+      }
+    }
+
+    function eventSetupPayloadFromForm(form) {
+      const formData = new FormData(form);
+      return {
+        homeTitle: String(formData.get("homeTitle") || "").trim(),
+        homeSubtitle: String(formData.get("homeSubtitle") || "").trim(),
+        homeCoverUrl: String(formData.get("homeCoverUrl") || "").trim(),
+        homeCoverAlt: String(formData.get("homeCoverAlt") || "").trim(),
+        planTitle: String(formData.get("planTitle") || "").trim(),
+        serviceDay: String(formData.get("serviceDay") || "").trim(),
+        destinationLabel: String(formData.get("destinationLabel") || "").trim(),
+        destinationAddress: String(formData.get("destinationAddress") || "").trim(),
+      };
+    }
+
+    function eventSetupErrorMessage(error) {
+      if (error.message === "plan_title_required") return "Ride list title is required.";
+      if (error.message === "signed_in_admin_required") return "Sign in as admin to upload the home image.";
+      if (error.message === "home_cover_file_type") return "Use a PNG, JPG, or WebP image.";
+      if (error.message === "home_cover_file_empty") return "Choose an image file before saving.";
+      if (error.message === "home_cover_file_too_large") return "Use an image smaller than 5 MB.";
+      if (error.message === "home_cover_upload_failed") return "Could not upload the home image.";
+      return "Could not save event setup.";
+    }
+
+    async function saveAdminEventSetup(form) {
+      if (!state.adminCode && !state.adminSession?.access_token) return;
+      const payload = eventSetupPayloadFromForm(form);
+      if (!payload.homeTitle || !payload.planTitle || !payload.serviceDay) {
+        state.adminError = "Home title, ride list title, and service day are required.";
+        render();
+        return;
+      }
+
+      const hadDraftChanges = adminChangedCount() > 0;
+      const draftStops = cloneStops(state.adminDraftStops || []);
+      const deletedStopIds = [...(state.adminDeletedStopIds || [])];
+      const originalStops = cloneStops(state.admin?.stops || []);
+      state.adminLoading = true;
+      state.adminError = "";
+      render();
+
+      try {
+        const homeCoverFile = selectedHomeCoverFile(form);
+        if (homeCoverFile) {
+          state.adminMessage = "Uploading home image...";
+          render();
+          const uploaded = await uploadAdminHomeCover(homeCoverFile);
+          payload.homeCoverUrl = uploaded.publicUrl;
+        }
+
+        const saved = await rpc("ride_admin_update_event_setup", {
+          p_admin_code: state.adminCode,
+          p_plan_date: activePlanDate(),
+          p_event: payload,
+        }, adminRpcOptions());
+
+        if (!saved?.ok) throw new Error(saved?.error || "event_setup_failed");
+        const drivers = orderDriversForDisplay(saved.drivers || []);
+        state.planDate = saved.plan?.date || activePlanDate();
+        state.plan = saved.plan || state.plan;
+        state.destination = saved.destination || state.destination;
+        state.appSettings = normalizeAppSettings(saved.appSettings || payload);
+        state.admin = {
+          ...saved,
+          drivers,
+          driverPool: orderDriversForDisplay(saved.driverPool || saved.allDrivers || drivers),
+          stops: hadDraftChanges ? originalStops : saved.stops,
+          security: state.admin?.security || saved.security,
+        };
+        state.adminDraftStops = hadDraftChanges ? draftStops : cloneStops(saved.stops);
+        state.adminDeletedStopIds = hadDraftChanges ? deletedStopIds : [];
+        state.adminActiveTab = "settings";
+        state.adminMessage = hadDraftChanges
+          ? "Event setup saved. Your unpublished route edits are still here."
+          : "Event setup saved.";
+        loadAdminRouteTiming();
+      } catch (error) {
+        state.adminMessage = "";
+        state.adminError = eventSetupErrorMessage(error);
         console.error(error);
       } finally {
         state.adminLoading = false;
@@ -6432,14 +7014,16 @@
     }
 
     function homeView() {
+      const branding = activeRideBranding();
+      const homeSubtitle = branding.homeSubtitle || `${state.drivers.length} drivers assigned`;
       return `
         <div class="stack">
-          <section class="intro-block" aria-label="${escapeHtml(activeRideBranding().homeAriaLabel)}">
+          <section class="intro-block" aria-label="${escapeHtml(branding.homeAriaLabel)}">
             <div class="home-header-row">
               <div>
                 <p class="eyebrow">${escapeHtml(planDateLabel())}</p>
-                <h1>${escapeHtml(ridePlanTitle())}</h1>
-                <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
+                <h1>${escapeHtml(branding.title)}</h1>
+                <p>${state.loading ? "Loading drivers..." : escapeHtml(homeSubtitle)}</p>
               </div>
               <button class="admin-entry-button" type="button" data-action="admin" aria-label="Open admin ride control">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -6534,7 +7118,12 @@
     function adminPublishButton(changed) {
       const blocked = adminPublishIssues().length > 0;
       const disabled = changed && !blocked ? "" : "disabled";
-      const label = blocked ? "Fix blockers before publishing" : `Publish route changes${changed ? ` (${changed})` : ""}`;
+      const countSuffix = changed ? ` (${changed})` : "";
+      const label = blocked
+        ? "Fix blockers before publishing"
+        : state.adminPublishFailed
+          ? `Try publishing again${countSuffix}`
+          : `Publish route changes${countSuffix}`;
       return `<button class="primary-action" type="button" data-action="adminPublish" ${disabled}>${state.adminLoading ? "Publishing..." : label}</button>`;
     }
 
@@ -6806,7 +7395,7 @@
       return `
         <button class="secondary-action admin-reset-action" type="button" data-action="adminReset">
           <span class="admin-control-action-icon" data-detail-icon="calendar">${peopleDetailIcon("calendar")}</span>
-          <span>Start New Sunday</span>
+          <span>Create ride list</span>
         </button>
         <section class="admin-route-list" aria-label="Driver routes">
           ${routedDrivers.map(adminRouteCard).join("")}
@@ -6814,24 +7403,75 @@
     }
 
     function adminSettingsView() {
+      const settings = normalizeAppSettings(state.appSettings || {});
+      const branding = activeRideBranding();
+      const destination = destinationSummary();
+      const plan = state.plan || {};
+      const homeTitle = settings.homeTitle || branding.title;
+      const homeSubtitle = settings.homeSubtitle || "";
+      const homeCoverUrl = settings.homeCoverUrl || branding.coverSrc;
+      const homeCoverAlt = settings.homeCoverAlt || branding.coverAlt;
+      const planTitle = plan.title || ridePlanTitle();
+      const serviceDay = plan.serviceDay || ridePlanSummaryDay();
+      const canUploadHomeCover = signedInAdminCanUploadHomeCover();
       return `
         <section class="admin-section-head">
           <div class="admin-section-title-row">
             <span class="admin-section-copy">
-              <strong>Settings</strong>
-              <span>Sunday mode is active.</span>
+              <strong>Event setup</strong>
+              <span>Update the first screen and current ride list.</span>
             </span>
+            <button class="admin-icon-button admin-menu-button" type="button" data-action="adminMenuOpen" aria-label="Open admin menu">
+              ${peopleDetailIcon("menu")}
+            </button>
           </div>
         </section>
-        <section class="admin-driver-availability-card" aria-label="Admin settings">
-          <article class="admin-driver-option">
-            <span class="admin-menu-row-icon" aria-hidden="true">${peopleDetailIcon("calendar")}</span>
-            <span class="admin-driver-option-copy">
-              <strong>${escapeHtml(ridePlanTitle())}</strong>
-              <span>${escapeHtml(ridePlanAdminSubtitle())}</span>
-            </span>
-          </article>
-        </section>`;
+        <form class="admin-form-grid" data-admin-form="event-setup">
+          ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+          ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
+          <section class="admin-form-card" aria-label="Home page setup">
+            <label>
+              <span>Home title</span>
+              <input name="homeTitle" value="${escapeHtml(homeTitle)}" maxlength="80" required>
+            </label>
+            <label>
+              <span>Home subtitle</span>
+              <input name="homeSubtitle" value="${escapeHtml(homeSubtitle)}" maxlength="120" placeholder="${escapeHtml(`${state.drivers.length} drivers assigned`)}">
+            </label>
+            <label>
+              <span>Home image URL</span>
+              <input name="homeCoverUrl" value="${escapeHtml(homeCoverUrl)}" autocomplete="off">
+            </label>
+            <label>
+              <span>Upload home image</span>
+              <input name="homeCoverFile" type="file" accept="image/png,image/jpeg,image/webp" data-admin-home-cover-file ${canUploadHomeCover ? "" : "disabled"}>
+            </label>
+            ${canUploadHomeCover ? "" : `<section class="admin-upload-note">Sign in as admin to upload the home image.</section>`}
+            <label>
+              <span>Image description</span>
+              <input name="homeCoverAlt" value="${escapeHtml(homeCoverAlt)}" maxlength="120">
+            </label>
+          </section>
+          <section class="admin-form-card" aria-label="Ride list setup">
+            <label>
+              <span>Ride list title</span>
+              <input name="planTitle" value="${escapeHtml(planTitle)}" maxlength="80" required>
+            </label>
+            <label>
+              <span>Service day</span>
+              <input name="serviceDay" value="${escapeHtml(serviceDay)}" maxlength="32" required>
+            </label>
+            <label>
+              <span>Destination name</span>
+              <input name="destinationLabel" value="${escapeHtml(destination.label)}" maxlength="80" required>
+            </label>
+            <label>
+              <span>Destination address</span>
+              <input name="destinationAddress" value="${escapeHtml(destination.address)}" autocomplete="off" required>
+            </label>
+          </section>
+          <button class="secondary-action" type="submit">${state.adminLoading ? "Saving..." : "Save event setup"}</button>
+        </form>`;
     }
 
     function adminChangesView(changed) {
@@ -6963,6 +7603,44 @@
         </section>`;
     }
 
+    function adminActivityProfileSlug(event = {}) {
+      const explicit = normalizeAdminProfileSlug(event.actorProfileSlug || event.actor_profile_slug || event.payload?.actorProfileSlug || "");
+      if (ADMIN_PROFILES.some((profile) => profile.slug === explicit)) return explicit;
+      const label = normalizeAdminProfileSlug(event.actorLabel || event.actor_label || "");
+      return ADMIN_PROFILES.find((profile) => profile.slug === label || profile.label.toLowerCase() === label)?.slug || "";
+    }
+
+    function adminActivityInitials(event = {}) {
+      const explicit = String(event.actorInitials || event.actor_initials || event.payload?.actorInitials || "").trim();
+      if (explicit) return explicit.slice(0, 3).toUpperCase();
+      const slug = adminActivityProfileSlug(event);
+      const profile = slug ? adminProfileBySlug(slug) : null;
+      if (profile) return profile.initials;
+      const label = String(event.actorLabel || event.actor_label || "AD").trim();
+      return label.split(/\s+/).map((part) => part[0] || "").join("").slice(0, 2).toUpperCase() || "AD";
+    }
+
+    function adminActivityFiltersHtml(events = state.adminActivity || []) {
+      const selected = state.adminActivityFilter || "all";
+      const filters = [
+        { slug: "all", label: "All", count: events.length },
+        ...ADMIN_PROFILES.map((profile) => ({
+          slug: profile.slug,
+          label: profile.label,
+          count: events.filter((event) => adminActivityProfileSlug(event) === profile.slug).length,
+        })),
+      ];
+
+      return `
+        <div class="admin-view-tabs admin-activity-filters" aria-label="Filter admin activity">
+          ${filters.map((filter) => `
+            <button type="button" data-admin-activity-filter="${escapeHtml(filter.slug)}" class="${filter.slug === selected ? "active" : ""}" aria-pressed="${filter.slug === selected ? "true" : "false"}">
+              ${escapeHtml(filter.label)}${filter.count ? ` ${filter.count}` : ""}
+            </button>
+          `).join("")}
+        </div>`;
+    }
+
     function adminActivityCard(event) {
       const created = event.createdAt ? new Date(event.createdAt) : null;
       const timeLabel = created && !Number.isNaN(created.getTime())
@@ -6970,7 +7648,7 @@
         : "Recent";
       return `
         <article class="admin-change-card">
-          <span class="admin-change-badge">i</span>
+          <span class="admin-change-badge admin-activity-badge">${escapeHtml(adminActivityInitials(event))}</span>
           <span class="admin-change-copy">
             <strong>${escapeHtml(event.action || "admin_action")}</strong>
             <span>${escapeHtml([event.actorLabel, timeLabel].filter(Boolean).join(" · "))}</span>
@@ -6980,10 +7658,17 @@
 
     function adminActivityList() {
       const events = state.adminActivity || [];
+      const selected = state.adminActivityFilter || "all";
+      const filteredEvents = selected === "all"
+        ? events
+        : events.filter((event) => adminActivityProfileSlug(event) === selected);
       return `
         <section class="admin-change-list" aria-label="Recent admin activity">
           <section class="admin-message">Recent admin activity</section>
-          ${events.length ? events.map(adminActivityCard).join("") : `<section class="empty-card"><p>No admin activity yet.</p></section>`}
+          ${adminActivityFiltersHtml(events)}
+          ${filteredEvents.length
+            ? filteredEvents.map(adminActivityCard).join("")
+            : `<section class="empty-card"><p>${events.length ? "No activity for this admin yet." : "No admin activity yet."}</p></section>`}
         </section>`;
     }
 
@@ -7005,9 +7690,21 @@
         </section>`;
     }
 
+    function adminDraftStatusHtml(changed = adminChangedCount()) {
+      if (!changed || !state.adminDraftSavedAt) return "";
+      const changeCopy = changed === 1
+        ? "1 change protected until publish succeeds"
+        : `${changed} changes protected until publish succeeds`;
+      return `
+        <section class="admin-message admin-draft-status">
+          <strong>Draft saved on this device</strong>
+          <span>${escapeHtml(changeCopy)}.</span>
+        </section>`;
+    }
+
     function adminDraftRestoreHtml() {
       const backup = state.adminDraftBackup;
-      if (!backup) return "";
+      if (!backup || adminDraftBackupsMatch(backup)) return "";
       const stopCount = backup.stops?.length || 0;
       const deletedCount = backup.deletedStopIds?.length || 0;
       const draftCount = stopCount + deletedCount;
@@ -7043,6 +7740,7 @@
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+          ${adminDraftStatusHtml(changed)}
           ${adminDraftRestoreHtml()}
           ${adminPublishIssuesHtml()}
 
@@ -7365,6 +8063,9 @@
       if (actor?.type === "user") {
         return `Signed in as ${actor.label || actor.email || "Ride Admin"}`;
       }
+      if (actor?.type === "profile") {
+        return `Signed in as ${actor.label || "Ride Admin"}`;
+      }
       if (actor?.type === "code") {
         return "Passcode fallback active · switch to admin login when ready";
       }
@@ -7392,8 +8093,8 @@
           <section class="intro-block compact">
             <div class="admin-top-row">
               <div>
-                <p class="eyebrow">Reset</p>
-                <h1>Create New Sunday</h1>
+                <p class="eyebrow">New list</p>
+                <h1>Create ride list</h1>
                 <p>Current plan: ${escapeHtml(planDateLabel())}</p>
               </div>
               <button class="admin-icon-button" type="button" data-action="adminResetBack" aria-label="Back to admin">
@@ -7410,12 +8111,12 @@
 
           <section class="admin-form-card">
             <label>
-              <span>Sunday date</span>
+              <span>Service date</span>
               <input name="planDate" type="date" value="${escapeHtml(state.adminResetDate || nextSundayDate())}" required>
             </label>
           </section>
 
-          <section class="admin-stats" aria-label="New Sunday reset stats">
+          <section class="admin-stats" aria-label="New ride list stats">
             <div class="admin-stat"><strong>${drivers.length}</strong><span>available</span></div>
             <div class="admin-stat"><strong>${selectedCount}</strong><span>selected</span></div>
             <div class="admin-stat"><strong>0</strong><span>assigned</span></div>
@@ -7427,7 +8128,7 @@
 
           <div class="admin-form-actions">
             <button class="secondary-action" type="button" data-action="adminResetBack">Cancel</button>
-            <button class="primary-action" type="submit" ${selectedCount ? "" : "disabled"}>${state.adminLoading ? "Creating..." : "Create New Sunday"}</button>
+            <button class="primary-action" type="submit" ${selectedCount ? "" : "disabled"}>${state.adminLoading ? "Creating..." : "Create ride list"}</button>
           </div>
         </form>`;
     }
@@ -7454,6 +8155,14 @@
                 ? adminSettingsView()
                 : adminSundayRidersView();
 
+      if (activeTab === "settings") {
+        return `
+        <div class="stack admin-control-screen admin-settings-screen">
+          ${activeView}
+          ${adminMenuDrawerHtml()}
+        </div>`;
+      }
+
       return `
         <div class="stack admin-control-screen">
           <section class="intro-block compact admin-control-header">
@@ -7477,6 +8186,7 @@
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+          ${adminDraftStatusHtml(changed)}
           ${adminDraftRestoreHtml()}
           ${adminNotifyPromptHtml()}
           ${activeView}
@@ -8130,6 +8840,8 @@
       state.codeMode = "driver";
       state.adminLoginMode = "code";
       state.selectedDriver = state.drivers.find((driver) => driver.slug === slug);
+      state.adminProfileLogin = null;
+      hideAdminProfileChoices();
       codeForm.classList.remove("admin-login-card");
       document.querySelector("#modalTitle").textContent = "Passcode";
       modalDriver.textContent = state.selectedDriver?.display_name || "";
@@ -8137,6 +8849,7 @@
       codeLabel.textContent = "Passcode";
       driverCode.placeholder = "Passcode";
       driverCode.setAttribute("aria-label", "Passcode");
+      driverCode.setAttribute("autocomplete", "one-time-code");
       codeSubmit.textContent = "Open route";
       driverCode.hidden = false;
       modalClose.hidden = true;
@@ -8154,14 +8867,18 @@
       }
       state.codeMode = "admin";
       state.selectedDriver = null;
-      state.adminLoginMode = "code";
+      state.adminLoginMode = "profile";
+      state.adminProfileLogin = null;
+      state.selectedAdminProfileSlug = adminProfileBySlug(state.selectedAdminProfileSlug).slug;
       codeForm.classList.add("admin-login-card");
       document.querySelector("#modalTitle").textContent = "Ride Control";
       modalKicker.hidden = false;
-      modalDriver.textContent = "Sunday · UH Hilton";
-      codeLabel.textContent = "Admin passcode";
-      driverCode.placeholder = "Enter passcode";
-      driverCode.setAttribute("aria-label", "Admin passcode");
+      modalDriver.textContent = "Choose admin profile";
+      renderAdminProfileChoices();
+      codeLabel.textContent = "Password";
+      driverCode.placeholder = "Enter password";
+      driverCode.setAttribute("aria-label", "Admin password");
+      driverCode.setAttribute("autocomplete", "current-password");
       codeSubmit.textContent = "Open Ride Control";
       driverCode.hidden = false;
       modalClose.hidden = false;
@@ -8176,6 +8893,7 @@
     function closeCodeModal() {
       codeModal.classList.remove("open");
       codeForm.classList.remove("admin-login-card");
+      hideAdminProfileChoices();
       modalKicker.hidden = true;
       modalClose.hidden = true;
       cancelCode.hidden = false;
@@ -8188,9 +8906,12 @@
       event.preventDefault();
       if (state.codeMode === "admin") {
         try {
-          await loadAdminSnapshot(driverCode.value);
+          const adminCode = state.adminLoginMode === "profile"
+            ? await loginAdminProfile(state.selectedAdminProfileSlug, driverCode.value)
+            : driverCode.value;
+          await loadAdminSnapshot(adminCode);
         } catch (error) {
-          codeError.textContent = "Admin passcode could not open Ride Control.";
+          codeError.textContent = "Admin password could not open Ride Control.";
           codeError.hidden = false;
           console.error(error);
         }
@@ -8242,6 +8963,13 @@
       if (adminTabButton) {
         state.adminActiveTab = adminTabButton.dataset.adminTab;
         state.adminMenuOpen = false;
+        render();
+        return;
+      }
+
+      const adminActivityFilterButton = event.target.closest("[data-admin-activity-filter]");
+      if (adminActivityFilterButton) {
+        state.adminActivityFilter = adminActivityFilterButton.dataset.adminActivityFilter || "all";
         render();
         return;
       }
@@ -8527,6 +9255,13 @@
         return;
       }
 
+      const eventSetupForm = event.target.closest("[data-admin-form='event-setup']");
+      if (eventSetupForm) {
+        event.preventDefault();
+        saveAdminEventSetup(eventSetupForm);
+        return;
+      }
+
       const adminForm = event.target.closest("[data-admin-form='rider']");
       if (adminForm) {
         event.preventDefault();
@@ -8559,6 +9294,13 @@
     });
     profileNav.addEventListener("click", openProfile);
     codeForm.addEventListener("submit", submitCode);
+    adminProfileChoices.addEventListener("click", (event) => {
+      const profileButton = event.target.closest("[data-admin-profile]");
+      if (!profileButton) return;
+      state.selectedAdminProfileSlug = adminProfileBySlug(profileButton.dataset.adminProfile).slug;
+      renderAdminProfileChoices();
+      driverCode.focus();
+    });
     modalClose.addEventListener("click", closeCodeModal);
     cancelCode.addEventListener("click", closeCodeModal);
     codeModal.addEventListener("click", (event) => {

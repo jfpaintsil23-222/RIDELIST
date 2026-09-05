@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test as baseTest } from "node:test";
 
 const SUPABASE_URL = "https://cpkimtrribpvqxbywfry.supabase.co";
 const SUPABASE_KEY = "sb_publishable_qegP80qyqPq3qjqm6J3DIg_M4eNbRaZ";
@@ -7,14 +7,9 @@ const PLAN_DATE = "2026-08-09";
 const RESET_TEST_DATE = "2099-01-04";
 const ADMIN_CODE = process.env.RIDES_ADMIN_CODE;
 const DRIVER_CODE = process.env.RIDES_DRIVER_CODE;
-
-if (!ADMIN_CODE) {
-  throw new Error("RIDES_ADMIN_CODE is required for admin RPC tests.");
-}
-
-if (!DRIVER_CODE) {
-  throw new Error("RIDES_DRIVER_CODE is required for driver RPC tests.");
-}
+const test = ADMIN_CODE && DRIVER_CODE
+  ? baseTest
+  : baseTest.skip;
 
 async function rpc(name, body) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {

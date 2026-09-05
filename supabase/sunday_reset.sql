@@ -8,6 +8,26 @@ create table if not exists rides_private.ride_app_settings (
 alter table rides_private.ride_app_settings enable row level security;
 alter table rides_private.ride_app_settings force row level security;
 
+alter table rides_private.ride_app_settings
+add column if not exists home_title text not null default 'Sunday Ride Plan',
+add column if not exists home_subtitle text not null default '',
+add column if not exists home_cover_url text not null default 'assets/home-car.png',
+add column if not exists home_cover_alt text not null default 'Church ride car';
+
+create table if not exists rides_private.ride_admin_drafts (
+  id uuid primary key default gen_random_uuid(),
+  plan_date date not null,
+  actor_key text not null,
+  draft jsonb not null default '{}'::jsonb,
+  saved_at timestamp with time zone not null default now(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  unique (plan_date, actor_key)
+);
+
+alter table rides_private.ride_admin_drafts enable row level security;
+alter table rides_private.ride_admin_drafts force row level security;
+
 insert into rides_private.ride_app_settings (id, active_plan_date)
 values (
   'main',
@@ -53,9 +73,19 @@ as $$
 declare
   v_plan record;
 begin
-  select p.title, p.service_day, p.plan_date, p.destination_label, p.destination_address
+  select
+    p.title,
+    p.service_day,
+    p.plan_date,
+    p.destination_label,
+    p.destination_address,
+    s.home_title,
+    s.home_subtitle,
+    s.home_cover_url,
+    s.home_cover_alt
   into v_plan
   from rides_private.ride_plans p
+  left join rides_private.ride_app_settings s on s.id = 'main'
   where p.plan_date = rides_private.current_ride_plan_date()
   limit 1;
 
@@ -73,6 +103,12 @@ begin
     'destination', jsonb_build_object(
       'label', v_plan.destination_label,
       'address', v_plan.destination_address
+    ),
+    'appSettings', jsonb_build_object(
+      'homeTitle', coalesce(v_plan.home_title, 'Sunday Ride Plan'),
+      'homeSubtitle', coalesce(v_plan.home_subtitle, ''),
+      'homeCoverUrl', coalesce(v_plan.home_cover_url, 'assets/home-car.png'),
+      'homeCoverAlt', coalesce(v_plan.home_cover_alt, 'Church ride car')
     )
   );
 end;
@@ -222,9 +258,20 @@ begin
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
   end if;
 
-  select p.id, p.title, p.service_day, p.plan_date, p.destination_label, p.destination_address
+  select
+    p.id,
+    p.title,
+    p.service_day,
+    p.plan_date,
+    p.destination_label,
+    p.destination_address,
+    s.home_title,
+    s.home_subtitle,
+    s.home_cover_url,
+    s.home_cover_alt
   into v_plan
   from rides_private.ride_plans p
+  left join rides_private.ride_app_settings s on s.id = 'main'
   where p.plan_date = coalesce(p_plan_date, rides_private.current_ride_plan_date())
   limit 1;
 
@@ -397,6 +444,12 @@ begin
       'label', v_plan.destination_label,
       'address', v_plan.destination_address
     ),
+    'appSettings', jsonb_build_object(
+      'homeTitle', coalesce(v_plan.home_title, 'Sunday Ride Plan'),
+      'homeSubtitle', coalesce(v_plan.home_subtitle, ''),
+      'homeCoverUrl', coalesce(v_plan.home_cover_url, 'assets/home-car.png'),
+      'homeCoverAlt', coalesce(v_plan.home_cover_alt, 'Church ride car')
+    ),
     'stats', jsonb_build_object(
       'drivers', v_total_drivers,
       'assigned', v_total_stops,
@@ -435,6 +488,8 @@ begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
   end if;
+
+  perform set_config('request.ride_admin_code', coalesce(p_admin_code, ''), true);
 
   select p.id
   into v_plan
@@ -588,6 +643,223 @@ begin
 end;
 $$;
 
+create or replace function public.ride_admin_publish_plan_dry_run(
+  p_admin_code text,
+  p_plan_date date default null,
+  p_stops jsonb default '[]'::jsonb,
+  p_deleted_stop_ids text[] default '{}'::text[]
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan record;
+  v_stop jsonb;
+  v_driver_id uuid;
+  v_index integer := 0;
+  v_name text;
+  v_driver_slug text;
+  v_issues jsonb := '[]'::jsonb;
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  select p.id
+  into v_plan
+  from rides_private.ride_plans p
+  where p.plan_date = coalesce(p_plan_date, rides_private.current_ride_plan_date())
+  limit 1;
+
+  if v_plan.id is null then
+    return jsonb_build_object('ok', false, 'error', 'plan_not_found');
+  end if;
+
+  if p_stops is null or jsonb_typeof(p_stops) <> 'array' then
+    return jsonb_build_object('ok', false, 'error', 'stops_array_required');
+  end if;
+
+  for v_stop in select value from jsonb_array_elements(p_stops) loop
+    v_index := v_index + 1;
+    v_name := btrim(coalesce(v_stop->>'name', ''));
+    v_driver_slug := lower(btrim(coalesce(v_stop->>'driverSlug', '')));
+
+    if v_name = '' then
+      v_issues := v_issues || jsonb_build_array(jsonb_build_object(
+        'error', 'rider_name_required',
+        'title', 'Rider name is missing',
+        'index', v_index
+      ));
+      continue;
+    end if;
+
+    if v_driver_slug = '' then
+      v_issues := v_issues || jsonb_build_array(jsonb_build_object(
+        'error', 'driver_required',
+        'title', v_name || ' is not assigned to a driver',
+        'riderName', v_name,
+        'driverSlug', v_driver_slug,
+        'index', v_index
+      ));
+      continue;
+    end if;
+
+    v_driver_id := null;
+    select d.id
+    into v_driver_id
+    from rides_private.ride_drivers d
+    where d.plan_id = v_plan.id
+      and d.slug = v_driver_slug
+    limit 1;
+
+    if v_driver_id is null then
+      v_issues := v_issues || jsonb_build_array(jsonb_build_object(
+        'error', 'driver_not_found',
+        'title', v_name || ' is assigned to a driver that is not active',
+        'riderName', v_name,
+        'driverSlug', v_driver_slug,
+        'index', v_index
+      ));
+    end if;
+  end loop;
+
+  return jsonb_build_object(
+    'ok', true,
+    'issues', v_issues,
+    'issueCount', jsonb_array_length(v_issues),
+    'deletedStopCount', coalesce(array_length(p_deleted_stop_ids, 1), 0)
+  );
+end;
+$$;
+
+grant execute on function public.ride_admin_publish_plan_dry_run(text, date, jsonb, text[]) to anon, authenticated;
+
+create or replace function public.ride_admin_save_draft(
+  p_admin_code text,
+  p_plan_date date default null,
+  p_draft jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan_date date := coalesce(p_plan_date, rides_private.current_ride_plan_date());
+  v_saved_at timestamp with time zone := now();
+  v_actor_key text := coalesce('user:' || (select auth.uid())::text, 'code:' || md5(coalesce(p_admin_code, '')));
+  v_draft jsonb;
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if not exists (
+    select 1
+    from rides_private.ride_plans p
+    where p.plan_date = v_plan_date
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'plan_not_found');
+  end if;
+
+  if p_draft is null or jsonb_typeof(p_draft) <> 'object' then
+    return jsonb_build_object('ok', false, 'error', 'draft_object_required');
+  end if;
+
+  v_draft := p_draft || jsonb_build_object(
+    'version', 1,
+    'source', 'server',
+    'planDate', v_plan_date,
+    'savedAt', v_saved_at
+  );
+
+  insert into rides_private.ride_admin_drafts (
+    plan_date,
+    actor_key,
+    draft,
+    saved_at,
+    updated_at
+  )
+  values (
+    v_plan_date,
+    v_actor_key,
+    v_draft,
+    v_saved_at,
+    v_saved_at
+  )
+  on conflict (plan_date, actor_key) do update
+  set draft = excluded.draft,
+      saved_at = excluded.saved_at,
+      updated_at = excluded.updated_at;
+
+  return jsonb_build_object('ok', true, 'draft', v_draft);
+end;
+$$;
+
+create or replace function public.ride_admin_get_draft(
+  p_admin_code text,
+  p_plan_date date default null
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan_date date := coalesce(p_plan_date, rides_private.current_ride_plan_date());
+  v_actor_key text := coalesce('user:' || (select auth.uid())::text, 'code:' || md5(coalesce(p_admin_code, '')));
+  v_draft jsonb;
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  select d.draft
+  into v_draft
+  from rides_private.ride_admin_drafts d
+  where d.plan_date = v_plan_date
+    and d.actor_key = v_actor_key
+  limit 1;
+
+  return jsonb_build_object('ok', true, 'draft', v_draft);
+end;
+$$;
+
+create or replace function public.ride_admin_clear_draft(
+  p_admin_code text,
+  p_plan_date date default null
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan_date date := coalesce(p_plan_date, rides_private.current_ride_plan_date());
+  v_actor_key text := coalesce('user:' || (select auth.uid())::text, 'code:' || md5(coalesce(p_admin_code, '')));
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  delete from rides_private.ride_admin_drafts d
+  where d.plan_date = v_plan_date
+    and d.actor_key = v_actor_key;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+grant execute on function public.ride_admin_save_draft(text, date, jsonb) to anon, authenticated;
+grant execute on function public.ride_admin_get_draft(text, date) to anon, authenticated;
+grant execute on function public.ride_admin_clear_draft(text, date) to anon, authenticated;
+
 create or replace function public.ride_admin_merge_people(
   p_admin_code text,
   p_primary_person_id uuid,
@@ -706,6 +978,67 @@ begin
 end;
 $$;
 
+create or replace function public.ride_admin_update_event_setup(
+  p_admin_code text,
+  p_plan_date date default null,
+  p_event jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+declare
+  v_plan_date date := coalesce(p_plan_date, rides_private.current_ride_plan_date());
+  v_plan record;
+  v_home_title text := btrim(coalesce(p_event->>'homeTitle', ''));
+  v_home_subtitle text := btrim(coalesce(p_event->>'homeSubtitle', ''));
+  v_home_cover_url text := btrim(coalesce(p_event->>'homeCoverUrl', ''));
+  v_home_cover_alt text := btrim(coalesce(p_event->>'homeCoverAlt', ''));
+  v_plan_title text := btrim(coalesce(p_event->>'planTitle', ''));
+  v_service_day text := btrim(coalesce(p_event->>'serviceDay', ''));
+  v_destination_label text := btrim(coalesce(p_event->>'destinationLabel', ''));
+  v_destination_address text := btrim(coalesce(p_event->>'destinationAddress', ''));
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  select p.id
+  into v_plan
+  from rides_private.ride_plans p
+  where p.plan_date = v_plan_date
+  limit 1;
+
+  if v_plan.id is null then
+    return jsonb_build_object('ok', false, 'error', 'plan_not_found');
+  end if;
+
+  if v_plan_title = '' then
+    return jsonb_build_object('ok', false, 'error', 'plan_title_required');
+  end if;
+
+  update rides_private.ride_plans p
+  set title = v_plan_title,
+      service_day = coalesce(nullif(v_service_day, ''), trim(to_char(v_plan_date, 'Day'))),
+      destination_label = coalesce(nullif(v_destination_label, ''), p.destination_label),
+      destination_address = coalesce(nullif(v_destination_address, ''), p.destination_address),
+      updated_at = now()
+  where p.id = v_plan.id;
+
+  update rides_private.ride_app_settings s
+  set home_title = coalesce(nullif(v_home_title, ''), v_plan_title),
+      home_subtitle = v_home_subtitle,
+      home_cover_url = coalesce(nullif(v_home_cover_url, ''), s.home_cover_url),
+      home_cover_alt = coalesce(nullif(v_home_cover_alt, ''), 'Church ride car'),
+      updated_at = now()
+  where s.id = 'main';
+
+  return public.ride_admin_snapshot(p_admin_code, v_plan_date);
+end;
+$$;
+
 create or replace function public.ride_admin_start_new_sunday(
   p_admin_code text,
   p_plan_date date,
@@ -724,6 +1057,7 @@ declare
   v_target_plan record;
   v_driver_count integer;
   v_has_filter boolean := coalesce(array_length(p_driver_slugs, 1), 0) > 0;
+  v_service_day text;
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
@@ -733,9 +1067,7 @@ begin
     return jsonb_build_object('ok', false, 'error', 'plan_date_required');
   end if;
 
-  if extract(dow from p_plan_date)::integer <> 0 then
-    return jsonb_build_object('ok', false, 'error', 'sunday_date_required');
-  end if;
+  v_service_day := to_char(p_plan_date, 'FMDay');
 
   select p.id, p.title, p.service_day, p.destination_label, p.destination_address
   into v_source_plan
@@ -773,8 +1105,8 @@ begin
   )
   values (
     p_plan_date,
-    coalesce(nullif(v_source_plan.title, ''), 'Sunday Ride Plan'),
-    'Sunday',
+    v_service_day || ' Ride Plan',
+    v_service_day,
     v_source_plan.destination_label,
     v_source_plan.destination_address
   )
@@ -1055,8 +1387,13 @@ grant execute on function public.ride_driver_directory(date) to anon, authentica
 grant execute on function public.ride_driver_route(text, text, date) to anon, authenticated;
 grant execute on function public.ride_admin_snapshot(text, date) to anon, authenticated;
 grant execute on function public.ride_admin_publish_plan(text, date, jsonb, text[]) to anon, authenticated;
+grant execute on function public.ride_admin_publish_plan_dry_run(text, date, jsonb, text[]) to anon, authenticated;
+grant execute on function public.ride_admin_save_draft(text, date, jsonb) to anon, authenticated;
+grant execute on function public.ride_admin_get_draft(text, date) to anon, authenticated;
+grant execute on function public.ride_admin_clear_draft(text, date) to anon, authenticated;
 grant execute on function public.ride_admin_merge_people(text, uuid, uuid, jsonb) to anon, authenticated;
 grant execute on function public.ride_admin_archive_people(text, uuid) to anon, authenticated;
+grant execute on function public.ride_admin_update_event_setup(text, date, jsonb) to anon, authenticated;
 grant execute on function public.ride_admin_start_new_sunday(text, date, text[], date, boolean) to anon, authenticated;
 grant execute on function public.ride_admin_update_plan_drivers(text, date, text[]) to anon, authenticated;
 grant execute on function public.ride_admin_add_driver(text, date, jsonb) to anon, authenticated;

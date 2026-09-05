@@ -23,6 +23,7 @@ async function loadApp(fetchImpl, options = {}) {
       },
       toggle() {},
     },
+    setAttribute() {},
     addEventListener() {},
     querySelector() {
       return element();
@@ -99,6 +100,11 @@ async function loadApp(fetchImpl, options = {}) {
       secureRouteTimingRequest: typeof secureRouteTimingRequest === "function" ? secureRouteTimingRequest : undefined,
       placeAutocompleteRequest: typeof placeAutocompleteRequest === "function" ? placeAutocompleteRequest : undefined,
       submitCode: typeof submitCode === "function" ? submitCode : undefined,
+      openAdminCodeModal: typeof openAdminCodeModal === "function" ? openAdminCodeModal : undefined,
+      loginAdminProfile: typeof loginAdminProfile === "function" ? loginAdminProfile : undefined,
+      adminProfileBySlug: typeof adminProfileBySlug === "function" ? adminProfileBySlug : undefined,
+      adminProfileOptionsHtml: typeof adminProfileOptionsHtml === "function" ? adminProfileOptionsHtml : undefined,
+      adminActivityList: typeof adminActivityList === "function" ? adminActivityList : undefined,
       loadDrivers: typeof loadDrivers === "function" ? loadDrivers : undefined,
       publishAdminDraft: typeof publishAdminDraft === "function" ? publishAdminDraft : undefined,
       saveAdminDriverAvailability: typeof saveAdminDriverAvailability === "function" ? saveAdminDriverAvailability : undefined,
@@ -115,17 +121,26 @@ async function loadApp(fetchImpl, options = {}) {
       adminDraftStorageKey: typeof adminDraftStorageKey === "function" ? adminDraftStorageKey : undefined,
       readAdminDraftBackup: typeof readAdminDraftBackup === "function" ? readAdminDraftBackup : undefined,
       saveAdminDraftBackup: typeof saveAdminDraftBackup === "function" ? saveAdminDraftBackup : undefined,
+      saveAdminServerDraft: typeof saveAdminServerDraft === "function" ? saveAdminServerDraft : undefined,
+      loadAdminServerDraftNotice: typeof loadAdminServerDraftNotice === "function" ? loadAdminServerDraftNotice : undefined,
+      clearAdminServerDraft: typeof clearAdminServerDraft === "function" ? clearAdminServerDraft : undefined,
       restoreAdminDraftBackup: typeof restoreAdminDraftBackup === "function" ? restoreAdminDraftBackup : undefined,
       adminAffectedDriverSlugs: typeof adminAffectedDriverSlugs === "function" ? adminAffectedDriverSlugs : undefined,
       adminRouteAlertDraft: typeof adminRouteAlertDraft === "function" ? adminRouteAlertDraft : undefined,
       nextSundayDate: typeof nextSundayDate === "function" ? nextSundayDate : undefined,
       homeView: typeof homeView === "function" ? homeView : undefined,
+      signedInAdminCanUploadHomeCover: typeof signedInAdminCanUploadHomeCover === "function" ? signedInAdminCanUploadHomeCover : undefined,
+      uploadAdminHomeCover: typeof uploadAdminHomeCover === "function" ? uploadAdminHomeCover : undefined,
       __driverCode: driverCode,
       __storage: localStorage,
     };
   `, context);
 
   return context.__app;
+}
+
+function secretPattern(parts) {
+  return new RegExp(parts.join(""), "i");
 }
 
 test("app contains admin ride control entry points", async () => {
@@ -175,6 +190,18 @@ test("SQL source supports PeopleData notes and protected merge RPC", async () =>
   assert.doesNotMatch(sql, /Merged into /);
 });
 
+test("SQL admin code guard keeps profile sessions when admin security is installed", async () => {
+  const sql = await readFile(new URL("../supabase/admin_ride_control.sql", import.meta.url), "utf8");
+  const guard = sql.match(/create or replace function rides_private\.is_ride_admin_code[\s\S]*?\$\$;/)?.[0] || "";
+
+  assert.match(guard, /language plpgsql/);
+  assert.match(guard, /to_regprocedure\('rides_private\.is_ride_admin\(\)'/);
+  assert.match(guard, /to_regprocedure\('rides_private\.is_ride_admin_profile_session\(text\)'/);
+  assert.match(guard, /to_regprocedure\('rides_private\.admin_login_required\(\)'/);
+  assert.match(guard, /execute 'select rides_private\.is_ride_admin_profile_session\(\$1\)'/);
+  assert.match(guard, /coalesce\(v_code_fallback_enabled, true\) and coalesce\(v_passcode_admin/);
+});
+
 test("SQL source protects driver push subscriptions", async () => {
   const sql = await readFile(new URL("../supabase/admin_ride_control.sql", import.meta.url), "utf8");
 
@@ -186,6 +213,43 @@ test("SQL source protects driver push subscriptions", async () => {
   assert.match(sql, /rides_private\.is_ride_admin_code\(p_admin_code\)/);
   assert.match(sql, /rides_private\.hash_driver_code\(p_access_code\)/);
   assert.match(sql, /grant execute on function public\.ride_driver_save_push_subscription/);
+});
+
+test("SQL source limits home image uploads to signed-in ride admins", async () => {
+  const sql = await readFile(new URL("../supabase/admin_security.sql", import.meta.url), "utf8");
+  const uploadPolicy = sql.match(/create policy "Ride admins can upload ride app assets"[\s\S]*?;/)?.[0] || "";
+
+  assert.match(sql, /insert into storage\.buckets/);
+  assert.match(sql, /'ride-app-assets'/);
+  assert.match(uploadPolicy, /for insert/);
+  assert.match(uploadPolicy, /to authenticated/);
+  assert.match(uploadPolicy, /bucket_id = 'ride-app-assets'/);
+  assert.match(uploadPolicy, /rides_private\.is_ride_admin\(\)/);
+  assert.doesNotMatch(uploadPolicy, /to anon/);
+});
+
+test("SQL source supports private admin profiles without committed plaintext passwords", async () => {
+  const sql = await readFile(new URL("../supabase/admin_security.sql", import.meta.url), "utf8");
+
+  assert.match(sql, /create table if not exists rides_private\.ride_admin_profiles/);
+  assert.match(sql, /create table if not exists rides_private\.ride_admin_profile_sessions/);
+  assert.match(sql, /password_hash text not null default ''/);
+  assert.match(sql, /\('joojo', 'Joojo', 'JJ'\)/);
+  assert.doesNotMatch(sql, /\('jojo', 'Jojo', 'JJ'\)/);
+  assert.match(sql, /actor_profile_slug text/);
+  assert.match(sql, /actor_initials text/);
+  assert.match(sql, /create or replace function public\.ride_admin_profile_login/);
+  assert.match(sql, /create or replace function public\.ride_admin_set_profile_password/);
+  assert.match(sql, /rides_private\.hash_driver_code\(p_password\)/);
+  assert.match(sql, /rides_private\.hash_driver_code\(p_new_password\)/);
+  assert.match(sql, /extensions\.gen_random_bytes\(32\)/);
+  assert.match(sql, /current_setting\('request\.ride_admin_code'/);
+  assert.match(sql, /revoke execute on function public\.ride_admin_profile_login\(text, text\) from public/);
+  assert.match(sql, /revoke execute on function public\.ride_admin_set_profile_password\(text, text, text\) from public/);
+  assert.match(sql, /grant execute on function public\.ride_admin_profile_login\(text, text\)/);
+  assert.match(sql, /grant execute on function public\.ride_admin_set_profile_password\(text, text, text\)/);
+  assert.doesNotMatch(sql, secretPattern(["danny", "my", "baby"]));
+  assert.doesNotMatch(sql, secretPattern(["admin", "123"]));
 });
 
 test("SQL source supports admin driver availability and add-driver RPCs", async () => {
@@ -201,6 +265,16 @@ test("SQL source supports admin driver availability and add-driver RPCs", async 
   assert.match(sql, /rides_private\.hash_driver_code/);
   assert.match(sql, /grant execute on function public\.ride_admin_update_plan_drivers/);
   assert.match(sql, /grant execute on function public\.ride_admin_add_driver/);
+});
+
+test("SQL source lets admins create ride lists for any service date", async () => {
+  const sql = await readFile(new URL("../supabase/sunday_reset.sql", import.meta.url), "utf8");
+  const resetFunction = sql.match(/create or replace function public\.ride_admin_start_new_sunday\([\s\S]*?grant execute on function public\.ride_admin_start_new_sunday/)?.[0] || "";
+
+  assert.match(resetFunction, /p_plan_date date/);
+  assert.doesNotMatch(resetFunction, /extract\(dow from p_plan_date\)/);
+  assert.doesNotMatch(resetFunction, /sunday_date_required/);
+  assert.match(resetFunction, /to_char\(p_plan_date, 'FMDay'\)/);
 });
 
 test("SQL publish allows address-pending riders without blocking other route changes", async () => {
@@ -238,6 +312,47 @@ test("SQL publish returns rider details when driver validation fails", async () 
   }
 });
 
+test("SQL publish dry-run validates without writing ride stops", async () => {
+  const sqlFiles = [
+    "../supabase/sunday_reset.sql",
+    "../supabase/admin_ride_control.sql",
+  ];
+
+  for (const sqlFile of sqlFiles) {
+    const sql = await readFile(new URL(sqlFile, import.meta.url), "utf8");
+    const dryRunFunction = sql.match(/create or replace function public\.ride_admin_publish_plan_dry_run[\s\S]*?grant execute on function public\.ride_admin_publish_plan_dry_run/)?.[0] || "";
+
+    assert.match(dryRunFunction, /returns jsonb/);
+    assert.match(dryRunFunction, /driver_required/);
+    assert.match(dryRunFunction, /driver_not_found/);
+    assert.match(dryRunFunction, /rider_name_required/);
+    assert.doesNotMatch(dryRunFunction, /insert into rides_private\.ride_stops/i);
+    assert.doesNotMatch(dryRunFunction, /delete from rides_private\.ride_stops/i);
+    assert.doesNotMatch(dryRunFunction, /update rides_private\.ride_stops/i);
+  }
+});
+
+test("SQL source supports server-side admin draft RPCs", async () => {
+  const sqlFiles = [
+    "../supabase/sunday_reset.sql",
+    "../supabase/admin_ride_control.sql",
+  ];
+
+  for (const sqlFile of sqlFiles) {
+    const sql = await readFile(new URL(sqlFile, import.meta.url), "utf8");
+
+    assert.match(sql, /create table if not exists rides_private\.ride_admin_drafts/);
+    assert.match(sql, /unique \(plan_date, actor_key\)/);
+    assert.match(sql, /create or replace function public\.ride_admin_save_draft/);
+    assert.match(sql, /create or replace function public\.ride_admin_get_draft/);
+    assert.match(sql, /create or replace function public\.ride_admin_clear_draft/);
+    assert.match(sql, /grant execute on function public\.ride_admin_save_draft/);
+    assert.match(sql, /grant execute on function public\.ride_admin_get_draft/);
+    assert.match(sql, /grant execute on function public\.ride_admin_clear_draft/);
+    assert.doesNotMatch(sql, /grant .* on table rides_private\.ride_admin_drafts to anon/i);
+  }
+});
+
 test("admin address autocomplete is proxied through a Supabase Edge Function", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   let source = "";
@@ -262,28 +377,184 @@ test("admin address autocomplete is proxied through a Supabase Edge Function", a
   assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
-test("driver route modal stays simple and admin login is passcode-only", async () => {
+test("driver route modal stays simple and admin login uses profile passwords", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const driverModal = html.match(/async function openCodeModal[\s\S]*?function openAdminCodeModal/)?.[0] || "";
   const adminModal = html.match(/function openAdminCodeModal[\s\S]*?function closeCodeModal/)?.[0] || "";
   const submitCode = html.match(/async function submitCode[\s\S]*?if \(!state\.selectedDriver\)/)?.[0] || "";
 
+  assert.match(html, /const ADMIN_PROFILES = \[/);
+  assert.match(html, /id="adminProfileChoices"/);
+  assert.match(html, /ride_admin_profile_login/);
+  assert.doesNotMatch(html, secretPattern(["danny", "my", "baby"]));
+  assert.doesNotMatch(html, secretPattern(["admin", "123"]));
   assert.match(driverModal, /document\.querySelector\("#modalTitle"\)\.textContent = "Passcode"/);
   assert.match(driverModal, /driverCode\.hidden = false/);
   assert.match(driverModal, /modalClose\.hidden = true/);
   assert.match(driverModal, /cancelCode\.hidden = false/);
   assert.match(driverModal, /codeForm\.classList\.remove\("admin-login-card"\)/);
-  assert.match(adminModal, /state\.adminLoginMode = "code"/);
+  assert.match(adminModal, /state\.adminLoginMode = "profile"/);
   assert.match(adminModal, /document\.querySelector\("#modalTitle"\)\.textContent = "Ride Control"/);
   assert.match(adminModal, /modalKicker\.hidden = false/);
-  assert.match(adminModal, /modalDriver\.textContent = "Sunday · UH Hilton"/);
+  assert.match(adminModal, /modalDriver\.textContent = "Choose admin profile"/);
+  assert.match(adminModal, /renderAdminProfileChoices\(\)/);
   assert.match(adminModal, /codeSubmit\.textContent = "Open Ride Control"/);
   assert.match(adminModal, /driverCode\.hidden = false/);
   assert.match(adminModal, /modalClose\.hidden = false/);
   assert.match(adminModal, /cancelCode\.hidden = true/);
   assert.doesNotMatch(adminModal, /adminAuthFields\.hidden = false/);
-  assert.match(submitCode, /await loadAdminSnapshot\(driverCode\.value\)/);
+  assert.match(submitCode, /await loginAdminProfile\(state\.selectedAdminProfileSlug, driverCode\.value\)/);
   assert.doesNotMatch(submitCode, /signInAdminWithPassword/);
+});
+
+test("admin profile login requests a backend session for the selected admin", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options) => {
+    if (String(url).includes("/functions/v1/ride-route-timing")) {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, timings: {} }),
+      };
+    }
+    const name = String(url).split("/rpc/").at(-1);
+    const body = options?.body ? JSON.parse(options.body) : null;
+    calls.push({ name, body });
+    if (name === "ride_admin_profile_login") {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          adminCode: "profile-session-token",
+          actor: {
+            type: "profile",
+            profileSlug: "faith",
+            label: "Faith",
+            initials: "FA",
+          },
+        }),
+      };
+    }
+    if (name === "ride_admin_snapshot") {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          plan: { date: "2026-08-30" },
+          destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+          drivers: [],
+          driverPool: [],
+          stops: [],
+          people: [],
+          security: {
+            ok: true,
+            actor: {
+              type: "profile",
+              profileSlug: "faith",
+              label: "Faith",
+              initials: "FA",
+            },
+          },
+        }),
+      };
+    }
+    if (name === "ride_admin_security_context") {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          actor: {
+            type: "profile",
+            profileSlug: "faith",
+            label: "Faith",
+            initials: "FA",
+          },
+        }),
+      };
+    }
+    if (name === "ride_admin_activity" || name === "ride_admin_get_draft") {
+      return { ok: true, json: async () => ({ ok: true, events: [], draft: null }) };
+    }
+    return { ok: true, json: async () => [] };
+  });
+
+  assert.equal(typeof app.loginAdminProfile, "function");
+  app.state.codeMode = "admin";
+  app.state.adminLoginMode = "profile";
+  app.state.selectedAdminProfileSlug = "faith";
+  app.__driverCode.value = "faith-test-password";
+
+  await app.submitCode({ preventDefault() {} });
+
+  const profileCall = calls.find((call) => call.name === "ride_admin_profile_login");
+  const snapshotCall = calls.find((call) => call.name === "ride_admin_snapshot");
+  assert.deepEqual(profileCall?.body, {
+    p_profile_slug: "faith",
+    p_password: "faith-test-password",
+  });
+  assert.equal(snapshotCall?.body?.p_admin_code, "profile-session-token");
+  assert.equal(app.state.adminCode, "profile-session-token");
+  assert.equal(app.state.admin?.security?.actor?.label, "Faith");
+});
+
+test("admin profile picker labels Joojo correctly", async () => {
+  const app = await loadApp();
+
+  assert.equal(app.adminProfileBySlug("joojo")?.label, "Joojo");
+  assert.equal(app.adminProfileBySlug("jojo")?.label, "Joojo");
+  assert.match(app.adminProfileOptionsHtml(), /Joojo/);
+  assert.doesNotMatch(app.adminProfileOptionsHtml(), />Jojo</);
+});
+
+test("joojo profile keeps legacy admin passcode fallback if profile RPC is missing", async () => {
+  const app = await loadApp(async (url) => {
+    const name = String(url).split("/rpc/").at(-1);
+    if (name === "ride_admin_profile_login") {
+      return {
+        ok: false,
+        text: async () => JSON.stringify({
+          code: "PGRST202",
+          message: "Could not find the function public.ride_admin_profile_login in the schema cache",
+        }),
+      };
+    }
+    return { ok: true, json: async () => [] };
+  });
+
+  const adminCode = await app.loginAdminProfile("joojo", "legacy-admin-code");
+
+  assert.equal(adminCode, "legacy-admin-code");
+  assert.equal(app.state.adminProfileLogin.actor.label, "Joojo");
+});
+
+test("admin activity can filter changes by Faith or Joojo", async () => {
+  const app = await loadApp();
+  app.state.adminActivity = [
+    {
+      action: "publish_plan",
+      actorLabel: "Faith",
+      actorProfileSlug: "faith",
+      actorInitials: "FA",
+      createdAt: "2026-09-05T14:00:00.000Z",
+    },
+    {
+      action: "update_people",
+      actorLabel: "Joojo",
+      actorProfileSlug: "joojo",
+      actorInitials: "JJ",
+      createdAt: "2026-09-05T13:00:00.000Z",
+    },
+  ];
+  app.state.adminActivityFilter = "faith";
+
+  const html = app.adminActivityList();
+
+  assert.match(html, /data-admin-activity-filter="all"/);
+  assert.match(html, /data-admin-activity-filter="joojo"/);
+  assert.match(html, /data-admin-activity-filter="faith"/);
+  assert.match(html, />FA</);
+  assert.match(html, /Faith/);
+  assert.doesNotMatch(html, /update_people/);
+  assert.doesNotMatch(html, />JJ</);
 });
 
 test("app exposes home screen icon metadata", async () => {
@@ -331,6 +602,124 @@ test("Sunday branding updates home and admin cover copy", async () => {
   const adminHtml = app.adminView();
   assert.match(adminHtml, /<h1>Sunday Ride Plan<\/h1>/);
   assert.match(adminHtml, /Build this Sunday(?:'|&#39;)s list/);
+});
+
+test("event setup branding updates the public home screen", async () => {
+  const app = await loadApp();
+  app.state.loading = false;
+  app.state.plan = { date: "2026-09-03", title: "Thursday Service Rides", serviceDay: "Thursday" };
+  app.state.destination = { label: "UH Hilton", address: "University of Houston Hilton, Houston, TX" };
+  app.state.appSettings = {
+    homeTitle: "Thursday Service Rides",
+    homeSubtitle: "Drivers assigned",
+    homeCoverUrl: "https://example.test/cover.webp",
+    homeCoverAlt: "Thursday service cover",
+  };
+  app.state.drivers = [{ slug: "naa", displayName: "Naa", initials: "NA", pickup_count: 1 }];
+
+  const html = app.homeView();
+  assert.match(html, /Thursday Service Rides/);
+  assert.match(html, /https:\/\/example\.test\/cover\.webp/);
+  assert.match(html, /Thursday service cover/);
+  assert.match(html, /Thursday · UH Hilton/);
+});
+
+test("admin settings renders editable event setup fields", async () => {
+  const app = await loadApp();
+  app.state.plan = { date: "2026-09-03", title: "Thursday Service Rides", serviceDay: "Thursday" };
+  app.state.destination = { label: "UH Hilton", address: "University of Houston Hilton, Houston, TX" };
+  app.state.appSettings = {
+    homeTitle: "Thursday Service Rides",
+    homeSubtitle: "Drivers assigned",
+    homeCoverUrl: "assets/home-car.png",
+    homeCoverAlt: "Church ride car",
+  };
+  app.state.admin = { drivers: [], stops: [], people: [], security: { actor: { type: "code" } } };
+  app.state.adminActiveTab = "settings";
+
+  const html = app.adminView();
+  assert.match(html, /Event setup/);
+  assert.match(html, /name="homeTitle"/);
+  assert.match(html, /name="planTitle"/);
+  assert.match(html, /name="serviceDay"/);
+  assert.match(html, /name="destinationLabel"/);
+  assert.match(html, /data-admin-form="event-setup"/);
+  assert.doesNotMatch(html, /class="[^"]*admin-control-header[^"]*"/);
+  assert.doesNotMatch(html, /class="[^"]*admin-control-stats[^"]*"/);
+  assert.doesNotMatch(html, /<h1>Sunday Ride Plan<\/h1>/);
+  assert.doesNotMatch(html, /drivers available/);
+  assert.doesNotMatch(html, /changes today/);
+});
+
+test("home image upload is available only to signed-in admins", async () => {
+  const app = await loadApp();
+  app.state.plan = { date: "2026-09-03", title: "Thursday Service Rides", serviceDay: "Thursday" };
+  app.state.destination = { label: "UH Hilton", address: "University of Houston Hilton, Houston, TX" };
+  app.state.appSettings = {
+    homeTitle: "Thursday Service Rides",
+    homeSubtitle: "",
+    homeCoverUrl: "assets/home-car.png",
+    homeCoverAlt: "Church ride car",
+  };
+  app.state.adminActiveTab = "settings";
+  app.state.admin = { drivers: [], stops: [], people: [], security: { actor: { type: "code" } } };
+
+  const passcodeHtml = app.adminView();
+  assert.match(passcodeHtml, /name="homeCoverFile"/);
+  assert.match(passcodeHtml, /type="file"[^>]*accept="image\/png,image\/jpeg,image\/webp"[^>]*disabled/);
+  assert.match(passcodeHtml, /Sign in as admin to upload the home image/);
+  assert.equal(app.signedInAdminCanUploadHomeCover(), false);
+
+  app.state.adminSession = { access_token: "signed-token" };
+  app.state.admin = { drivers: [], stops: [], people: [], security: { actor: { type: "user" } } };
+  const signedInHtml = app.adminView();
+  assert.match(signedInHtml, /type="file"[^>]*accept="image\/png,image\/jpeg,image\/webp"/);
+  assert.doesNotMatch(signedInHtml, /type="file"[^>]*disabled/);
+  assert.equal(app.signedInAdminCanUploadHomeCover(), true);
+});
+
+test("home cover upload uses signed-in admin Supabase storage auth", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (String(url).includes("/rest/v1/rpc/ride_driver_directory")) {
+      return {
+        ok: true,
+        json: async () => [],
+      };
+    }
+    if (String(url).includes("/rest/v1/rpc/")) {
+      return {
+        ok: true,
+        json: async () => ({ ok: false }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({}),
+    };
+  });
+
+  app.state.adminSession = { access_token: "signed-token" };
+  app.state.admin = { security: { actor: { type: "user" } } };
+
+  const file = { name: "Thursday Service.JPG", type: "image/jpeg", size: 512 };
+  const uploaded = await app.uploadAdminHomeCover(file);
+  const call = calls.find((item) => String(item.url).includes("/storage/v1/object/ride-app-assets/"));
+
+  assert.ok(call, "home cover upload should call Supabase Storage");
+  assert.match(uploaded.publicUrl, /\/storage\/v1\/object\/public\/ride-app-assets\/home-covers\//);
+  assert.match(call.url, /\/storage\/v1\/object\/ride-app-assets\/home-covers\//);
+  assert.equal(call.options.method, "POST");
+  assert.equal(call.options.headers.authorization, "Bearer signed-token");
+  assert.equal(call.options.headers.apikey.length > 20, true);
+  assert.equal(call.options.headers["content-type"], "image/jpeg");
+  assert.equal(call.options.body, file);
+  assert.doesNotMatch(JSON.stringify(call), /google/i);
+
+  app.state.adminSession = null;
+  app.state.admin = { security: { actor: { type: "code" } } };
+  await assert.rejects(() => app.uploadAdminHomeCover(file), /signed_in_admin_required/);
 });
 
 test("app includes a root push service worker", async () => {
@@ -461,7 +850,7 @@ test("admin uses drivers sunday riders and changes tabs with rider assignment st
 
   app.state.adminActiveTab = "drivers";
   const driversHtml = app.adminView();
-  assert.match(driversHtml, /Start New Sunday/);
+  assert.match(driversHtml, /Create ride list/);
   assert.match(driversHtml, /data-action="adminReset"/);
   assert.doesNotMatch(driversHtml, /Everyone coming/);
 
@@ -476,7 +865,7 @@ test("admin uses drivers sunday riders and changes tabs with rider assignment st
   assert.match(ridersHtml, /Not assigned/);
   assert.match(ridersHtml, /data-admin-edit="stop-2"/);
   assert.match(ridersHtml, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
-  assert.doesNotMatch(ridersHtml, /Start New Sunday/);
+  assert.doesNotMatch(ridersHtml, /Create ride list/);
   assert.doesNotMatch(ridersHtml, /Tinnie/);
 
   app.state.admin.stops = app.state.admin.stops.map((stop) => (
@@ -620,7 +1009,7 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
   assert.match(html, /<button class="admin-stat[^"]*" type="button" data-admin-tab="changes"><strong>0<\/strong><span>changes today<\/span>/);
   assert.match(html, /class="primary-action admin-add-rider-action" type="button" data-action="adminNew"/);
   assert.match(html, /data-detail-icon="user-plus"/);
-  assert.doesNotMatch(html, /Start New Sunday/);
+  assert.doesNotMatch(html, /Create ride list/);
   assert.doesNotMatch(html, /data-action="adminReset"/);
   assert.match(html, /Everyone coming/);
   assert.match(html, /A&#39;lena/);
@@ -757,7 +1146,7 @@ test("admin drivers tab shows route cards without saved driver availability", as
   assert.match(html, /data-admin-driver-toggle="joojo"/);
   assert.doesNotMatch(html, /data-admin-driver-toggle="blue"/);
   assert.doesNotMatch(html, /Blu/);
-  assert.match(html, /Start New Sunday/);
+  assert.match(html, /Create ride list/);
   assert.doesNotMatch(html, /Driver availability/);
   assert.doesNotMatch(html, /Check who can drive for this plan/);
   assert.doesNotMatch(html, /data-action="adminDriverAdd"/);
@@ -801,7 +1190,7 @@ test("admin driver list menu page shows saved driver availability with add drive
   assert.match(html, /Lou/);
   assert.match(html, /Inactive/);
   assert.match(html, /Save availability/);
-  assert.doesNotMatch(html, /Start New Sunday/);
+  assert.doesNotMatch(html, /Create ride list/);
   assert.doesNotMatch(html, /data-admin-driver-toggle="joojo"/);
 });
 
@@ -977,7 +1366,7 @@ test("admin place autocomplete request calls Supabase without exposing Google ke
     };
   });
 
-  app.state.adminCode = "admin123";
+  app.state.adminCode = "test-admin-code";
   assert.equal(typeof app.placeAutocompleteRequest, "function");
   const payload = await app.placeAutocompleteRequest({
     mode: "suggest",
@@ -995,7 +1384,7 @@ test("admin place autocomplete request calls Supabase without exposing Google ke
     mode: "suggest",
     input: "4200 Uni",
     sessionToken: "session-1",
-    adminCode: "admin123",
+    adminCode: "test-admin-code",
   });
   assert.doesNotMatch(JSON.stringify(call), /places\.googleapis\.com|X-Goog-Api-Key|GOOGLE_PLACES_API_KEY|GOOGLE_ROUTES_API_KEY|AIza/);
 });
@@ -1521,7 +1910,7 @@ test("local Coffee and Christ rehearsal shows route cards and simulates driver a
 test("admin review shows publish blockers for unassigned riders", async () => {
   const app = await loadApp();
 
-  app.state.adminCode = "admin123";
+  app.state.adminCode = "test-admin-code";
   app.state.planDate = "2026-08-30";
   app.state.admin = {
     plan: { date: "2026-08-30" },
@@ -1582,7 +1971,7 @@ test("admin publish blocks unassigned riders before Supabase and preserves a dra
     };
   });
 
-  app.state.adminCode = "admin123";
+  app.state.adminCode = "test-admin-code";
   app.state.planDate = "2026-08-30";
   app.state.admin = {
     plan: { date: "2026-08-30" },
@@ -1626,6 +2015,18 @@ test("admin publish keeps draft and explains server driver failures", async () =
   const app = await loadApp(async (url, options) => {
     const name = String(url).split("/rpc/").at(-1);
     calls.push({ name, body: options?.body ? JSON.parse(options.body) : null });
+    if (name === "ride_admin_save_draft") {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, draft: { source: "server", planDate: "2026-08-30", savedAt: "2026-09-04T14:00:00.000Z", stops: [], deletedStopIds: [] } }),
+      };
+    }
+    if (name === "ride_admin_publish_plan_dry_run") {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, issues: [], issueCount: 0 }),
+      };
+    }
     if (name === "ride_admin_publish_plan") {
       return {
         ok: true,
@@ -1640,7 +2041,7 @@ test("admin publish keeps draft and explains server driver failures", async () =
     return { ok: true, json: async () => [] };
   });
 
-  app.state.adminCode = "admin123";
+  app.state.adminCode = "test-admin-code";
   app.state.planDate = "2026-08-30";
   app.state.admin = {
     plan: { date: "2026-08-30" },
@@ -1676,6 +2077,416 @@ test("admin publish keeps draft and explains server driver failures", async () =
   assert.equal(app.readAdminDraftBackup("2026-08-30").stops[0].name, "Faith Test");
 });
 
+test("admin publish runs backend dry-run before live publish", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options) => {
+    if (String(url).includes("/functions/v1/ride-route-timing")) {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, timings: {} }),
+      };
+    }
+    const name = String(url).split("/rpc/").at(-1);
+    calls.push({ name, body: options?.body ? JSON.parse(options.body) : null });
+    if (name === "ride_admin_save_draft" || name === "ride_admin_clear_draft") {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, draft: { source: "server", planDate: "2026-08-30", savedAt: "2026-09-04T14:00:00.000Z", stops: [], deletedStopIds: [] } }),
+      };
+    }
+    if (name === "ride_admin_publish_plan_dry_run") {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, issues: [], issueCount: 0 }),
+      };
+    }
+    if (name === "ride_admin_publish_plan") {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          plan: { date: "2026-08-30" },
+          destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+          drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 1, sortOrder: 1 }],
+          driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 1, sortOrder: 1 }],
+          stops: [{
+            id: "stop-faith",
+            driverSlug: "joojo",
+            stopOrder: 1,
+            name: "Faith Test",
+            phone: "",
+            address: "1 Test Way, Houston, TX",
+            area: "",
+            pickupTime: "12:00 PM",
+            readyBy: "",
+            routeLabel: "",
+            notes: "",
+          }],
+        }),
+      };
+    }
+    return { ok: true, json: async () => [] };
+  });
+
+  app.state.adminCode = "test-admin-code";
+  app.state.planDate = "2026-08-30";
+  app.state.admin = {
+    plan: { date: "2026-08-30" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 1, sortOrder: 1 }],
+    driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 1, sortOrder: 1 }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [{
+    id: "temp-faith",
+    driverSlug: "joojo",
+    stopOrder: 1,
+    name: "Faith Test",
+    phone: "",
+    address: "1 Test Way, Houston, TX",
+    area: "",
+    pickupTime: "12:00 PM",
+    readyBy: "",
+    routeLabel: "",
+    notes: "",
+  }];
+  app.state.adminDeletedStopIds = [];
+
+  await app.publishAdminDraft();
+
+  const names = calls.map((call) => call.name);
+  assert.ok(names.indexOf("ride_admin_publish_plan_dry_run") >= 0);
+  assert.ok(names.indexOf("ride_admin_publish_plan") > names.indexOf("ride_admin_publish_plan_dry_run"));
+  assert.equal(calls.filter((call) => call.name === "ride_admin_publish_plan").length, 1);
+  assert.equal(app.state.view, "admin");
+  assert.equal(app.state.adminMessage, "Route changes published.");
+});
+
+test("admin publish stops when backend dry-run reports blockers", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options) => {
+    const name = String(url).split("/rpc/").at(-1);
+    calls.push({ name, body: options?.body ? JSON.parse(options.body) : null });
+    if (name === "ride_admin_save_draft") {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, draft: { source: "server", planDate: "2026-08-30", savedAt: "2026-09-04T14:00:00.000Z", stops: [], deletedStopIds: [] } }),
+      };
+    }
+    if (name === "ride_admin_publish_plan_dry_run") {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          issues: [{
+            error: "driver_not_found",
+            title: "Faith Test is assigned to a driver that is not active",
+            riderName: "Faith Test",
+            driverSlug: "joojo",
+            index: 1,
+          }],
+          issueCount: 1,
+        }),
+      };
+    }
+    return { ok: true, json: async () => [] };
+  });
+
+  app.state.adminCode = "test-admin-code";
+  app.state.planDate = "2026-08-30";
+  app.state.admin = {
+    plan: { date: "2026-08-30" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 1, sortOrder: 1 }],
+    driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 1, sortOrder: 1 }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [{
+    id: "temp-faith",
+    driverSlug: "joojo",
+    stopOrder: 1,
+    name: "Faith Test",
+    phone: "",
+    address: "1 Test Way, Houston, TX",
+    area: "",
+    pickupTime: "12:00 PM",
+    readyBy: "",
+    routeLabel: "",
+    notes: "",
+  }];
+  app.state.adminDeletedStopIds = [];
+
+  await app.publishAdminDraft();
+
+  assert.equal(calls.filter((call) => call.name === "ride_admin_publish_plan_dry_run").length, 1);
+  assert.equal(calls.filter((call) => call.name === "ride_admin_publish_plan").length, 0);
+  assert.equal(app.state.view, "adminReview");
+  assert.match(app.state.adminError, /Faith Test is assigned to a driver that is not active/);
+  assert.equal(app.readAdminDraftBackup("2026-08-30").stops[0].name, "Faith Test");
+});
+
+test("admin publish explains backend mismatch and keeps retry available", async () => {
+  const app = await loadApp(async (url, options) => {
+    const name = String(url).split("/rpc/").at(-1);
+    if (name === "ride_admin_publish_plan_dry_run") {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, issues: [], issueCount: 0 }),
+      };
+    }
+    if (name === "ride_admin_publish_plan") {
+      return {
+        ok: false,
+        text: async () => JSON.stringify({
+          code: "PGRST202",
+          message: "Could not find the function public.ride_admin_publish_plan in the schema cache",
+        }),
+      };
+    }
+    return { ok: true, json: async () => [] };
+  });
+
+  app.state.adminCode = "test-admin-code";
+  app.state.planDate = "2026-08-30";
+  app.state.admin = {
+    plan: { date: "2026-08-30" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 1, sortOrder: 1 }],
+    driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 1, sortOrder: 1 }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [{
+    id: "temp-faith",
+    driverSlug: "joojo",
+    stopOrder: 1,
+    name: "Faith Test",
+    phone: "",
+    address: "1 Test Way, Houston, TX",
+    area: "",
+    pickupTime: "12:00 PM",
+    readyBy: "",
+    routeLabel: "",
+    notes: "",
+  }];
+  app.state.adminDeletedStopIds = [];
+
+  await app.publishAdminDraft();
+
+  assert.equal(app.state.view, "adminReview");
+  assert.match(app.state.adminError, /App backend needs an update/);
+  assert.match(app.state.adminError, /Nothing was lost/);
+  assert.equal(app.state.adminDraftStops[0].name, "Faith Test");
+  assert.equal(app.readAdminDraftBackup("2026-08-30").stops[0].name, "Faith Test");
+  assert.match(app.adminReviewView(), /Try publishing again \(1\)/);
+});
+
+test("admin publish explains connection failures without losing draft", async () => {
+  const app = await loadApp(async (url) => {
+    const name = String(url).split("/rpc/").at(-1);
+    if (name === "ride_admin_publish_plan_dry_run") {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, issues: [], issueCount: 0 }),
+      };
+    }
+    if (name === "ride_admin_publish_plan") throw new Error("Failed to fetch");
+    return { ok: true, json: async () => [] };
+  });
+
+  app.state.adminCode = "test-admin-code";
+  app.state.planDate = "2026-08-30";
+  app.state.admin = {
+    plan: { date: "2026-08-30" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 1, sortOrder: 1 }],
+    driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 1, sortOrder: 1 }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [{
+    id: "temp-faith",
+    driverSlug: "joojo",
+    stopOrder: 1,
+    name: "Faith Test",
+    phone: "",
+    address: "1 Test Way, Houston, TX",
+    area: "",
+    pickupTime: "12:00 PM",
+    readyBy: "",
+    routeLabel: "",
+    notes: "",
+  }];
+  app.state.adminDeletedStopIds = [];
+
+  await app.publishAdminDraft();
+
+  assert.equal(app.state.view, "adminReview");
+  assert.match(app.state.adminError, /Could not reach Supabase/);
+  assert.match(app.state.adminError, /Nothing was lost/);
+  assert.equal(app.state.adminDraftStops[0].name, "Faith Test");
+  assert.equal(app.readAdminDraftBackup("2026-08-30").stops[0].name, "Faith Test");
+  assert.match(app.adminReviewView(), /Try publishing again \(1\)/);
+});
+
+test("admin shows draft protection after rider edits are autosaved", async () => {
+  const app = await loadApp();
+
+  app.state.adminCode = "test-admin-code";
+  app.state.planDate = "2026-08-30";
+  app.state.admin = {
+    plan: { date: "2026-08-30" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 1, sortOrder: 1 }],
+    driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 1, sortOrder: 1 }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [{
+    id: "temp-faith",
+    driverSlug: "joojo",
+    stopOrder: 1,
+    name: "Faith Test",
+    phone: "",
+    address: "1 Test Way, Houston, TX",
+    area: "",
+    pickupTime: "12:00 PM",
+    readyBy: "",
+    routeLabel: "",
+    notes: "",
+  }];
+  app.state.adminDeletedStopIds = [];
+
+  app.saveAdminDraftBackup("rider-saved");
+
+  const html = app.adminReviewView();
+  assert.match(html, /Draft saved on this device/);
+  assert.match(html, /1 change protected until publish succeeds/);
+  assert.match(html, /Publish route changes \(1\)/);
+  assert.doesNotMatch(html, /Restore draft/);
+});
+
+test("admin server draft failure keeps the local draft backup", async () => {
+  const app = await loadApp(async (url) => {
+    const name = String(url).split("/rpc/").at(-1);
+    if (name === "ride_admin_save_draft") {
+      return {
+        ok: true,
+        json: async () => ({ ok: false, error: "draft_save_failed" }),
+      };
+    }
+    return { ok: true, json: async () => [] };
+  });
+
+  app.state.adminCode = "test-admin-code";
+  app.state.planDate = "2026-08-30";
+  app.state.admin = {
+    plan: { date: "2026-08-30" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 1, sortOrder: 1 }],
+    driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 1, sortOrder: 1 }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [{
+    id: "temp-faith",
+    driverSlug: "joojo",
+    stopOrder: 1,
+    name: "Faith Test",
+    phone: "",
+    address: "1 Test Way, Houston, TX",
+    area: "",
+    pickupTime: "12:00 PM",
+    readyBy: "",
+    routeLabel: "",
+    notes: "",
+  }];
+  app.state.adminDeletedStopIds = [];
+
+  const backup = app.saveAdminDraftBackup("rider-saved");
+  const saved = await app.saveAdminServerDraft("rider-saved", backup);
+
+  assert.equal(saved, null);
+  assert.equal(app.readAdminDraftBackup("2026-08-30").stops[0].name, "Faith Test");
+  assert.equal(app.state.adminDraftSavedAt, backup.savedAt);
+});
+
+test("admin loads the newest server draft as a restorable backup", async () => {
+  const serverDraft = {
+    version: 1,
+    source: "server",
+    planDate: "2026-08-30",
+    savedAt: "2026-09-04T13:30:00.000Z",
+    reason: "rider-saved",
+    stops: [{
+      id: "temp-server",
+      driverSlug: "joojo",
+      stopOrder: 1,
+      name: "Server Draft Rider",
+      phone: "",
+      address: "2 Server Way, Houston, TX",
+      area: "",
+      pickupTime: "12:15 PM",
+      readyBy: "",
+      routeLabel: "",
+      notes: "",
+    }],
+    deletedStopIds: [],
+  };
+  const app = await loadApp(async (url) => {
+    const name = String(url).split("/rpc/").at(-1);
+    if (name === "ride_admin_get_draft") {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, draft: serverDraft }),
+      };
+    }
+    return { ok: true, json: async () => [] };
+  });
+
+  app.state.adminCode = "test-admin-code";
+  app.state.planDate = "2026-08-30";
+  app.state.admin = {
+    plan: { date: "2026-08-30" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+    drivers: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", pickupCount: 0, sortOrder: 1 }],
+    driverPool: [{ slug: "joojo", displayName: "Joojo", initials: "JJ", active: true, pickupCount: 0, sortOrder: 1 }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminDraftBackup = {
+    version: 1,
+    source: "local",
+    planDate: "2026-08-30",
+    savedAt: "2026-09-04T13:00:00.000Z",
+    reason: "rider-saved",
+    stops: [{
+      id: "temp-local",
+      driverSlug: "joojo",
+      stopOrder: 1,
+      name: "Older Local Rider",
+      phone: "",
+      address: "1 Local Way, Houston, TX",
+      area: "",
+      pickupTime: "12:00 PM",
+      readyBy: "",
+      routeLabel: "",
+      notes: "",
+    }],
+    deletedStopIds: [],
+  };
+  app.state.adminDraftSavedAt = app.state.adminDraftBackup.savedAt;
+
+  await app.loadAdminServerDraftNotice();
+
+  assert.equal(app.state.adminDraftBackup.source, "server");
+  assert.equal(app.state.adminDraftBackup.stops[0].name, "Server Draft Rider");
+  assert.equal(app.state.adminDraftSavedAt, "2026-09-04T13:30:00.000Z");
+});
+
 test("admin can restore an unpublished draft backup", async () => {
   const app = await loadApp(async (url) => {
     const urlText = String(url);
@@ -1685,7 +2496,7 @@ test("admin can restore an unpublished draft backup", async () => {
     return { ok: true, json: async () => [] };
   });
 
-  app.state.adminCode = "admin123";
+  app.state.adminCode = "test-admin-code";
   app.state.planDate = "2026-08-30";
   app.state.admin = {
     plan: { date: "2026-08-30" },
@@ -2738,7 +3549,7 @@ test("edit screen contains the red remove control above form actions", async () 
   assert.ok(html.indexOf("Remove rider") < html.indexOf("Cancel"), "remove should appear above Cancel");
 });
 
-test("admin Sunday reset screen keeps PeopleData and starts with selected blank drivers", async () => {
+test("admin create ride list screen keeps PeopleData and starts with selected blank drivers", async () => {
   const app = await loadApp();
 
   assert.equal(typeof app.adminResetView, "function");
@@ -2773,7 +3584,8 @@ test("admin Sunday reset screen keeps PeopleData and starts with selected blank 
   app.state.adminResetDriverSlugs = ["joojo", "annie"];
 
   const html = app.adminResetView();
-  assert.match(html, /Create New Sunday/);
+  assert.match(html, /Create ride list/);
+  assert.match(html, /Service date/);
   assert.match(html, /2026-08-16/);
   assert.match(html, /Joojo/);
   assert.match(html, /Annie/);
@@ -2783,4 +3595,5 @@ test("admin Sunday reset screen keeps PeopleData and starts with selected blank 
   assert.match(html, /name="driverSlug" value="joojo" checked/);
   assert.match(html, /name="driverSlug" value="annie" checked/);
   assert.doesNotMatch(html, /Faith<\/strong>/);
+  assert.doesNotMatch(html, /Sunday date/);
 });

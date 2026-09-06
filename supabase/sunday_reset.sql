@@ -28,6 +28,35 @@ create table if not exists rides_private.ride_admin_drafts (
 alter table rides_private.ride_admin_drafts enable row level security;
 alter table rides_private.ride_admin_drafts force row level security;
 
+create or replace function rides_private.ride_admin_draft_actor_key(p_admin_code text)
+returns text
+language plpgsql
+stable
+security definer
+set search_path to ''
+as $$
+declare
+  v_actor jsonb;
+  v_user_id uuid := (select auth.uid());
+begin
+  if to_regprocedure('rides_private.ride_admin_profile_session_actor(text)') is not null then
+    execute 'select rides_private.ride_admin_profile_session_actor($1)'
+    into v_actor
+    using p_admin_code;
+  end if;
+
+  if lower(nullif(v_actor->>'profileSlug', '')) is not null then
+    return 'profile:' || lower(nullif(v_actor->>'profileSlug', ''));
+  end if;
+
+  if v_user_id is not null then
+    return 'user:' || v_user_id::text;
+  end if;
+
+  return 'code:' || md5(coalesce(p_admin_code, ''));
+end;
+$$;
+
 insert into rides_private.ride_app_settings (id, active_plan_date)
 values (
   'main',
@@ -120,6 +149,8 @@ returns table (
   display_name text,
   initials text,
   subtitle text,
+  route_label text,
+  route_notes text,
   pickup_count integer,
   sort_order integer
 )
@@ -133,13 +164,18 @@ as $$
     d.display_name,
     d.initials,
     d.subtitle,
+    coalesce(
+      (array_agg(nullif(btrim(s.route_label), '') order by s.stop_order) filter (where nullif(btrim(s.route_label), '') is not null))[1],
+      ''
+    ) as route_label,
+    d.route_notes,
     count(s.id)::integer as pickup_count,
     d.sort_order
   from rides_private.ride_drivers d
   join rides_private.ride_plans p on p.id = d.plan_id
   left join rides_private.ride_stops s on s.driver_id = d.id
   where p.plan_date = coalesce(p_plan_date, rides_private.current_ride_plan_date())
-  group by d.id, d.slug, d.display_name, d.initials, d.subtitle, d.sort_order
+  group by d.id, d.slug, d.display_name, d.initials, d.subtitle, d.route_notes, d.sort_order
   order by d.sort_order, d.display_name;
 $$;
 
@@ -751,7 +787,7 @@ as $$
 declare
   v_plan_date date := coalesce(p_plan_date, rides_private.current_ride_plan_date());
   v_saved_at timestamp with time zone := now();
-  v_actor_key text := coalesce('user:' || (select auth.uid())::text, 'code:' || md5(coalesce(p_admin_code, '')));
+  v_actor_key text := rides_private.ride_admin_draft_actor_key(p_admin_code);
   v_draft jsonb;
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
@@ -812,7 +848,7 @@ set search_path to ''
 as $$
 declare
   v_plan_date date := coalesce(p_plan_date, rides_private.current_ride_plan_date());
-  v_actor_key text := coalesce('user:' || (select auth.uid())::text, 'code:' || md5(coalesce(p_admin_code, '')));
+  v_actor_key text := rides_private.ride_admin_draft_actor_key(p_admin_code);
   v_draft jsonb;
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
@@ -842,7 +878,7 @@ set search_path to ''
 as $$
 declare
   v_plan_date date := coalesce(p_plan_date, rides_private.current_ride_plan_date());
-  v_actor_key text := coalesce('user:' || (select auth.uid())::text, 'code:' || md5(coalesce(p_admin_code, '')));
+  v_actor_key text := rides_private.ride_admin_draft_actor_key(p_admin_code);
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');

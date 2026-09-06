@@ -343,6 +343,10 @@ test("SQL source supports server-side admin draft RPCs", async () => {
 
     assert.match(sql, /create table if not exists rides_private\.ride_admin_drafts/);
     assert.match(sql, /unique \(plan_date, actor_key\)/);
+    assert.match(sql, /create or replace function rides_private\.ride_admin_draft_actor_key/);
+    assert.match(sql, /ride_admin_profile_session_actor\(text\)/);
+    assert.match(sql, /using p_admin_code/);
+    assert.match(sql, /'profile:' \|\| lower\(nullif\(v_actor->>'profileSlug'/);
     assert.match(sql, /create or replace function public\.ride_admin_save_draft/);
     assert.match(sql, /create or replace function public\.ride_admin_get_draft/);
     assert.match(sql, /create or replace function public\.ride_admin_clear_draft/);
@@ -760,6 +764,10 @@ test("driver profile cards show route areas instead of rider names", async () =>
     slug: "dq",
     subtitle: "A'lena and Christopher L",
   });
+  const naaSummary = app.driverRouteSummary({
+    slug: "naa",
+    route_label: "HCU - arrive 12:00 PM",
+  });
   const homeAreaHtml = app.driverProfileCard({
     slug: "unknown-driver",
     display_name: "Test Driver",
@@ -774,7 +782,18 @@ test("driver profile cards show route areas instead of rider names", async () =>
   assert.doesNotMatch(preciousHtml, /DaSilva, Emmanuel Mitch, and Christopher R/);
   assert.equal(dawsonSummary.routeLabel, "UH Clear Lake Route");
   assert.equal(dqSummary.routeLabel, "South / NAU Route");
+  assert.equal(naaSummary.routeLabel, "HCU - arrive 12:00 PM");
   assert.doesNotMatch(homeAreaHtml, /Home Route/);
+});
+
+test("SQL driver directory returns live route labels and notes", async () => {
+  const sql = await readFile(new URL("../supabase/sunday_reset.sql", import.meta.url), "utf8");
+  const directoryFunction = sql.match(/create or replace function public\.ride_driver_directory[\s\S]*?\$\$;/)?.[0] || "";
+
+  assert.match(directoryFunction, /route_label text/);
+  assert.match(directoryFunction, /route_notes text/);
+  assert.match(directoryFunction, /array_agg\(nullif\(btrim\(s\.route_label\), ''\) order by s\.stop_order\)/);
+  assert.match(directoryFunction, /d\.route_notes/);
 });
 
 test("admin uses drivers sunday riders and changes tabs with rider assignment status", async () => {

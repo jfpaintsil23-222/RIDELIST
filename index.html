@@ -4379,7 +4379,7 @@
     function normalizeRouteArea(area) {
       const label = String(area || "").trim();
       if (!label) return "";
-      if (/route$/i.test(label)) return label;
+      if (/route$/i.test(label) || /\b(arrive|pickup)\b/i.test(label)) return label;
       if (/^(uh|uh campus|campus|campus area|home|neighborhood)$/i.test(label)) return "Neighborhood Route";
       return `${label} Route`;
     }
@@ -4407,11 +4407,12 @@
       return (exactTime || sorted[0] || {}).pickupTime || "";
     }
 
-    function driverRouteSummary(driver) {
+    function driverRouteSummary(driver = {}) {
       const directRouteLabel = normalizeRouteArea(driver.route_label || driver.routeLabel);
-      return DRIVER_ROUTE_SUMMARIES[driver.slug] || {
-        routeLabel: directRouteLabel || "Assigned Route",
-        timeLabel: driver.time_label || driver.timeLabel || "Route time pending",
+      const defaultSummary = DRIVER_ROUTE_SUMMARIES[driver.slug] || {};
+      return {
+        routeLabel: directRouteLabel || defaultSummary.routeLabel || "Assigned Route",
+        timeLabel: driver.time_label || driver.timeLabel || defaultSummary.timeLabel || "Route time pending",
       };
     }
 
@@ -4909,6 +4910,8 @@
         initials,
         subtitle: driver?.subtitle || "",
         routeNotes: driver?.routeNotes || driver?.route_notes || "",
+        routeLabel: driver?.routeLabel || driver?.route_label || "",
+        route_label: driver?.route_label || driver?.routeLabel || "",
         pickupCount,
         pickup_count: pickupCount,
         sortOrder: driverSortOrderValue(driver, options.index || 0),

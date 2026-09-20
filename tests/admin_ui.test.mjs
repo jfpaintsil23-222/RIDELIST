@@ -1707,10 +1707,10 @@ test("legacy descriptive labels do not create more driver cards for one FLOC rid
   ]);
 });
 
-test("rider confirmation status defaults to Waiting and maps confirmed and declined states", async () => {
+test("published riders default to Ready while explicit confirmation responses still map correctly", async () => {
   const app = await loadApp();
 
-  assert.deepEqual({ ...app.riderConfirmationMeta({}) }, { key: "waiting", label: "Waiting", detail: "Confirmation pending" });
+  assert.deepEqual({ ...app.riderConfirmationMeta({}) }, { key: "ready", label: "Ready", detail: "On the ride list" });
   assert.deepEqual({ ...app.riderConfirmationMeta({ confirmationStatus: "confirmed" }) }, { key: "ready", label: "Ready", detail: "Confirmed" });
   assert.deepEqual({ ...app.riderConfirmationMeta({ confirmation_status: "declined" }) }, { key: "declined", label: "Not coming", detail: "Cannot ride today" });
 });
@@ -1791,7 +1791,7 @@ test("driver opens one run and sees only that run's riders with confirmation sta
   assert.match(html, /Nya/);
   assert.match(html, /Raquel/);
   assert.doesNotMatch(html, /Aamiyah/);
-  assert.match(html, /data-confirmation-status="waiting"/);
+  assert.match(html, /data-confirmation-status="ready"/);
   assert.match(html, /data-confirmation-status="declined"/);
   assert.match(html, /Not coming/);
   assert.doesNotMatch(html, /route-scene/);

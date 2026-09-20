@@ -5451,7 +5451,7 @@
       if (["declined", "not coming", "not-coming", "no"].includes(status)) {
         return { key: "declined", label: "Not coming", detail: "Cannot ride today" };
       }
-      return { key: "waiting", label: "Waiting", detail: "Confirmation pending" };
+      return { key: "ready", label: "Ready", detail: "On the ride list" };
     }
 
     function driverRouteSummary(driver = {}) {

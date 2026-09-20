@@ -92,12 +92,23 @@ async function loadApp(fetchImpl, options = {}) {
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
       returnToAdminPersonDetailFromAdd: typeof returnToAdminPersonDetailFromAdd === "function" ? returnToAdminPersonDetailFromAdd : undefined,
       driverProfileCard,
+      profileView: typeof profileView === "function" ? profileView : undefined,
       driverHomeView,
       ridesView,
       detailView,
       driverRouteSummary,
+      driverRouteAlertsHtml: typeof driverRouteAlertsHtml === "function" ? driverRouteAlertsHtml : undefined,
+      driverRunLabel: typeof driverRunLabel === "function" ? driverRunLabel : undefined,
+      driverRunKey: typeof driverRunKey === "function" ? driverRunKey : undefined,
+      driverRuns: typeof driverRuns === "function" ? driverRuns : undefined,
+      driverPickupGroups: typeof driverPickupGroups === "function" ? driverPickupGroups : undefined,
+      riderConfirmationMeta: typeof riderConfirmationMeta === "function" ? riderConfirmationMeta : undefined,
+      selectedDriverRun: typeof selectedDriverRun === "function" ? selectedDriverRun : undefined,
+      openDriverRun: typeof openDriverRun === "function" ? openDriverRun : undefined,
       routeTimingForDriver: typeof routeTimingForDriver === "function" ? routeTimingForDriver : undefined,
       secureRouteTimingRequest: typeof secureRouteTimingRequest === "function" ? secureRouteTimingRequest : undefined,
+      requestAdminAiRoutes: typeof requestAdminAiRoutes === "function" ? requestAdminAiRoutes : undefined,
+      applyAdminAiDraft: typeof applyAdminAiDraft === "function" ? applyAdminAiDraft : undefined,
       placeAutocompleteRequest: typeof placeAutocompleteRequest === "function" ? placeAutocompleteRequest : undefined,
       submitCode: typeof submitCode === "function" ? submitCode : undefined,
       openAdminCodeModal: typeof openAdminCodeModal === "function" ? openAdminCodeModal : undefined,
@@ -113,6 +124,7 @@ async function loadApp(fetchImpl, options = {}) {
       sendAdminRouteNotifications: typeof sendAdminRouteNotifications === "function" ? sendAdminRouteNotifications : undefined,
       isRehearsalMode: typeof isRehearsalMode === "function" ? isRehearsalMode : undefined,
       openRehearsalDriverRoute: typeof openRehearsalDriverRoute === "function" ? openRehearsalDriverRoute : undefined,
+      loadRehearsalData: typeof loadRehearsalData === "function" ? loadRehearsalData : undefined,
       adminRouteWarnings: typeof adminRouteWarnings === "function" ? adminRouteWarnings : undefined,
       weatherSummaryText: typeof weatherSummaryText === "function" ? weatherSummaryText : undefined,
       adminChangedCount,
@@ -595,6 +607,9 @@ test("Sunday branding updates home and admin cover copy", async () => {
   assert.match(homeHtml, /assets\/home-car\.png/);
   assert.match(homeHtml, /Church ride car/);
   assert.match(homeHtml, /1 drivers assigned/);
+  assert.match(homeHtml, /Sunday · UH Hilton/);
+  assert.match(homeHtml, /Total pickups/);
+  assert.match(homeHtml, /<strong class="count">0<\/strong>/);
   assert.doesNotMatch(homeHtml, /Coffee and Christ Ride Plan/);
 
   app.state.admin = {
@@ -784,6 +799,41 @@ test("driver profile cards show route areas instead of rider names", async () =>
   assert.equal(dqSummary.routeLabel, "South / NAU Route");
   assert.equal(naaSummary.routeLabel, "HCU - arrive 12:00 PM");
   assert.doesNotMatch(homeAreaHtml, /Home Route/);
+});
+
+test("driver profile selection uses one compact dropdown instead of a card wall", async () => {
+  const app = await loadApp();
+  app.state.loading = false;
+  app.state.drivers = [
+    { slug: "joojo", display_name: "Joojo", initials: "JJ", pickup_count: 2 },
+    { slug: "megan", display_name: "Megan", initials: "ME", pickup_count: 0 },
+  ];
+
+  const html = app.profileView();
+  assert.match(html, /data-driver-profile-form/);
+  assert.match(html, /name="driverSlug"/);
+  assert.match(html, /<option value="joojo">Joojo<\/option>/);
+  assert.match(html, /<option value="megan">Megan<\/option>/);
+  assert.match(html, />Continue /);
+  assert.doesNotMatch(html, /class="driver-card"/);
+});
+
+test("new Sunday rehearsal activates new drivers and keeps Precious hidden in the saved pool", async () => {
+  const app = await loadApp(undefined, { search: "?rehearsal=new-sunday" });
+  app.loadRehearsalData();
+
+  const activeSlugs = app.state.drivers.map((driver) => driver.slug);
+  assert.ok(activeSlugs.includes("megan"));
+  assert.ok(activeSlugs.includes("jay"));
+  assert.ok(activeSlugs.includes("p-tony"));
+  assert.ok(activeSlugs.includes("p-ricky"));
+  assert.ok(!activeSlugs.includes("precious"));
+  assert.equal(app.state.planDate, "2026-09-20");
+  assert.equal(app.state.adminDraftStops.length, 0);
+
+  const precious = app.state.admin.driverPool.find((driver) => driver.slug === "precious");
+  assert.ok(precious);
+  assert.equal(precious.active, false);
 });
 
 test("SQL driver directory returns live route labels and notes", async () => {
@@ -1076,6 +1126,150 @@ test("admin hamburger drawer exposes secondary admin tools without notifications
   assert.equal(app.state.adminActiveTab, "driver-list");
   assert.equal(app.state.adminMenuOpen, false);
   assert.match(app.adminView(), /Driver availability/);
+});
+
+test("admin menu opens the local AI Organizer without the removed shortcut boxes", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [{ slug: "david-b", displayName: "David B.", initials: "DB" }],
+    stops: [],
+    people: [],
+  };
+  app.state.adminDraftStops = [];
+  app.state.adminActiveTab = "riders";
+  app.state.adminMenuOpen = true;
+
+  const menuHtml = app.adminView();
+  assert.match(menuHtml, /data-admin-menu-page="ai"/);
+  assert.match(menuHtml, /AI Organizer/);
+
+  app.openAdminMenuPage("ai");
+  assert.equal(app.state.adminActiveTab, "ai");
+  assert.equal(app.state.adminMenuOpen, false);
+
+  const aiHtml = app.adminView();
+  assert.match(aiHtml, /Organize rides/);
+  assert.match(aiHtml, /Turn your rider list into optimized routes\./);
+  assert.match(aiHtml, /assets\/ai-route-hero\.jpg/);
+  assert.match(aiHtml, /Give me the list/);
+  assert.match(aiHtml, /Organize routes/);
+  assert.match(aiHtml, /data-admin-ai-prompt/);
+  assert.match(aiHtml, /No AI routes yet/);
+  assert.doesNotMatch(aiHtml, /Capacity/);
+  assert.doesNotMatch(aiHtml, /Deadlines/);
+  assert.doesNotMatch(aiHtml, /Locations/);
+  assert.doesNotMatch(aiHtml, /Rules/);
+  assert.doesNotMatch(aiHtml, /David B\./);
+  assert.doesNotMatch(aiHtml, /Blu/);
+});
+
+test("admin AI organizer calls Supabase Edge Function and renders real suggestions", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options) => {
+    calls.push({ url: String(url), options });
+    if (!String(url).includes("/functions/v1/ride-ai-organizer")) {
+      return { ok: true, json: async () => [] };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        summary: "Built 2 route ideas.",
+        routes: [
+          {
+            driverSlug: "david-b",
+            driverName: "David B.",
+            initials: "DB",
+            summary: "2 rides · latest arrival 12:35",
+            rides: [
+              {
+                label: "Ride 1",
+                names: ["Owen", "Fabio", "Kadie"],
+                detail: "Arrive by 10:50",
+              },
+            ],
+            why: "Keeps the early campus group together.",
+          },
+        ],
+        assignments: [
+          {
+            riderName: "Owen",
+            driverSlug: "david-b",
+            rideLabel: "Ride 1",
+            pickupTime: "10:20 AM",
+            reason: "Early campus pickup.",
+          },
+        ],
+        warnings: ["Amanda timing is tight."],
+      }),
+    };
+  });
+
+  app.state.adminCode = "profile-session-token";
+  app.state.adminSession = { access_token: "sb-session" };
+  app.state.planDate = "2026-09-06";
+  app.state.destination = { label: "Church", address: "4450 University Dr, Houston, TX" };
+  app.state.admin = {
+    drivers: [{ slug: "david-b", displayName: "David B.", initials: "DB" }],
+    stops: [
+      {
+        id: "stop-1",
+        driverSlug: "",
+        stopOrder: 1,
+        name: "Owen",
+        phone: "",
+        address: "100 First St, Houston, TX",
+        area: "HCU",
+        pickupTime: "",
+        readyBy: "",
+        routeLabel: "",
+        notes: "",
+      },
+    ],
+    people: [],
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
+  app.state.adminAiPrompt = "HCU by 12. David B can do the early route.";
+  app.state.adminActiveTab = "ai";
+
+  assert.equal(typeof app.requestAdminAiRoutes, "function");
+  await app.requestAdminAiRoutes();
+
+  const aiCall = calls.find((call) => call.url.includes("/functions/v1/ride-ai-organizer"));
+  assert.ok(aiCall, "should call ride-ai-organizer Edge Function");
+  assert.equal(aiCall.options.headers.authorization, "Bearer sb-session");
+  assert.doesNotMatch(aiCall.url, /api\.openai\.com/);
+
+  const body = JSON.parse(aiCall.options.body);
+  assert.equal(body.adminCode, "profile-session-token");
+  assert.equal(body.planDate, "2026-09-06");
+  assert.equal(body.prompt, "HCU by 12. David B can do the early route.");
+  assert.equal(body.drivers[0].slug, "david-b");
+  assert.equal(body.stops[0].name, "Owen");
+
+  const html = app.adminView();
+  assert.match(html, /Suggested by AI/);
+  assert.match(html, /David B\./);
+  assert.match(html, /Owen, Fabio, Kadie/);
+  assert.match(html, /Amanda timing is tight/);
+  assert.match(html, /data-action="adminAiApplyDraft"/);
+});
+
+test("admin AI integration keeps OpenAI keys server-side", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  let source = "";
+  try {
+    source = await readFile(new URL("../supabase/functions/ride-ai-organizer/index.ts", import.meta.url), "utf8");
+  } catch {
+    source = "";
+  }
+
+  assert.match(html, /\/functions\/v1\/ride-ai-organizer/);
+  assert.doesNotMatch(html, /OPENAI_API_KEY|api\.openai\.com|gpt-6-astra/i);
+  assert.match(source, /OPENAI_API_KEY/);
+  assert.match(source, /api\.openai\.com\/v1\/responses/);
+  assert.match(source, /ride_admin_snapshot/);
 });
 
 test("admin changes stat uses the cleaned Figma pencil icon", async () => {
@@ -1472,6 +1666,132 @@ test("admin route headers summarize route area and first pickup timing", async (
   assert.match(html, /target="_blank" rel="noreferrer">Map/);
 });
 
+test("driver runs group FLOC stops and keep explicit shuttle runs separate", async () => {
+  const app = await loadApp();
+  const riders = [
+    { stopOrder: 4, name: "Second TSU", routeLabel: "TSU Zone - Run 2", pickupTime: "12:20 PM" },
+    { stopOrder: 1, name: "First TSU", routeLabel: "TSU Zone - Run 1", pickupTime: "12:00 PM" },
+    { stopOrder: 2, name: "Also TSU", routeLabel: "TSU Zone - Run 1", pickupTime: "Follow after First TSU" },
+    { stopOrder: 3, name: "Unlabeled", area: "Pearland", pickupTime: "11:15 AM" },
+  ];
+
+  const runs = Array.from(app.driverRuns(riders), (run) => ({
+    key: run.key,
+    label: run.label,
+    riderCount: run.riderCount,
+    departureTime: run.departureTime,
+    riderNames: Array.from(run.riders, (rider) => rider.name),
+  }));
+
+  assert.deepEqual(runs, [
+    { key: "floc-run-1", label: "FLOC · Run 1", riderCount: 1, departureTime: "11:15 AM", riderNames: ["Unlabeled"] },
+    { key: "tsu-zone-run-1", label: "TSU Zone · Run 1", riderCount: 2, departureTime: "12:00 PM", riderNames: ["First TSU", "Also TSU"] },
+    { key: "tsu-zone-run-2", label: "TSU Zone · Run 2", riderCount: 1, departureTime: "12:20 PM", riderNames: ["Second TSU"] },
+  ]);
+});
+
+test("legacy descriptive labels do not create more driver cards for one FLOC ride", async () => {
+  const app = await loadApp();
+  const runs = Array.from(app.driverRuns([
+    { stopOrder: 1, name: "DeSilva", area: "FLOC", routeLabel: "Joojo early pickup", pickupTime: "7:20 AM" },
+    { stopOrder: 2, name: "Joanna", area: "FLOC", routeLabel: "Driver pickup", pickupTime: "8:50 AM" },
+    { stopOrder: 3, name: "Fabio", area: "NAU", routeLabel: "Joojo second pickup", pickupTime: "10:30 AM" },
+    { stopOrder: 4, name: "Aamiyah", area: "TSU", address: "TSU Cul-de-sac", routeLabel: "Joojo TSU pickup", pickupTime: "12:00 PM" },
+    { stopOrder: 5, name: "Nick", area: "TSU", address: "TSU Cul-de-sac", routeLabel: "TSU pickup 2", pickupTime: "12:20 PM" },
+  ]), (run) => ({ label: run.label, names: Array.from(run.riders, (rider) => rider.name) }));
+
+  assert.deepEqual(runs, [
+    { label: "FLOC · Run 1", names: ["DeSilva", "Joanna", "Fabio"] },
+    { label: "TSU Zone · Run 1", names: ["Aamiyah"] },
+    { label: "TSU Zone · Run 2", names: ["Nick"] },
+  ]);
+});
+
+test("rider confirmation status defaults to Waiting and maps confirmed and declined states", async () => {
+  const app = await loadApp();
+
+  assert.deepEqual({ ...app.riderConfirmationMeta({}) }, { key: "waiting", label: "Waiting", detail: "Confirmation pending" });
+  assert.deepEqual({ ...app.riderConfirmationMeta({ confirmationStatus: "confirmed" }) }, { key: "ready", label: "Ready", detail: "Confirmed" });
+  assert.deepEqual({ ...app.riderConfirmationMeta({ confirmation_status: "declined" }) }, { key: "declined", label: "Not coming", detail: "Cannot ride today" });
+});
+
+test("driver pickup groups keep riders at the same address together", async () => {
+  const app = await loadApp();
+  const groups = Array.from(app.driverPickupGroups([
+    { stopOrder: 1, name: "Zarah", address: "Texas Southern University Library", area: "TSU" },
+    { stopOrder: 2, name: "Emanuel", address: "Texas Southern University Library", area: "TSU" },
+    { stopOrder: 3, name: "FLOC rider", address: "8810 Sunforest Ln", area: "Outer Houston" },
+  ]), (group) => ({
+    label: group.label,
+    address: group.address,
+    names: Array.from(group.riders, (rider) => rider.name),
+  }));
+
+  assert.deepEqual(groups, [
+    { label: "TSU", address: "Texas Southern University Library", names: ["Zarah", "Emanuel"] },
+    { label: "FLOC rider", address: "8810 Sunforest Ln", names: ["FLOC rider"] },
+  ]);
+});
+
+test("driver dashboard shows assigned zone runs as the primary navigation", async () => {
+  const app = await loadApp();
+  app.state.route = {
+    plan: { date: "2026-09-20" },
+    driver: { slug: "joojo", displayName: "Joojo", initials: "JP" },
+    destination: { label: "UH Hilton", address: "4800 Calhoun Rd, Houston, TX" },
+    riders: [
+      { stopOrder: 1, name: "Nora", address: "TSU Library", area: "TSU", routeLabel: "TSU Zone · Run 1", pickupTime: "11:45 AM" },
+      { stopOrder: 2, name: "Simi", address: "TSU Library", area: "TSU", routeLabel: "TSU Zone · Run 2", pickupTime: "12:15 PM" },
+    ],
+  };
+
+  const html = app.driverHomeView();
+  assert.match(html, /RIDELIST/);
+  assert.match(html, /data-action="profile"/);
+  assert.match(html, /Good morning, Joojo/);
+  assert.match(html, /assigned riders · 2 runs/);
+  assert.match(html, /data-driver-run="tsu-zone-run-1"/);
+  assert.match(html, /TSU Zone · Run 1/);
+  assert.match(html, /1 rider · Leave 11:45 AM/);
+  assert.match(html, /TSU Zone · Run 2/);
+  assert.match(html, /Weather/);
+  assert.doesNotMatch(html, /route-scene/);
+  assert.doesNotMatch(html, /Total route:/);
+  assert.doesNotMatch(html, /View my rides/);
+});
+
+test("driver opens one run and sees only that run's riders with confirmation states", async () => {
+  const app = await loadApp();
+  app.state.route = {
+    plan: { date: "2026-09-20" },
+    driver: { slug: "blu", displayName: "Blu", initials: "BLU" },
+    destination: { label: "UH Hilton", address: "4450 University Dr, Houston, TX" },
+    riders: [
+      { stopOrder: 1, name: "Aamiyah", address: "TSU Library", area: "TSU", routeLabel: "TSU Zone · Run 1", pickupTime: "11:45 AM", confirmationStatus: "confirmed" },
+      { stopOrder: 2, name: "Nya", address: "TSU Library", area: "TSU", routeLabel: "TSU Zone · Run 2", pickupTime: "12:15 PM" },
+      { stopOrder: 3, name: "Raquel", address: "TSU Library", area: "TSU", routeLabel: "TSU Zone · Run 2", pickupTime: "12:15 PM", confirmationStatus: "declined" },
+    ],
+  };
+
+  app.openDriverRun("tsu-zone-run-2");
+  assert.equal(app.state.view, "rides");
+  assert.equal(app.state.selectedDriverRunKey, "tsu-zone-run-2");
+  const html = app.ridesView();
+  assert.match(html, /Blu route/);
+  assert.match(html, /Nya/);
+  assert.match(html, /Raquel/);
+  assert.doesNotMatch(html, /Aamiyah/);
+  assert.match(html, /data-confirmation-status="waiting"/);
+  assert.match(html, /data-confirmation-status="declined"/);
+  assert.match(html, /Not coming/);
+  assert.doesNotMatch(html, /route-scene/);
+  assert.match(html, /2 riders · 1 pickup/);
+  assert.match(html, /Pickup 1/);
+  assert.match(html, /TSU/);
+  assert.match(html, /Confirmation status/);
+  assert.doesNotMatch(html, /Twilio/i);
+});
+
 test("driver dashboard summarizes route and unlocks UH route after all pickups", async () => {
   const app = await loadApp();
 
@@ -1507,13 +1827,12 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   };
 
   const homeHtml = app.driverHomeView();
-  assert.match(homeHtml, /Route overview/);
-  assert.match(homeHtml, /Cypress Route/);
-  assert.match(homeHtml, /First pickup: 11:00 AM/);
-  assert.match(homeHtml, /Total route/);
-  assert.match(homeHtml, /Total route time pending/);
-  assert.match(homeHtml, /Ends at UH Hilton/);
-  assert.match(homeHtml, /Weather/);
+  assert.match(homeHtml, /Good morning, Joojo/);
+  assert.match(homeHtml, /assigned riders · 1 run/);
+  assert.match(homeHtml, /FLOC · Run 1/);
+  assert.match(homeHtml, /2 riders · Leave 11:00 AM/);
+  assert.match(homeHtml, /Houston weather/);
+  assert.doesNotMatch(homeHtml, /Total route/);
   assert.doesNotMatch(homeHtml, /<section class="destination-block">/);
 
   app.state.weatherOpen = true;
@@ -1528,11 +1847,12 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   const weatherHtml = app.driverHomeView();
   assert.match(weatherHtml, /Partly cloudy · 92° \/ 78° · Rain 30%/);
   assert.match(weatherHtml, /Wind 12 mph/);
+  assert.equal((weatherHtml.match(/Partly cloudy/g) || []).length, 1);
+  assert.equal((weatherHtml.match(/Rain 30%/g) || []).length, 1);
 
   const pendingHtml = app.ridesView();
-  assert.match(pendingHtml, /Start route to Nora/);
+  assert.match(pendingHtml, /aria-label="Start route to Nora"/);
   assert.match(pendingHtml, /Ready by 10:55 AM/);
-  assert.match(pendingHtml, /Details<span aria-hidden="true">&rsaquo;<\/span>/);
   assert.match(pendingHtml, /aria-label="Open Nora pickup details"/);
   assert.doesNotMatch(pendingHtml, /10819 Tryon Dr/);
   assert.doesNotMatch(pendingHtml, /All pickups complete/);
@@ -1547,18 +1867,17 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
 
   app.__storage.setItem("ride-picked-2026-08-09-joojo-1", "1");
   const partialHtml = app.ridesView();
-  assert.match(partialHtml, /class="route-stop is-picked"[\s\S]*<span class="stop-number">✓<\/span>[\s\S]*<strong>Nora<\/strong>/);
-  assert.doesNotMatch(partialHtml, /<span class="stop-number">1<\/span>[\s\S]*<strong>Nora<\/strong>/);
-  assert.match(partialHtml, /<span class="stop-number">2<\/span>[\s\S]*<strong>Simi<\/strong>/);
+  assert.match(partialHtml, /class="pickup-rider is-picked"[\s\S]*<span class="pickup-avatar">✓<\/span>[\s\S]*<strong>Nora<\/strong>/);
+  assert.match(partialHtml, /class="pickup-rider"[\s\S]*<span class="pickup-avatar">S<\/span>[\s\S]*<strong>Simi<\/strong>/);
 
   app.__storage.setItem("ride-picked-2026-08-09-joojo-2", "1");
 
   const completeHtml = app.ridesView();
   assert.match(completeHtml, /All pickups complete/);
-  assert.match(completeHtml, /Start route to UH Hilton/);
+  assert.match(completeHtml, /aria-label="Start route to UH Hilton"/);
 });
 
-test("driver dashboard prefers secure route timing when available", async () => {
+test("driver route timing remains available without cluttering the run overview", async () => {
   const app = await loadApp();
 
   app.state.planDate = "2026-08-09";
@@ -1601,11 +1920,10 @@ test("driver dashboard prefers secure route timing when available", async () => 
     },
   };
 
-  const html = app.driverHomeView();
-  assert.match(html, /Total route: 42 min/);
-  assert.match(html, /Estimated UH arrival: 11:42 AM/);
-  assert.match(html, /Suggested order: Nora, Simi/);
-  assert.doesNotMatch(html, /1 hr 22 min to UH Hilton/);
+  assert.equal(app.routeTimingForDriver("joojo").durationText, "42 min");
+  assert.equal(app.routeTimingForDriver("joojo").etaText, "11:42 AM");
+  assert.deepEqual(Array.from(app.routeTimingForDriver("joojo").optimizedStopOrder), ["Nora", "Simi"]);
+  assert.doesNotMatch(app.driverHomeView(), /Total route:/);
 });
 
 test("driver dashboard exposes simple route alert opt-in states", async () => {
@@ -1617,18 +1935,18 @@ test("driver dashboard exposes simple route alert opt-in states", async () => {
   };
 
   app.state.pushStatus = "available";
-  let html = app.driverHomeView();
+  let html = app.driverRouteAlertsHtml();
   assert.match(html, /Route alerts/);
   assert.match(html, /Get notified if admin changes your pickups/);
   assert.match(html, /data-action="enableRouteAlerts"/);
 
   app.state.pushStatus = "enabled";
-  html = app.driverHomeView();
+  html = app.driverRouteAlertsHtml();
   assert.match(html, /Route alerts on/);
   assert.match(html, /This phone will get updates for John Mark&#39;s route/);
 
   app.state.pushStatus = "unsupported";
-  html = app.driverHomeView();
+  html = app.driverRouteAlertsHtml();
   assert.match(html, /Add RIDELIST to your Home Screen/i);
 });
 
@@ -1913,9 +2231,9 @@ test("local Coffee and Christ rehearsal shows route cards and simulates driver a
   assert.equal(typeof app.openRehearsalDriverRoute, "function");
   app.openRehearsalDriverRoute("joojo");
   const driverHtml = app.driverHomeView();
-  assert.match(driverHtml, /Total route: /);
-  assert.match(driverHtml, /Suggested order: Zarah, Emanuel/);
-  assert.doesNotMatch(driverHtml, /Live timing unavailable/);
+  assert.match(driverHtml, /FLOC · Run 1/);
+  assert.match(driverHtml, /2 riders · Time pending/);
+  assert.doesNotMatch(driverHtml, /route-scene/);
 
   assert.equal(typeof app.publishAdminDraft, "function");
   await app.publishAdminDraft();
@@ -2843,8 +3161,8 @@ test("driver login sends the typed passcode to live route timing", async () => {
   assert.equal(timingRequests.length, 1);
   assert.equal(timingRequests[0].accessCode, "rides123");
   assert.equal(app.routeTimingForDriver("john-mark").durationText, "1 hr 46 min");
-  assert.match(app.driverHomeView(), /Total route: 1 hr 46 min/);
-  assert.doesNotMatch(app.driverHomeView(), /Total route time pending/);
+  assert.match(app.driverHomeView(), /1 rider · Leave 11:20 AM/);
+  assert.doesNotMatch(app.driverHomeView(), /Total route:/);
 });
 
 test("driver notification Edge Function keeps push secrets server-side", async () => {

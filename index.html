@@ -923,6 +923,171 @@
       font-weight: 850;
     }
 
+    .driver-run-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .driver-shell-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 2px 0 8px;
+    }
+
+    .driver-brand {
+      color: #050505;
+      font-size: 17px;
+      font-weight: 850;
+      letter-spacing: 0.2em;
+    }
+
+    .driver-menu-button {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: #050505;
+      background: #f2f2f4;
+    }
+
+    .driver-menu-button svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .driver-greeting {
+      display: grid;
+      gap: 5px;
+    }
+
+    .driver-greeting h1 {
+      color: #050505;
+      font-size: 34px;
+      line-height: 1.02;
+      font-weight: 850;
+      letter-spacing: 0;
+    }
+
+    .driver-greeting p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .driver-weather-strip {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      padding: 14px 0;
+      border-top: 1px solid var(--line);
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+      border-left: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      letter-spacing: 0;
+    }
+
+    .driver-weather-strip strong,
+    .driver-weather-strip span {
+      display: block;
+    }
+
+    .driver-weather-strip strong {
+      color: #050505;
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    .driver-weather-strip span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .driver-weather-strip .weather-chevron {
+      margin: 0;
+    }
+
+    .driver-run-list h2 {
+      margin: 0;
+      color: #050505;
+      font-size: 17px;
+      font-weight: 850;
+    }
+
+    .driver-run-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      width: 100%;
+      min-height: 72px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--card);
+      text-align: left;
+      letter-spacing: 0;
+    }
+
+    .driver-run-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .driver-run-copy strong {
+      color: #050505;
+      font-size: 16px;
+      line-height: 1.25;
+      font-weight: 850;
+    }
+
+    .driver-run-copy span,
+    .driver-run-arrow {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 650;
+    }
+
+    .driver-run-arrow {
+      font-size: 24px;
+    }
+
+    .rider-confirmation {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      width: fit-content;
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 750;
+    }
+
+    .confirmation-dot {
+      width: 9px;
+      height: 9px;
+      flex: 0 0 9px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .rider-confirmation.ready { color: #16803a; }
+    .rider-confirmation.waiting { color: #9a6500; }
+    .rider-confirmation.declined { color: #b42318; }
+
     .driver-overview-row {
       display: grid;
       grid-template-columns: 28px minmax(0, 1fr);
@@ -1074,6 +1239,36 @@
       margin-top: 0;
       font-size: 17px;
       font-weight: 800;
+    }
+
+    .driver-profile-form {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .driver-profile-form label {
+      display: grid;
+      gap: 8px;
+      color: #050505;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .driver-profile-form select {
+      width: 100%;
+      min-height: 52px;
+      padding: 0 42px 0 14px;
+      border: 1px solid #cfd3d8;
+      border-radius: 8px;
+      color: #050505;
+      background: #ffffff;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 700;
     }
 
     .driver-card {
@@ -1454,6 +1649,443 @@
     @keyframes adminMenuSlide {
       from { transform: translateX(100%); }
       to { transform: translateX(0); }
+    }
+
+    .admin-ai-screen {
+      padding-top: 0;
+      gap: 0;
+    }
+
+    .admin-ai-organizer {
+      display: grid;
+      gap: 18px;
+      margin-inline: -28px;
+    }
+
+    .admin-ai-hero {
+      position: relative;
+      min-height: 248px;
+      padding: 44px 28px 26px;
+      overflow: hidden;
+      background: #fafbfc;
+      border-bottom: 1px solid #edf0f3;
+    }
+
+    .admin-ai-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(250, 251, 252, 0.18);
+      pointer-events: none;
+    }
+
+    .admin-ai-hero-art {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+    }
+
+    .admin-ai-hero-top {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .admin-ai-brand {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .admin-ai-brand strong {
+      color: #050505;
+      font-size: 19px;
+      line-height: 1;
+      font-weight: 850;
+      letter-spacing: 0.18em;
+    }
+
+    .admin-ai-brand span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.15;
+      font-weight: 500;
+    }
+
+    .admin-ai-hero .admin-menu-button {
+      width: 50px;
+      height: 50px;
+      box-shadow: 0 14px 28px rgba(16, 24, 40, 0.12);
+    }
+
+    .admin-ai-hero-copy {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 10px;
+      max-width: 316px;
+    }
+
+    .admin-ai-hero-copy h2 {
+      margin: 0;
+      color: #050505;
+      font-size: 44px;
+      line-height: 0.96;
+      font-weight: 850;
+      letter-spacing: 0;
+    }
+
+    .admin-ai-hero-copy p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 19px;
+      line-height: 1.22;
+      font-weight: 550;
+    }
+
+    .admin-ai-content {
+      display: grid;
+      gap: 18px;
+      padding: 0 28px 26px;
+    }
+
+    .admin-ai-prompt-card,
+    .admin-ai-route-card,
+    .admin-ai-warning {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #ffffff;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.06);
+    }
+
+    .admin-ai-prompt-card {
+      display: grid;
+      gap: 14px;
+      margin-top: -26px;
+      padding: 18px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .admin-ai-prompt-head {
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
+    }
+
+    .admin-ai-logo {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 14px;
+      color: #ffffff;
+      background: #050505;
+      font-size: 19px;
+      line-height: 1;
+      font-weight: 850;
+    }
+
+    .admin-ai-prompt-title {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .admin-ai-prompt-title strong {
+      color: #050505;
+      font-size: 22px;
+      line-height: 1.05;
+      font-weight: 850;
+    }
+
+    .admin-ai-prompt-title span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 500;
+    }
+
+    .admin-ai-prompt-input {
+      width: 100%;
+      min-height: 98px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 48px;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      border: 0;
+      border-radius: 16px;
+      color: #5f6774;
+      background: #f5f6f8;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
+    .admin-ai-prompt-textarea {
+      width: 100%;
+      min-height: 132px;
+      padding: 16px;
+      border: 0;
+      border-radius: 16px;
+      color: #111827;
+      background: #f5f6f8;
+      resize: vertical;
+      font: inherit;
+      font-size: 16px;
+      line-height: 1.35;
+      box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.03);
+    }
+
+    .admin-ai-prompt-textarea::placeholder {
+      color: #6b7280;
+    }
+
+    .admin-ai-prompt-input span:first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .admin-ai-prompt-arrow {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      color: #050505;
+      background: #ffffff;
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .admin-ai-organize-action {
+      min-height: 70px;
+      border-radius: 14px;
+      font-size: 19px;
+      font-weight: 800;
+      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.18);
+    }
+
+    .admin-ai-organize-action:disabled,
+    .admin-ai-actions .primary-action:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .admin-ai-organize-action .admin-control-action-icon {
+      font-size: 31px;
+      line-height: 1;
+    }
+
+    .admin-ai-route-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      color: #697181;
+      font-size: 12px;
+      line-height: 1.2;
+      font-weight: 850;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .admin-ai-route-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .admin-ai-route-card {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr) 24px;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .admin-ai-route-avatar {
+      display: grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      color: #050505;
+      background: #f1f2f4;
+      font-size: 19px;
+      line-height: 1;
+      font-weight: 850;
+    }
+
+    .admin-ai-route-menu {
+      color: #6b7280;
+      font-size: 28px;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .admin-ai-route-body {
+      display: grid;
+      gap: 13px;
+      min-width: 0;
+    }
+
+    .admin-ai-route-title {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .admin-ai-route-title strong {
+      color: #050505;
+      font-size: 22px;
+      line-height: 1.05;
+      font-weight: 850;
+    }
+
+    .admin-ai-route-title span {
+      color: #596273;
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 650;
+    }
+
+    .admin-ai-ride-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .admin-ai-ride-row {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+
+    .admin-ai-ride-number {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      color: #050505;
+      background: #eef0f2;
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .admin-ai-ride-copy {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .admin-ai-ride-copy strong,
+    .admin-ai-ride-copy span {
+      overflow-wrap: anywhere;
+    }
+
+    .admin-ai-ride-copy strong {
+      color: #050505;
+      font-size: 16px;
+      line-height: 1.24;
+      font-weight: 800;
+    }
+
+    .admin-ai-ride-copy span {
+      color: #697181;
+      font-size: 14px;
+      line-height: 1.25;
+      font-weight: 500;
+    }
+
+    .admin-ai-why {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 12px;
+      border-radius: 14px;
+      color: #5e6674;
+      background: #f5f6f7;
+      font-size: 14px;
+      line-height: 1.32;
+      font-weight: 500;
+    }
+
+    .admin-ai-why-icon {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      color: #ffffff;
+      background: #687181;
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .admin-ai-warning {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      gap: 13px;
+      align-items: center;
+      padding: 14px;
+      border-color: #efd58f;
+      background: #fffaf0;
+      box-shadow: none;
+    }
+
+    .admin-ai-warning-icon {
+      display: grid;
+      place-items: center;
+      color: #9a5b00;
+    }
+
+    .admin-ai-warning strong {
+      color: #050505;
+      font-size: 16px;
+      line-height: 1.25;
+      font-weight: 850;
+    }
+
+    .admin-ai-warning span {
+      color: #111827;
+      font-weight: 500;
+    }
+
+    .admin-ai-message {
+      padding: 12px 14px;
+      border-radius: 14px;
+      color: #111827;
+      background: #f2f3f5;
+      font-size: 14px;
+      line-height: 1.35;
+      font-weight: 650;
+    }
+
+    .admin-ai-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .admin-ai-actions .secondary-action,
+    .admin-ai-actions .primary-action {
+      min-height: 64px;
+      border-radius: 14px;
+      font-size: 20px;
+      font-weight: 850;
     }
 
     .admin-reset-action,
@@ -2996,6 +3628,294 @@
       font-weight: 850;
     }
 
+    .run-detail-screen {
+      gap: 0;
+    }
+
+    .run-detail-header {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) 44px;
+      gap: 10px;
+      align-items: center;
+      padding-bottom: 16px;
+    }
+
+    .run-detail-header h1 {
+      margin: 0;
+      color: #050505;
+      font-size: 28px;
+      line-height: 1.05;
+      font-weight: 850;
+      text-align: center;
+      letter-spacing: 0;
+    }
+
+    .run-detail-header .back-button,
+    .run-detail-more {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border: 0;
+      color: #050505;
+      background: transparent;
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .run-detail-more {
+      font-size: 25px;
+      font-weight: 850;
+    }
+
+    .run-map-card {
+      position: relative;
+      min-height: 274px;
+      margin-bottom: 22px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #f3f5f4;
+    }
+
+    .run-map-card > img {
+      display: block;
+      width: 100%;
+      height: 274px;
+      object-fit: cover;
+    }
+
+    .run-map-summary {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      left: 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 1px minmax(0, .9fr);
+      gap: 16px;
+      align-items: center;
+      padding: 15px 16px;
+      border: 1px solid rgba(255, 255, 255, .75);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, .09);
+      backdrop-filter: blur(12px);
+    }
+
+    .run-map-summary strong,
+    .run-map-summary span {
+      display: block;
+    }
+
+    .run-map-summary strong {
+      color: #050505;
+      font-size: 15px;
+      line-height: 1.2;
+      font-weight: 850;
+    }
+
+    .run-map-summary span {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .run-map-divider {
+      width: 1px;
+      height: 48px;
+      background: var(--line);
+    }
+
+    .pickup-timeline {
+      display: grid;
+    }
+
+    .pickup-group,
+    .pickup-dropoff {
+      display: grid;
+      grid-template-columns: 50px minmax(0, 1fr);
+      gap: 12px;
+      padding-bottom: 20px;
+    }
+
+    .pickup-rail {
+      position: relative;
+      display: flex;
+      justify-content: center;
+    }
+
+    .pickup-group:not(:last-child) .pickup-rail::after {
+      content: "";
+      position: absolute;
+      top: 44px;
+      bottom: -20px;
+      width: 2px;
+      background: #d8dce2;
+    }
+
+    .pickup-number {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      color: #ffffff;
+      background: #050505;
+      font-size: 17px;
+      font-weight: 850;
+    }
+
+    .pickup-copy {
+      min-width: 0;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .pickup-label {
+      margin: 3px 0 15px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.2;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .pickup-location {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .pickup-location-icon,
+    .pickup-avatar {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      color: #050505;
+      background: #f0f1f3;
+    }
+
+    .pickup-location-icon svg {
+      width: 23px;
+      height: 23px;
+    }
+
+    .pickup-location > span:not(.pickup-location-icon) > strong,
+    .pickup-location > span:not(.pickup-location-icon) > span {
+      display: block;
+    }
+
+    .pickup-location > span:not(.pickup-location-icon) > strong {
+      color: #050505;
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 850;
+    }
+
+    .pickup-location > span:not(.pickup-location-icon) > span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .pickup-rider {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) auto auto;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      min-height: 68px;
+      padding: 10px 0;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      letter-spacing: 0;
+    }
+
+    .pickup-rider + .pickup-rider {
+      border-top: 1px solid var(--line);
+    }
+
+    .pickup-avatar {
+      font-size: 16px;
+      font-weight: 850;
+    }
+
+    .pickup-rider.is-picked .pickup-avatar {
+      color: #ffffff;
+      background: var(--green);
+    }
+
+    .pickup-rider-copy strong,
+    .pickup-rider-copy span {
+      display: block;
+    }
+
+    .pickup-rider-copy strong {
+      color: #050505;
+      font-size: 16px;
+      line-height: 1.2;
+      font-weight: 850;
+    }
+
+    .pickup-rider-copy span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pickup-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      padding: 7px 11px;
+      border-radius: 17px;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .pickup-status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .pickup-status.ready { color: #13752f; background: #d9f7df; }
+    .pickup-status.waiting { color: #8a5600; background: #fff0c9; }
+    .pickup-status.declined { color: #9f2017; background: #fde1df; }
+
+    .pickup-chevron {
+      color: var(--muted);
+      font-size: 25px;
+      line-height: 1;
+    }
+
+    .pickup-dropoff {
+      padding-top: 2px;
+    }
+
+    .pickup-dropoff .pickup-copy {
+      padding-bottom: 4px;
+      border-bottom: 0;
+    }
+
+    .run-start-button {
+      margin-top: 16px;
+    }
+
     .route-stop {
       width: 100%;
       display: grid;
@@ -3531,6 +4451,7 @@
       selectedDriver: null,
       route: null,
       selectedRider: null,
+      selectedDriverRunKey: "",
       driverAccessCode: "",
       pushStatus: "idle",
       pushMessage: "",
@@ -3569,6 +4490,11 @@
       adminResetDate: "",
       adminResetDriverSlugs: [],
       adminDriverAddOpen: false,
+      adminAiPrompt: "",
+      adminAiStatus: "idle",
+      adminAiError: "",
+      adminAiResult: null,
+      adminAiMessage: "",
       adminMessage: "",
       adminError: "",
       adminLoading: false,
@@ -3849,6 +4775,28 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(data?.error || "place_autocomplete_failed");
+      }
+      return data;
+    }
+
+    async function adminAiOrganizerRequest(payload = {}) {
+      const headers = {
+        "apikey": SUPABASE_KEY,
+        "content-type": "application/json",
+      };
+      if (state.adminSession?.access_token) {
+        headers.authorization = "Bearer " + state.adminSession.access_token;
+      }
+
+      const response = await fetch(SUPABASE_URL + "/functions/v1/ride-ai-organizer", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...payload, adminCode: state.adminCode || "" }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) {
+        throw new Error(data?.error || "ai_organizer_failed");
       }
       return data;
     }
@@ -4239,6 +5187,12 @@
       serviceDay: "Thursday",
     };
 
+    const NEW_SUNDAY_REHEARSAL_PLAN = {
+      date: "2026-09-20",
+      title: "Sunday Ride Plan",
+      serviceDay: "Sunday",
+    };
+
     const REHEARSAL_DESTINATION = {
       label: "UH Science & Engineering Classroom 102",
       address: "Science & Engineering Classroom 102, University of Houston, Houston, TX 77204",
@@ -4256,6 +5210,10 @@
       { slug: "dolapo", displayName: "Dolapo", display_name: "Dolapo", initials: "DO", sort_order: 9, routeLabel: "Cypress / HCU" },
       { slug: "danny-p", displayName: "P. Danny", display_name: "P. Danny", initials: "PD", sort_order: 10, routeLabel: "Fulshear" },
       { slug: "albert", displayName: "Albert", display_name: "Albert", initials: "AL", sort_order: 11, routeLabel: "North Houston" },
+      { slug: "megan", displayName: "Megan", display_name: "Megan", initials: "ME", sort_order: 12, routeLabel: "FLOC", newSundayOnly: true },
+      { slug: "jay", displayName: "Jay", display_name: "Jay", initials: "JY", sort_order: 13, routeLabel: "FLOC", newSundayOnly: true },
+      { slug: "p-tony", displayName: "P. Tony", display_name: "P. Tony", initials: "PT", sort_order: 14, routeLabel: "FLOC", newSundayOnly: true },
+      { slug: "p-ricky", displayName: "P. Ricky", display_name: "P. Ricky", initials: "PR", sort_order: 15, routeLabel: "FLOC", newSundayOnly: true },
     ];
 
     const REHEARSAL_STOPS = [
@@ -4407,6 +5365,95 @@
       return (exactTime || sorted[0] || {}).pickupTime || "";
     }
 
+    function driverRunLabel(stop = {}) {
+      const rawLabel = String(stop.routeLabel || stop.route_label || "").trim();
+      const routeContext = [rawLabel, stop.area, stop.address].filter(Boolean).join(" ");
+      const numberedRun = rawLabel.match(/\b(?:run|pickup|ride)\s*(?:#\s*)?(\d+)\b/i);
+      const wordedRun = rawLabel.match(/\b(first|second|third)\s+(?:run|pickup|ride)\b/i);
+      const wordedRunNumber = wordedRun
+        ? { first: 1, second: 2, third: 3 }[wordedRun[1].toLowerCase()]
+        : null;
+      const zone = /\b(?:tsu|texas southern)\b/i.test(routeContext)
+        ? "TSU Zone"
+        : /\b(?:hcu|houston christian)\b/i.test(routeContext)
+          ? "HCU Zone"
+          : "FLOC";
+      const runNumber = zone === "FLOC" ? 1 : Number(numberedRun?.[1] || wordedRunNumber || 1);
+      return `${zone} · Run ${Math.min(Math.max(runNumber, 1), 3)}`;
+    }
+
+    function driverRunKey(stop = {}) {
+      return driverRunLabel(stop)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+    }
+
+    function pickupTimeMinutes(value) {
+      const match = String(value || "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*([ap]m)$/i);
+      if (!match) return Number.POSITIVE_INFINITY;
+      const hours = Number(match[1]) % 12 + (/pm/i.test(match[3]) ? 12 : 0);
+      return hours * 60 + Number(match[2] || 0);
+    }
+
+    function driverRuns(riders = []) {
+      const groups = new Map();
+      orderedStops(riders).forEach((rider) => {
+        const key = driverRunKey(rider);
+        if (!groups.has(key)) {
+          groups.set(key, { key, label: driverRunLabel(rider), riders: [] });
+        }
+        groups.get(key).riders.push(rider);
+      });
+      return Array.from(groups.values()).map((run) => {
+        const sharedAddress = run.riders.length > 0 && run.riders.every((rider) => rider.address === run.riders[0].address);
+        return {
+          ...run,
+          riderCount: run.riders.length,
+          departureTime: firstPickupTime(run.riders),
+          meetupLabel: sharedAddress
+            ? run.riders[0].area || run.riders[0].address || "Meetup pending"
+            : "Multiple pickup points",
+        };
+      }).sort((a, b) => {
+        const aTime = pickupTimeMinutes(firstPickupTime(a.riders));
+        const bTime = pickupTimeMinutes(firstPickupTime(b.riders));
+        return aTime - bTime || a.label.localeCompare(b.label);
+      });
+    }
+
+    function driverPickupGroups(riders = []) {
+      const groups = new Map();
+      orderedStops(riders).forEach((rider) => {
+        const address = String(rider.address || "").trim();
+        const key = address.toLowerCase().replace(/\s+/g, " ") || `rider-${rider.stopOrder}`;
+        if (!groups.has(key)) groups.set(key, { address, riders: [] });
+        groups.get(key).riders.push(rider);
+      });
+      return Array.from(groups.values()).map((group) => {
+        const first = group.riders[0] || {};
+        const shared = group.riders.length > 1;
+        const area = String(first.area || "").trim();
+        return {
+          ...group,
+          label: shared ? area || group.address || "Group pickup" : first.name || area || "Pickup",
+          description: shared ? "Group pickup" : ["Individual pickup", area].filter(Boolean).join(" · "),
+        };
+      });
+    }
+
+    function riderConfirmationMeta(rider = {}) {
+      const status = String(rider.confirmationStatus || rider.confirmation_status || "").trim().toLowerCase();
+      if (["confirmed", "ready", "yes"].includes(status)) {
+        const updatedAt = rider.confirmationUpdatedAt || rider.confirmation_updated_at;
+        return { key: "ready", label: "Ready", detail: updatedAt ? `Confirmed ${updatedAt}` : "Confirmed" };
+      }
+      if (["declined", "not coming", "not-coming", "no"].includes(status)) {
+        return { key: "declined", label: "Not coming", detail: "Cannot ride today" };
+      }
+      return { key: "waiting", label: "Waiting", detail: "Confirmation pending" };
+    }
+
     function driverRouteSummary(driver = {}) {
       const directRouteLabel = normalizeRouteArea(driver.route_label || driver.routeLabel);
       const defaultSummary = DRIVER_ROUTE_SUMMARIES[driver.slug] || {};
@@ -4493,7 +5540,9 @@
       if (state.weatherStatus === "loading") return `${WEATHER_LOCATION.label} forecast is loading.`;
       if (state.weatherStatus === "error") return "Forecast could not load for this Sunday.";
       if (!forecast) return "Open to check the Sunday forecast.";
-      return `${WEATHER_LOCATION.label} · ${forecast.condition} · High ${forecast.high}°, low ${forecast.low}° · Rain ${forecast.rainChance}% · Wind ${forecast.wind} mph`;
+      return forecast.wind === "" || forecast.wind === null || forecast.wind === undefined
+        ? "No additional weather details."
+        : `Wind ${forecast.wind} mph`;
     }
 
     function weatherApiUrl(dateValue = activePlanDate()) {
@@ -4688,17 +5737,28 @@
       return /(?:[?&](rehearsal|mockSunday|sundayMock)(?:=|&|$))/i.test(search);
     }
 
-    function rehearsalDrivers(stops = REHEARSAL_STOPS) {
+    function isNewSundayRehearsal() {
+      return new URLSearchParams(String(globalThis.location?.search || "")).get("rehearsal") === "new-sunday";
+    }
+
+    function rehearsalDriverPool(stops = REHEARSAL_STOPS) {
+      const newSunday = isNewSundayRehearsal();
       return orderDriversForDisplay(REHEARSAL_DRIVER_BASE.map((driver) => {
         const driverStops = orderedStops(stops.filter((stop) => stop.driverSlug === driver.slug));
         const pickupCount = driverStops.length;
+        const active = newSunday ? driver.slug !== "precious" : !driver.newSundayOnly;
         return {
           ...driver,
+          active,
           pickup_count: pickupCount,
           pickupCount,
           subtitle: riderNameList(driverStops),
         };
       }));
+    }
+
+    function rehearsalDrivers(stops = REHEARSAL_STOPS) {
+      return rehearsalDriverPool(stops).filter((driver) => driver.active);
     }
 
     function rehearsalPeople(stops = REHEARSAL_STOPS) {
@@ -4763,11 +5823,14 @@
     }
 
     function loadRehearsalData() {
-      const stops = cloneStops(REHEARSAL_STOPS);
+      const newSunday = isNewSundayRehearsal();
+      const stops = cloneStops(newSunday ? [] : REHEARSAL_STOPS);
       const drivers = rehearsalDrivers(stops);
-      state.planDate = REHEARSAL_PLAN.date;
-      state.plan = { ...REHEARSAL_PLAN };
-      state.destination = { ...REHEARSAL_DESTINATION };
+      const driverPool = rehearsalDriverPool(stops);
+      const rehearsalPlan = newSunday ? NEW_SUNDAY_REHEARSAL_PLAN : REHEARSAL_PLAN;
+      state.planDate = rehearsalPlan.date;
+      state.plan = { ...rehearsalPlan };
+      state.destination = { ...(newSunday ? DESTINATION_SUMMARY : REHEARSAL_DESTINATION) };
       state.appSettings = null;
       state.drivers = drivers;
       state.admin = {
@@ -4775,7 +5838,7 @@
         plan: { ...REHEARSAL_PLAN },
         destination: { ...REHEARSAL_DESTINATION },
         drivers,
-        driverPool: drivers.map((driver) => ({ ...driver, active: true })),
+        driverPool,
         stops: [],
         people: rehearsalPeople(stops),
         security: { actor: { type: "rehearsal", label: "Local rehearsal" } },
@@ -6978,6 +8041,7 @@
     function setDriverHome() {
       state.view = "driverHome";
       state.selectedRider = null;
+      state.selectedDriverRunKey = "";
       render();
     }
 
@@ -6987,12 +8051,31 @@
       render();
     }
 
+    function selectedDriverRun() {
+      const runs = driverRuns(state.route?.riders || []);
+      const selected = runs.find((run) => run.key === state.selectedDriverRunKey);
+      return selected || (!state.selectedDriverRunKey && runs.length === 1 ? runs[0] : null);
+    }
+
+    function openDriverRun(key) {
+      const run = driverRuns(state.route?.riders || []).find((item) => item.key === key);
+      if (!run) {
+        setDriverHome();
+        return;
+      }
+      state.selectedDriverRunKey = run.key;
+      state.selectedRider = null;
+      state.view = "rides";
+      render();
+    }
+
     function openProfile() {
       setView("profile");
     }
 
     function openHome() {
       state.driverAccessCode = "";
+      state.selectedDriverRunKey = "";
       state.pushStatus = "idle";
       state.pushMessage = "";
       state.adminMenuOpen = false;
@@ -7000,7 +8083,7 @@
     }
 
     function setActiveNav() {
-      const routeScreen = state.view === "rides" || state.view === "detail";
+      const routeScreen = state.view === "driverHome" || state.view === "rides" || state.view === "detail";
       const adminScreen = state.view === "admin" || state.view === "adminEdit" || state.view === "adminReset" || state.view === "adminReview";
       bottomNav.hidden = routeScreen || adminScreen;
       screen.classList.toggle("full-bottom", routeScreen || adminScreen);
@@ -7035,7 +8118,7 @@
           <section class="summary-card dark">
             <div>
               <p>Total pickups</p>
-              <strong class="count">${state.loading ? "..." : countRiders()}</strong>
+              <strong class="count">0</strong>
               <p>${escapeHtml(ridePlanSummaryDay())} · ${escapeHtml(destinationSummary().label)}</p>
             </div>
           </section>
@@ -7052,9 +8135,20 @@
     }
 
     function profileView() {
-      const driverCards = state.loading
+      const driverSelector = state.loading
         ? `<section class="empty-card"><p>Loading drivers...</p></section>`
-        : state.drivers.map(driverProfileCard).join("");
+        : state.drivers.length
+          ? `<form class="driver-profile-form" data-driver-profile-form>
+              <label>
+                <span>Choose your name</span>
+                <select name="driverSlug" required>
+                  <option value="" selected disabled>Select driver</option>
+                  ${state.drivers.map((driver) => `<option value="${escapeHtml(driver.slug)}">${escapeHtml(driver.display_name || driver.displayName)}</option>`).join("")}
+                </select>
+              </label>
+              <button class="primary-action" type="submit">Continue <span aria-hidden="true">&rarr;</span></button>
+            </form>`
+          : `<section class="empty-card"><p>No drivers assigned.</p></section>`;
 
       return `
         <div class="stack">
@@ -7063,9 +8157,7 @@
             <h1>${escapeHtml(ridePlanTitle())}</h1>
             <p>${state.loading ? "Loading drivers..." : `${state.drivers.length} drivers assigned`}</p>
           </section>
-          <section class="driver-list" aria-label="Drivers">
-            ${driverCards}
-          </section>
+          ${driverSelector}
           ${isRehearsalMode() ? `
           <section class="admin-message rehearsal-message">
             <strong>Local rehearsal</strong>
@@ -7209,6 +8301,7 @@
               </button>
             </header>
             <section class="admin-menu-list" aria-label="Admin tools">
+              ${adminMenuRow("ai", "AI Organizer", "Draft route ideas", "map")}
               ${adminMenuRow("people", "People Bank", "Saved riders and details", "user")}
               ${adminMenuRow("driver-list", "Driver list", "Availability and add driver", "users")}
               ${adminMenuRow("settings", "Settings", "Event setup", "sliders")}
@@ -7226,7 +8319,7 @@
     }
 
     function openAdminMenuPage(page) {
-      const nextTab = ["people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
+      const nextTab = ["ai", "people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
       state.adminActiveTab = nextTab;
       state.adminMenuOpen = false;
       state.adminError = "";
@@ -7237,7 +8330,7 @@
       const tab = state.adminActiveTab || "riders";
       if (tab === "routes") return "drivers";
       if (tab === "people") return "people";
-      return ["drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
+      return ["ai", "drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
     }
 
     function adminStatButton(tab, count, label, icon, extraClass = "") {
@@ -8128,6 +9221,202 @@
         </form>`;
     }
 
+    function adminAiResult() {
+      return state.adminAiResult || { routes: [], assignments: [], warnings: [] };
+    }
+
+    function adminAiAssignments() {
+      const assignments = adminAiResult().assignments;
+      return Array.isArray(assignments) ? assignments : [];
+    }
+
+    function adminAiRoutes() {
+      const routes = adminAiResult().routes;
+      return Array.isArray(routes) ? routes : [];
+    }
+
+    function adminAiWarnings() {
+      const warnings = adminAiResult().warnings;
+      return Array.isArray(warnings) ? warnings.filter(Boolean) : [];
+    }
+
+    async function requestAdminAiRoutes() {
+      const prompt = String(state.adminAiPrompt || "").trim();
+      if (!prompt) {
+        state.adminAiError = "Add the ride notes first.";
+        state.adminAiStatus = "idle";
+        render();
+        return;
+      }
+
+      state.adminAiStatus = "loading";
+      state.adminAiError = "";
+      state.adminAiMessage = "";
+      render();
+
+      try {
+        const result = await adminAiOrganizerRequest({
+          planDate: activePlanDate(),
+          prompt,
+          destination: destinationSummary(),
+          drivers: adminDrivers(),
+          stops: adminStops(),
+        });
+        state.adminAiResult = result;
+        state.adminAiStatus = "ready";
+        state.adminAiError = "";
+        state.adminAiMessage = result.summary || "AI route ideas ready.";
+      } catch (error) {
+        state.adminAiStatus = "error";
+        state.adminAiError = /ai_not_configured/i.test(error?.message || "")
+          ? "AI is not connected yet. Add the OpenAI key to Supabase secrets first."
+          : "AI could not organize this list yet.";
+      }
+
+      render();
+    }
+
+    function applyAdminAiDraft() {
+      const assignments = adminAiAssignments();
+      if (!assignments.length) {
+        state.adminAiError = "No AI assignments to apply yet.";
+        render();
+        return;
+      }
+
+      const byStopId = new Map(assignments.map((assignment) => [String(assignment.stopId || ""), assignment]));
+      state.adminDraftStops = adminStops().map((stop) => {
+        const assignment = byStopId.get(String(stop.id || ""));
+        if (!assignment) return stop;
+
+        const reason = String(assignment.reason || "").trim();
+        const notes = reason && !String(stop.notes || "").includes(reason)
+          ? [stop.notes, `AI: ${reason}`].filter(Boolean).join(" ")
+          : stop.notes;
+        return {
+          ...stop,
+          driverSlug: assignment.driverSlug || stop.driverSlug,
+          pickupTime: assignment.pickupTime || stop.pickupTime,
+          routeLabel: assignment.rideLabel || stop.routeLabel,
+          notes,
+        };
+      });
+
+      normalizeAdminDraftStops();
+      if (isRehearsalMode()) syncRehearsalDrivers();
+      const backup = saveAdminDraftBackup("ai-organizer");
+      void saveAdminServerDraft("ai-organizer", backup);
+      state.adminMessage = `${assignments.length} AI ${assignments.length === 1 ? "assignment" : "assignments"} added to your draft. Review changes before publishing.`;
+      state.adminAiMessage = "AI draft applied.";
+      state.adminAiError = "";
+      state.adminPublishFailed = false;
+      state.adminActiveTab = "changes";
+      render();
+      loadAdminRouteTiming();
+    }
+
+    function adminAiRouteCard(route) {
+      return `
+        <article class="admin-ai-route-card">
+          <span class="admin-ai-route-avatar" aria-hidden="true">${escapeHtml(route.initials || route.driverName?.slice(0, 2) || "?")}</span>
+          <div class="admin-ai-route-body">
+            <span class="admin-ai-route-title">
+              <strong>${escapeHtml(route.driver)}</strong>
+              <span>${escapeHtml(route.summary)}</span>
+            </span>
+            <div class="admin-ai-ride-list">
+              ${(route.rides || []).map((ride, index) => `
+                <div class="admin-ai-ride-row">
+                  <span class="admin-ai-ride-number">${escapeHtml(String(index + 1))}</span>
+                  <span class="admin-ai-ride-copy">
+                    <strong>${escapeHtml(ride.label || `Ride ${index + 1}`)} &middot; ${escapeHtml(Array.isArray(ride.names) ? ride.names.join(", ") : ride.names)}</strong>
+                    <span>${escapeHtml(ride.detail)}</span>
+                  </span>
+                </div>`).join("")}
+            </div>
+            <div class="admin-ai-why">
+              <span class="admin-ai-why-icon" aria-hidden="true">i</span>
+              <span><strong>Why:</strong> ${escapeHtml(route.why)}</span>
+            </div>
+          </div>
+          <span class="admin-ai-route-menu" aria-hidden="true">&vellip;</span>
+        </article>`;
+    }
+
+    function adminAiOrganizerView() {
+      const routes = adminAiRoutes().map((route) => ({
+        ...route,
+        driver: route.driverName || adminDriverName(route.driverSlug),
+      }));
+      const warnings = adminAiWarnings();
+      const assignments = adminAiAssignments();
+      const loading = state.adminAiStatus === "loading";
+      const promptPlaceholder = "Paste the ride list, driver limits, arrival times, campus groups, and anything that must stay together.";
+
+      return `
+        <section class="admin-ai-organizer" aria-label="AI route organizer">
+          <section class="admin-ai-hero">
+            <img class="admin-ai-hero-art" src="assets/ai-route-hero.jpg" alt="" aria-hidden="true">
+            <div class="admin-ai-hero-top">
+              <span class="admin-ai-brand">
+                <strong>RIDELIST</strong>
+                <span>Admin AI</span>
+              </span>
+              <button class="admin-icon-button admin-menu-button" type="button" data-action="adminMenuOpen" aria-label="Open admin menu">
+                ${peopleDetailIcon("menu")}
+              </button>
+            </div>
+            <div class="admin-ai-hero-copy">
+              <h2>Organize rides</h2>
+              <p>Turn your rider list into optimized routes.</p>
+            </div>
+          </section>
+
+          <section class="admin-ai-content">
+            <section class="admin-ai-prompt-card">
+              <div class="admin-ai-prompt-head">
+                <span class="admin-ai-logo">AI</span>
+                <span class="admin-ai-prompt-title">
+                  <strong>Give me the list</strong>
+                  <span>Names, addresses, drivers, timing rules, and notes.</span>
+                </span>
+              </div>
+              <textarea class="admin-ai-prompt-textarea" data-admin-ai-prompt placeholder="${escapeHtml(promptPlaceholder)}">${escapeHtml(state.adminAiPrompt || "")}</textarea>
+            </section>
+
+            <button class="primary-action admin-ai-organize-action" type="button" data-action="adminAiOrganize" ${loading || !String(state.adminAiPrompt || "").trim() ? "disabled" : ""}>
+              <span>${loading ? "Organizing..." : "Organize routes"}</span>
+              <span class="admin-control-action-icon" aria-hidden="true">&rarr;</span>
+            </button>
+
+            ${state.adminAiMessage ? `<section class="admin-ai-message">${escapeHtml(state.adminAiMessage)}</section>` : ""}
+            ${state.adminAiError ? `<section class="admin-message error">${escapeHtml(state.adminAiError)}</section>` : ""}
+
+            <div class="admin-ai-route-head">
+              <span>${routes.length ? "Suggested by AI" : "AI draft"}</span>
+              <span>${escapeHtml(`${routes.length} ${routes.length === 1 ? "driver" : "drivers"} · ${assignments.length} ${assignments.length === 1 ? "assignment" : "assignments"}`)}</span>
+            </div>
+
+            <section class="admin-ai-route-list" aria-label="Suggested routes">
+              ${routes.length
+                ? routes.map(adminAiRouteCard).join("")
+                : `<section class="empty-card"><p>No AI routes yet. Add ride notes and organize.</p></section>`}
+            </section>
+
+            ${warnings.length ? `<section class="admin-ai-warning">
+              <span class="admin-ai-warning-icon" aria-hidden="true">${peopleDetailIcon("warning")}</span>
+              <strong>Before publish: <span>${escapeHtml(warnings.join(" "))}</span></strong>
+              <span aria-hidden="true">&rsaquo;</span>
+            </section>` : ""}
+
+            <div class="admin-ai-actions">
+              <button class="secondary-action" type="button" data-action="adminAiClear">Clear</button>
+              <button class="primary-action" type="button" data-action="adminAiApplyDraft" ${assignments.length ? "" : "disabled"}>Apply to draft</button>
+            </div>
+          </section>
+        </section>`;
+    }
+
     function adminView() {
       if (state.adminLoading && !state.admin) {
         return `<div class="stack"><section class="empty-card"><p>Loading admin...</p></section></div>`;
@@ -8140,19 +9429,29 @@
       const activeTab = adminActiveTab();
       const activeView = activeTab === "people"
         ? adminPeopleView()
-        : activeTab === "drivers"
-          ? adminRoutesView(drivers)
-          : activeTab === "changes"
-            ? adminChangesView(changed)
-            : activeTab === "driver-list"
-              ? adminDriverAvailabilityView()
-              : activeTab === "settings"
-                ? adminSettingsView()
-                : adminSundayRidersView();
+        : activeTab === "ai"
+          ? adminAiOrganizerView()
+          : activeTab === "drivers"
+            ? adminRoutesView(drivers)
+            : activeTab === "changes"
+              ? adminChangesView(changed)
+              : activeTab === "driver-list"
+                ? adminDriverAvailabilityView()
+                : activeTab === "settings"
+                  ? adminSettingsView()
+                  : adminSundayRidersView();
 
       if (activeTab === "settings") {
         return `
         <div class="stack admin-control-screen admin-settings-screen">
+          ${activeView}
+          ${adminMenuDrawerHtml()}
+        </div>`;
+      }
+
+      if (activeTab === "ai") {
+        return `
+        <div class="stack admin-control-screen admin-ai-screen">
           ${activeView}
           ${adminMenuDrawerHtml()}
         </div>`;
@@ -8567,66 +9866,59 @@
         </section>`;
     }
 
+    function driverRunRow(run) {
+      const riderLabel = `${run.riderCount} ${run.riderCount === 1 ? "rider" : "riders"}`;
+      const timing = run.departureTime ? ` · Leave ${run.departureTime}` : " · Time pending";
+      return `
+        <button class="driver-run-row" type="button" data-driver-run="${escapeHtml(run.key)}" aria-label="Open ${escapeHtml(run.label)} details">
+          <span class="driver-run-copy">
+            <strong>${escapeHtml(run.label)}</strong>
+            <span>${escapeHtml(riderLabel + timing)}</span>
+          </span>
+          <span class="driver-run-arrow" aria-hidden="true">&rsaquo;</span>
+        </button>`;
+    }
+
     function driverHomeView() {
       const driver = state.route?.driver;
       const riders = state.route?.riders || [];
-      const destination = state.route?.destination;
-      const riderNames = riderNameList(riders);
-      const meta = driverDashboardMeta(driver, riders, destination);
+      const runs = driverRuns(riders);
+      const dateLabel = `${weekdayLabel()}, ${planDateLabel()}`;
 
       return `
         <div class="stack">
-          <section class="intro-block compact" aria-label="${escapeHtml(driver.displayName)} dashboard">
-            <h1>Good day, ${escapeHtml(driver.displayName)}</h1>
-            <p>Driver mode</p>
-            ${routeScene(driver.slug)}
+          <header class="driver-shell-header">
+            <strong class="driver-brand">RIDELIST</strong>
+            <button class="driver-menu-button" type="button" data-action="profile" aria-label="Open driver menu">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+            </button>
+          </header>
+
+          <section class="driver-greeting" aria-label="${escapeHtml(driver.displayName)} dashboard">
+            <p>${escapeHtml(dateLabel)}</p>
+            <h1>Good morning, ${escapeHtml(driver.displayName)}</h1>
           </section>
+
+          <button class="driver-weather-strip" type="button" data-action="toggleWeather" aria-expanded="${state.weatherOpen ? "true" : "false"}">
+            <span>
+              <strong>${escapeHtml(weatherSummaryText())}</strong>
+              <span>Houston weather</span>
+            </span>
+            <span class="weather-chevron" aria-hidden="true">&rsaquo;</span>
+          </button>
+          ${state.weatherOpen ? `<p class="weather-details">${escapeHtml(weatherDetailsText())}</p>` : ""}
 
           <section class="summary-card dark">
             <div>
-              <p>Total pickups</p>
               <strong class="count">${riders.length}</strong>
-              <p>${escapeHtml(riderNames)}</p>
+              <p>assigned ${riders.length === 1 ? "rider" : "riders"} · ${runs.length} ${runs.length === 1 ? "run" : "runs"}</p>
             </div>
           </section>
 
-          <section class="driver-overview-card" aria-label="Route overview">
-            <h2>Route overview</h2>
-            <div class="driver-overview-row">
-              ${iconSvg("pin")}
-              <span>
-                <strong>${escapeHtml(meta.routeLabel)}</strong>
-                <span>${escapeHtml(meta.firstPickupLine)}</span>
-              </span>
-            </div>
-            <div class="driver-overview-row">
-              ${iconSvg("clock")}
-              <span>
-                <strong>${escapeHtml(meta.timeLine)}</strong>
-                <span>${escapeHtml(meta.destinationLine)}</span>
-              </span>
-            </div>
-            ${meta.orderLine ? `
-            <div class="driver-overview-row">
-              ${iconSvg("map")}
-              <span>
-                <strong>${escapeHtml(meta.orderLine)}</strong>
-              </span>
-            </div>` : ""}
-            <button class="driver-overview-row weather-toggle-row" type="button" data-action="toggleWeather" aria-expanded="${state.weatherOpen ? "true" : "false"}">
-              ${iconSvg("weather")}
-              <span>
-                <strong>Weather</strong>
-                <span>${escapeHtml(weatherSummaryText())}</span>
-              </span>
-              <span class="weather-chevron" aria-hidden="true">&rsaquo;</span>
-            </button>
-            ${state.weatherOpen ? `<p class="weather-details">${escapeHtml(weatherDetailsText())}</p>` : ""}
+          <section class="driver-run-list" aria-label="Assigned runs">
+            <h2>Your runs</h2>
+            ${runs.length ? runs.map(driverRunRow).join("") : `<p class="empty-state">No runs assigned.</p>`}
           </section>
-
-          ${driverRouteAlertsHtml()}
-
-          <button class="primary-action" type="button" data-action="rides">View my rides <span aria-hidden="true">&rarr;</span></button>
         </div>`;
     }
 
@@ -8640,16 +9932,55 @@
 
     function routeStopRow(rider) {
       const picked = getPicked(rider.stopOrder);
+      const confirmation = riderConfirmationMeta(rider);
       return `
         <button class="route-stop${picked ? " is-picked" : ""}" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} pickup details">
           <span class="stop-number">${picked ? "✓" : Number(rider.stopOrder)}</span>
           <span class="stop-copy">
             <strong>${escapeHtml(rider.name)}</strong>
             <small>${escapeHtml(readyText(rider))}</small>
+            <span class="rider-confirmation ${escapeHtml(confirmation.key)}" data-confirmation-status="${escapeHtml(confirmation.key)}">
+              <span class="confirmation-dot" aria-hidden="true"></span>
+              ${escapeHtml(confirmation.label)}
+            </span>
             <span class="stop-details-cue">Details<span aria-hidden="true">&rsaquo;</span></span>
           </span>
           <span class="stop-time">${escapeHtml(pickupTimeText(rider))}</span>
         </button>`;
+    }
+
+    function pickupRiderRow(rider) {
+      const picked = getPicked(rider.stopOrder);
+      const confirmation = riderConfirmationMeta(rider);
+      const initials = String(rider.name || "R").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase();
+      return `
+        <button class="pickup-rider${picked ? " is-picked" : ""}" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} pickup details">
+          <span class="pickup-avatar">${picked ? "✓" : escapeHtml(initials)}</span>
+          <span class="pickup-rider-copy">
+            <strong>${escapeHtml(rider.name)}</strong>
+            <span>${escapeHtml(rider.readyBy ? `Ready by ${rider.readyBy}` : "Confirmation status")}</span>
+          </span>
+          <span class="pickup-status ${escapeHtml(confirmation.key)}" data-confirmation-status="${escapeHtml(confirmation.key)}">${escapeHtml(confirmation.label)}</span>
+          <span class="pickup-chevron" aria-hidden="true">&rsaquo;</span>
+        </button>`;
+    }
+
+    function pickupGroupHtml(group, index) {
+      return `
+        <section class="pickup-group" aria-label="Pickup ${index + 1}: ${escapeHtml(group.label)}">
+          <div class="pickup-rail"><span class="pickup-number">${index + 1}</span></div>
+          <div class="pickup-copy">
+            <p class="pickup-label">Pickup ${index + 1}</p>
+            <div class="pickup-location">
+              <span class="pickup-location-icon">${iconSvg("pin")}</span>
+              <span>
+                <strong>${escapeHtml(group.label)}</strong>
+                <span>${escapeHtml(group.description || group.address)}</span>
+              </span>
+            </div>
+            ${group.riders.map(pickupRiderRow).join("")}
+          </div>
+        </section>`;
     }
 
     function routeTarget(riders, destination) {
@@ -8671,41 +10002,53 @@
 
     function ridesView() {
       const driver = state.route?.driver;
-      const riders = state.route?.riders || [];
+      const run = selectedDriverRun();
+      if (!run) return driverHomeView();
+      const riders = run.riders;
+      const pickupGroups = driverPickupGroups(riders);
       const destination = state.route?.destination;
       const target = routeTarget(riders, destination);
-
-      const cards = riders.map(routeStopRow).join("");
+      const pickupLabel = `${pickupGroups.length} ${pickupGroups.length === 1 ? "pickup" : "pickups"}`;
 
       return `
-        <div class="stack">
-          <section class="intro-block compact">
-            <div class="title-row">
-              <button class="back-button" type="button" data-action="driverHome" aria-label="Back">&larr;</button>
-              <div>
-                <h1>Review route</h1>
-                <p>${escapeHtml(driver.displayName)}'s pickups</p>
-              </div>
-            </div>
-            ${routeScene(driver.slug, "review")}
-          </section>
+        <div class="stack run-detail-screen">
+          <header class="run-detail-header">
+            <button class="back-button" type="button" data-action="driverHome" aria-label="Back">&larr;</button>
+            <h1>${escapeHtml(driver.displayName)} route</h1>
+            <button class="run-detail-more" type="button" data-action="profile" aria-label="Open driver menu">&hellip;</button>
+          </header>
 
-          <section class="route-list" aria-label="Assigned riders">
-            <h2>Pick-up</h2>
-            ${cards}
-          </section>
-
-          <section class="route-list" aria-label="Drop off">
-            <h2>Drop-off</h2>
-            <div class="route-stop destination ${target.allPicked ? "is-picked" : ""}">
-              <span class="stop-number">✓</span>
-              <span class="stop-copy">
-                <strong>${escapeHtml(destination.label)}</strong>
-                <span>${escapeHtml(destination.address)}</span>
-                <small>${target.allPicked ? "Ready for final route" : "Final destination"}</small>
+          <section class="run-map-card" aria-label="Route overview map">
+            <img src="assets/driver-route-map.png" alt="">
+            <div class="run-map-summary">
+              <span>
+                <strong>${run.riderCount} ${run.riderCount === 1 ? "rider" : "riders"} · ${pickupLabel}</strong>
+                <span>Confirmation status</span>
+              </span>
+              <span class="run-map-divider" aria-hidden="true"></span>
+              <span>
+                <strong>${escapeHtml(driver.displayName)} route</strong>
+                <span>${escapeHtml(run.label)}</span>
               </span>
             </div>
           </section>
+
+          <div class="pickup-timeline" aria-label="Route pickups">
+            ${pickupGroups.map(pickupGroupHtml).join("")}
+            <section class="pickup-dropoff" aria-label="Drop-off: ${escapeHtml(destination.label)}">
+              <div class="pickup-rail"><span class="pickup-number">✓</span></div>
+              <div class="pickup-copy">
+                <p class="pickup-label">Drop-off</p>
+                <div class="pickup-location">
+                  <span class="pickup-location-icon">${iconSvg("pin")}</span>
+                  <span>
+                    <strong>${escapeHtml(destination.label)}</strong>
+                    <span>Final destination</span>
+                  </span>
+                </div>
+              </div>
+            </section>
+          </div>
 
           ${target.allPicked ? `
           <section class="route-complete-card" aria-label="All pickups complete">
@@ -8716,7 +10059,7 @@
             </span>
           </section>` : ""}
 
-          <a class="primary-action route-start" href="${googleMaps(target.address)}" target="_blank" rel="noreferrer">${escapeHtml(target.label)} <span aria-hidden="true">&rarr;</span></a>
+          <a class="primary-action route-start run-start-button" href="${googleMaps(target.address)}" target="_blank" rel="noreferrer" aria-label="${escapeHtml(target.label)}">Start route <span aria-hidden="true">&rarr;</span></a>
         </div>`;
     }
 
@@ -8821,7 +10164,7 @@
     }
 
     function syncPickedChips() {
-      document.querySelectorAll(".rider-card[data-rider], .route-stop[data-rider]").forEach((card) => {
+      document.querySelectorAll(".rider-card[data-rider], .route-stop[data-rider], .pickup-rider[data-rider]").forEach((card) => {
         const stopOrder = card.dataset.rider;
         card.classList.toggle("is-picked", getPicked(stopOrder));
       });
@@ -8954,6 +10297,12 @@
     }
 
     screen.addEventListener("click", (event) => {
+      const driverRunButton = event.target.closest("[data-driver-run]");
+      if (driverRunButton) {
+        openDriverRun(driverRunButton.dataset.driverRun);
+        return;
+      }
+
       const adminTabButton = event.target.closest("[data-admin-tab]");
       if (adminTabButton) {
         state.adminActiveTab = adminTabButton.dataset.adminTab;
@@ -9008,6 +10357,21 @@
       }
       if (action === "adminMenuClose") {
         state.adminMenuOpen = false;
+        render();
+      }
+      if (action === "adminAiOrganize") requestAdminAiRoutes();
+      if (action === "adminAiApplyDraft") applyAdminAiDraft();
+      if (action === "adminAiClear") {
+        state.adminAiPrompt = "";
+        state.adminAiResult = null;
+        state.adminAiStatus = "idle";
+        state.adminAiError = "";
+        state.adminAiMessage = "";
+        render();
+      }
+      if (action === "adminAiDraftMessage") {
+        state.adminAiMessage = "AI Organizer is local for review. The next step is connecting route generation to a draft that must be reviewed before publish.";
+        state.adminError = "";
         render();
       }
       if (action === "adminPersonAddBack") {
@@ -9163,6 +10527,16 @@
     });
 
     screen.addEventListener("input", (event) => {
+      const aiPromptInput = event.target.closest("[data-admin-ai-prompt]");
+      if (aiPromptInput) {
+        state.adminAiPrompt = aiPromptInput.value;
+        state.adminAiError = "";
+        state.adminAiMessage = "";
+        const organizeButton = screen.querySelector("[data-action='adminAiOrganize']");
+        if (organizeButton) organizeButton.disabled = !String(state.adminAiPrompt || "").trim();
+        return;
+      }
+
       const resetForm = event.target.closest("[data-admin-form='reset']");
       if (resetForm) {
         if (event.target.name === "planDate") {
@@ -9229,6 +10603,14 @@
     });
 
     screen.addEventListener("submit", (event) => {
+      const driverProfileForm = event.target.closest("[data-driver-profile-form]");
+      if (driverProfileForm) {
+        event.preventDefault();
+        const driverSlug = String(new FormData(driverProfileForm).get("driverSlug") || "");
+        if (driverSlug) openCodeModal(driverSlug);
+        return;
+      }
+
       const resetForm = event.target.closest("[data-admin-form='reset']");
       if (resetForm) {
         event.preventDefault();

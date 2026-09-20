@@ -1729,8 +1729,18 @@ test("driver pickup groups keep riders at the same address together", async () =
 
   assert.deepEqual(groups, [
     { label: "TSU", address: "Texas Southern University Library", names: ["Zarah", "Emanuel"] },
-    { label: "FLOC rider", address: "8810 Sunforest Ln", names: ["FLOC rider"] },
+    { label: "8810 Sunforest Ln", address: "8810 Sunforest Ln", names: ["FLOC rider"] },
   ]);
+});
+
+test("individual pickup headings show the location without repeating the rider name", async () => {
+  const app = await loadApp();
+  const [group] = app.driverPickupGroups([
+    { stopOrder: 1, name: "Vicky", address: "2111 Holly Hall St", area: "TSU", readyBy: "11:30 AM" },
+  ]);
+
+  assert.equal(group.label, "2111 Holly Hall St");
+  assert.equal(group.description, "Individual pickup · TSU");
 });
 
 test("driver dashboard shows assigned zone runs as the primary navigation", async () => {
@@ -1854,7 +1864,7 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   assert.match(pendingHtml, /aria-label="Start route to Nora"/);
   assert.match(pendingHtml, /Ready by 10:55 AM/);
   assert.match(pendingHtml, /aria-label="Open Nora pickup details"/);
-  assert.doesNotMatch(pendingHtml, /10819 Tryon Dr/);
+  assert.match(pendingHtml, /10819 Tryon Dr/);
   assert.doesNotMatch(pendingHtml, /All pickups complete/);
 
   app.state.selectedRider = app.state.route.riders[0];

@@ -5436,7 +5436,7 @@
         const area = String(first.area || "").trim();
         return {
           ...group,
-          label: shared ? area || group.address || "Group pickup" : first.name || area || "Pickup",
+          label: shared ? area || group.address || "Group pickup" : group.address || area || "Pickup",
           description: shared ? "Group pickup" : ["Individual pickup", area].filter(Boolean).join(" · "),
         };
       });

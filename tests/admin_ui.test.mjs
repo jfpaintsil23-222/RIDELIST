@@ -609,7 +609,7 @@ test("Sunday branding updates home and admin cover copy", async () => {
   assert.match(homeHtml, /1 drivers assigned/);
   assert.match(homeHtml, /Sunday · UH Hilton/);
   assert.match(homeHtml, /Total pickups/);
-  assert.match(homeHtml, /<strong class="count">0<\/strong>/);
+  assert.match(homeHtml, /<strong class="count">2<\/strong>/);
   assert.doesNotMatch(homeHtml, /Coffee and Christ Ride Plan/);
 
   app.state.admin = {
@@ -3946,4 +3946,18 @@ test("admin create ride list screen keeps PeopleData and starts with selected bl
   assert.match(html, /name="driverSlug" value="annie" checked/);
   assert.doesNotMatch(html, /Faith<\/strong>/);
   assert.doesNotMatch(html, /Sunday date/);
+});
+
+test("home summary shows the loaded total pickup count", async () => {
+  const app = await loadApp();
+
+  app.state.loading = false;
+  app.state.drivers = [
+    { slug: "joojo", pickup_count: 7 },
+    { slug: "naa", pickup_count: 11 },
+    { slug: "p-tony", pickup_count: 17 },
+  ];
+
+  const html = app.homeView();
+  assert.match(html, /<strong class="count">35<\/strong>/);
 });

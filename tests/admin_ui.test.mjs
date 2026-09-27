@@ -1061,6 +1061,7 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
   };
   app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
   app.state.adminActiveTab = "riders";
+  app.state.adminExpandedZone = "floc";
 
   const html = app.adminView();
   assert.match(html, /class="stack admin-control-screen"/);
@@ -1089,6 +1090,50 @@ test("admin routes page uses the target Ride Control chrome without extra cards"
   assert.doesNotMatch(html, /admin-security-message/);
   assert.doesNotMatch(html, /Passcode fallback active/);
   assert.doesNotMatch(html, /No riders assigned[\s\S]*Add riders before final route timing/);
+});
+
+test("admin riders are grouped into collapsible school and FLOC zones", async () => {
+  const app = await loadApp();
+
+  app.state.admin = {
+    drivers: [
+      { slug: "joojo", displayName: "Joojo", initials: "JJ" },
+      { slug: "naa", displayName: "Naa", initials: "NA" },
+    ],
+    stops: [
+      { id: "tsu-1", driverSlug: "joojo", stopOrder: 1, name: "TSU Rider", area: "TSU", address: "Texas Southern University Library", routeLabel: "TSU Zone - Run 1" },
+      { id: "hcu-1", driverSlug: "naa", stopOrder: 1, name: "HCU Rider", area: "HCU", address: "HCU Volleyball Court", routeLabel: "HCU Zone - Run 1" },
+      { id: "uh-1", driverSlug: "joojo", stopOrder: 2, name: "UH Rider", area: "UH", address: "University of Houston", routeLabel: "UH pickup" },
+      { id: "floc-1", driverSlug: "joojo", stopOrder: 3, name: "FLOC Rider", area: "FLOC", address: "Outer Houston", routeLabel: "FLOC pickup" },
+      { id: "sam-1", driverSlug: "joojo", stopOrder: 4, name: "Sam Rider", area: "Sam Houston", address: "Huntsville", routeLabel: "Sam Houston Zone" },
+    ],
+    people: [],
+    security: { actor: { type: "code" } },
+  };
+  app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({
+    phone: "",
+    pickupTime: "",
+    readyBy: "",
+    notes: "",
+    ...stop,
+  }));
+  app.state.adminActiveTab = "riders";
+  app.state.adminExpandedZone = "";
+
+  const collapsed = app.adminView();
+  assert.match(collapsed, /data-admin-zone="tsu"/);
+  assert.match(collapsed, /data-admin-zone="hcu"/);
+  assert.match(collapsed, /data-admin-zone="uh"/);
+  assert.match(collapsed, /data-admin-zone="floc"/);
+  assert.match(collapsed, /TSU[\s\S]*1 rider/);
+  assert.match(collapsed, /FLOC[\s\S]*2 riders/);
+  assert.doesNotMatch(collapsed, /data-admin-edit="tsu-1"/);
+
+  app.state.adminExpandedZone = "tsu";
+  const expanded = app.adminView();
+  assert.match(expanded, /data-admin-zone-panel="tsu"/);
+  assert.match(expanded, /data-admin-edit="tsu-1"/);
+  assert.doesNotMatch(expanded, /data-admin-edit="hcu-1"/);
 });
 
 test("admin hamburger drawer exposes secondary admin tools without notifications", async () => {
@@ -1314,6 +1359,7 @@ test("admin sunday riders tab keeps the icon Add rider action", async () => {
   };
   app.state.adminDraftStops = app.state.admin.stops.map((stop) => ({ ...stop }));
   app.state.adminActiveTab = "riders";
+  app.state.adminExpandedZone = "floc";
 
   const html = app.adminView();
   assert.match(html, /Everyone coming/);
@@ -1862,7 +1908,7 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
 
   const pendingHtml = app.ridesView();
   assert.match(pendingHtml, /aria-label="Start route to Nora"/);
-  assert.match(pendingHtml, /Ready by 10:55 AM/);
+  assert.match(pendingHtml, /Pick up by 10:55 AM/);
   assert.match(pendingHtml, /aria-label="Open Nora pickup details"/);
   assert.match(pendingHtml, /10819 Tryon Dr/);
   assert.doesNotMatch(pendingHtml, /All pickups complete/);
@@ -2157,12 +2203,8 @@ test("local Coffee and Christ rehearsal loads sheet riders without Supabase writ
   assert.match(html, /Local rehearsal/);
   assert.match(html, /8<\/strong><span>event riders/);
   assert.match(html, /8 changes pending/);
-  assert.match(html, /William Andrews/);
-  assert.match(html, /Assigned to Blu/);
-  assert.match(html, /Kadie/);
-  assert.match(html, /Assigned to Annie/);
-  assert.match(html, /Ashton group - Precious car/);
-  assert.match(html, /Ashton group - Dawson car/);
+  assert.match(html, /data-admin-zone="uh"/);
+  assert.match(html, /data-admin-zone="floc"/);
   assert.match(html, /data-action="adminReviewChanges"/);
   assert.match(app.adminReviewView(), /Publish route changes \(8\)/);
 

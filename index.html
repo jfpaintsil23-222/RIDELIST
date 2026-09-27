@@ -2185,6 +2185,13 @@
     .admin-control-stats .admin-stat {
       min-height: 118px;
       padding: 22px 18px 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 42px;
+      grid-template-areas:
+        "count icon"
+        "label label";
+      column-gap: 10px;
+      align-content: start;
       border-radius: 20px;
       box-shadow: 0 16px 34px rgba(0, 0, 0, 0.06);
     }
@@ -2198,6 +2205,7 @@
     }
 
     .admin-control-stats .admin-stat strong {
+      grid-area: count;
       font-size: 40px;
       font-weight: 800;
     }
@@ -2215,21 +2223,22 @@
     }
 
     .admin-control-stats .admin-stat span {
+      grid-area: label;
       margin-top: 12px;
-      max-width: 86px;
+      max-width: none;
       font-size: 17px;
       line-height: 1.12;
       font-weight: 500;
     }
 
     .admin-stat-glyph {
-      position: absolute;
-      top: 24px;
-      right: 20px;
+      grid-area: icon !important;
+      position: static;
       display: grid;
       place-items: center;
       width: 42px;
       height: 42px;
+      margin-top: -2px !important;
       border-radius: 12px;
       color: #050505;
       background: #f3f3f4;
@@ -2691,6 +2700,91 @@
       font-size: 38px;
       line-height: 1;
       font-weight: 300;
+    }
+
+    .admin-zone-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .admin-zone {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .admin-zone-toggle {
+      width: 100%;
+      min-height: 78px;
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 12px 2px;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .admin-zone-mark {
+      width: 54px;
+      height: 54px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: #ffffff;
+      background: #050505;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .admin-zone-mark img {
+      width: 100%;
+      height: 100%;
+      padding: 5px;
+      object-fit: contain;
+      background: #ffffff;
+    }
+
+    .admin-zone-copy {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .admin-zone-copy strong {
+      color: #050505;
+      font-size: 20px;
+      line-height: 1.1;
+      font-weight: 850;
+    }
+
+    .admin-zone-copy span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 550;
+    }
+
+    .admin-zone-chevron {
+      color: var(--muted);
+      font-size: 28px;
+      line-height: 1;
+      transform: rotate(90deg);
+      transition: transform 160ms ease;
+    }
+
+    .admin-zone.is-open .admin-zone-chevron {
+      transform: rotate(-90deg);
+    }
+
+    .admin-zone-panel {
+      display: grid;
+      gap: 10px;
+      padding: 2px 0 16px;
     }
 
     .admin-rider-row {
@@ -4474,6 +4568,7 @@
       adminSelectedStopId: null,
       adminPersonSeed: null,
       adminRiderQuery: "",
+      adminExpandedZone: "",
       adminSelectedAddressType: "",
       adminSelectedPersonId: null,
       adminPersonDraft: null,
@@ -8173,7 +8268,7 @@
       const detailLine = [
         options.showDriver ? stop.routeLabel : "",
         stop.pickupTime,
-        stop.readyBy ? `Ready ${stop.readyBy}` : "",
+        stop.readyBy ? `Pick up by ${stop.readyBy}` : "",
         stop.phone,
       ].filter(Boolean).join(" · ") || "No time listed";
 
@@ -8367,6 +8462,44 @@
         </button>`;
     }
 
+    const ADMIN_RIDER_ZONES = [
+      { id: "tsu", label: "TSU", detail: "Texas Southern University", logo: "assets/tsu-logo.png" },
+      { id: "uh", label: "UH", detail: "University of Houston", logo: "assets/uh-logo.png" },
+      { id: "hcu", label: "HCU", detail: "Houston Christian University", logo: "assets/hcu-logo.png" },
+      { id: "floc", label: "FLOC", detail: "Off-campus and Sam Houston", logo: "" },
+    ];
+
+    function adminRiderZone(stop) {
+      const area = String(stop?.area || "").toLowerCase();
+      const route = String(stop?.routeLabel || "").toLowerCase();
+      const address = String(stop?.address || "").toLowerCase();
+      const combined = `${area} ${route} ${address}`;
+      if (/\bhcu\b|houston christian/.test(combined)) return "hcu";
+      if (/\btsu\b|texas southern/.test(combined)) return "tsu";
+      if (/\buh\b|university of houston/.test(combined)) return "uh";
+      return "floc";
+    }
+
+    function adminZoneSection(zone, riders, expandedZone) {
+      const isOpen = expandedZone === zone.id;
+      const riderCount = `${riders.length} ${riders.length === 1 ? "rider" : "riders"}`;
+      const mark = zone.logo
+        ? `<img src="${escapeHtml(zone.logo)}" alt="">`
+        : `<span>FLOC</span>`;
+      return `
+        <section class="admin-zone${isOpen ? " is-open" : ""}">
+          <button class="admin-zone-toggle" type="button" data-admin-zone="${escapeHtml(zone.id)}" aria-expanded="${isOpen ? "true" : "false"}">
+            <span class="admin-zone-mark" aria-hidden="true">${mark}</span>
+            <span class="admin-zone-copy">
+              <strong>${escapeHtml(zone.label)}</strong>
+              <span>${escapeHtml(zone.detail)} · ${escapeHtml(riderCount)}</span>
+            </span>
+            <span class="admin-zone-chevron" aria-hidden="true">&rsaquo;</span>
+          </button>
+          ${isOpen ? `<section class="admin-zone-panel" data-admin-zone-panel="${escapeHtml(zone.id)}">${riders.length ? riders.map(adminSundayRiderCard).join("") : `<section class="empty-card"><p>No riders in this group.</p></section>`}</section>` : ""}
+        </section>`;
+    }
+
     function adminPeopleView() {
       return `
         <section class="admin-message">
@@ -8385,6 +8518,12 @@
     function adminSundayRidersView() {
       const riders = adminFilteredStops();
       const ridersLabel = ridePlanRidersLabel();
+      const ridersByZone = Object.fromEntries(ADMIN_RIDER_ZONES.map((zone) => [
+        zone.id,
+        riders.filter((stop) => adminRiderZone(stop) === zone.id),
+      ]));
+      const firstMatchingZone = ADMIN_RIDER_ZONES.find((zone) => ridersByZone[zone.id].length)?.id || "";
+      const expandedZone = state.adminExpandedZone || (String(state.adminSearch || "").trim() ? firstMatchingZone : "");
       return `
         <section class="admin-section-head">
           <div class="admin-section-title-row">
@@ -8402,8 +8541,8 @@
             <input class="admin-search-input" data-admin-search type="search" value="${escapeHtml(state.adminSearch)}" placeholder="Search ${escapeHtml(ridersLabel)}" aria-label="Search ${escapeHtml(ridersLabel)}">
           </label>
         </section>
-        <section class="admin-rider-list" data-admin-riders-results aria-label="${escapeHtml(ridersLabel)}">
-          ${riders.length ? riders.map(adminSundayRiderCard).join("") : `<section class="empty-card"><p>No ${escapeHtml(ridersLabel)} yet. Add a rider to start this plan.</p></section>`}
+        <section class="admin-zone-list" data-admin-riders-results aria-label="${escapeHtml(ridersLabel)}">
+          ${riders.length ? ADMIN_RIDER_ZONES.map((zone) => adminZoneSection(zone, ridersByZone[zone.id], expandedZone)).join("") : `<section class="empty-card"><p>No ${escapeHtml(ridersLabel)} yet. Add a rider to start this plan.</p></section>`}
         </section>`;
     }
 
@@ -9805,7 +9944,7 @@
               <input name="pickupTime" value="${escapeHtml(stop.pickupTime || "")}" placeholder="12:25 PM">
             </label>
             <label>
-              <span>Ready by</span>
+              <span>Pick up by</span>
               <input name="readyBy" value="${escapeHtml(stop.readyBy || "")}" placeholder="12:20 PM">
             </label>
             <label>
@@ -9923,7 +10062,7 @@
     }
 
     function readyText(rider) {
-      return rider.readyBy ? `Ready by ${rider.readyBy}` : "Coordinate pickup directly";
+      return rider.readyBy ? `Pick up by ${rider.readyBy}` : "Coordinate pickup directly";
     }
 
     function pickupTimeText(rider) {
@@ -9958,7 +10097,7 @@
           <span class="pickup-avatar">${picked ? "✓" : escapeHtml(initials)}</span>
           <span class="pickup-rider-copy">
             <strong>${escapeHtml(rider.name)}</strong>
-            <span>${escapeHtml(rider.readyBy ? `Ready by ${rider.readyBy}` : "Confirmation status")}</span>
+            <span>${escapeHtml(rider.readyBy ? `Pick up by ${rider.readyBy}` : "Confirmation status")}</span>
           </span>
           <span class="pickup-status ${escapeHtml(confirmation.key)}" data-confirmation-status="${escapeHtml(confirmation.key)}">${escapeHtml(confirmation.label)}</span>
           <span class="pickup-chevron" aria-hidden="true">&rsaquo;</span>
@@ -10069,7 +10208,7 @@
         rider.phone ? `<div class="detail-row"><small>Phone</small><strong>${escapeHtml(rider.phone)}</strong></div>` : "",
         rider.routeLabel ? `<div class="detail-row"><small>Route</small><strong>${escapeHtml(rider.routeLabel)}</strong></div>` : "",
         rider.pickupTime ? `<div class="detail-row"><small>Pickup time</small><strong>${escapeHtml(rider.pickupTime)}</strong></div>` : "",
-        rider.readyBy ? `<div class="detail-row"><small>Ready by</small><strong>${escapeHtml(rider.readyBy)}</strong></div>` : "",
+        rider.readyBy ? `<div class="detail-row"><small>Pick up by</small><strong>${escapeHtml(rider.readyBy)}</strong></div>` : "",
         `<div class="detail-row"><small>Notes</small><strong>${escapeHtml(rider.notes || "Coordinate pickup directly.")}</strong></div>`,
       ].join("");
     }
@@ -10307,6 +10446,14 @@
       if (adminTabButton) {
         state.adminActiveTab = adminTabButton.dataset.adminTab;
         state.adminMenuOpen = false;
+        render();
+        return;
+      }
+
+      const adminZoneButton = event.target.closest("[data-admin-zone]");
+      if (adminZoneButton) {
+        const zone = adminZoneButton.dataset.adminZone || "";
+        state.adminExpandedZone = state.adminExpandedZone === zone ? "" : zone;
         render();
         return;
       }

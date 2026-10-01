@@ -91,3 +91,43 @@ explicitly skips database cases; do not supply production integration credential
 Schema preparation does not initialize a workspace or enable shared writers.
 Shared cutover must wait for mutation/publication and legacy compatibility fences,
 recovery review, and separately authorized rollout.
+
+## Versioned mutations and shared publication (Task 2)
+
+The shared harness now loads the actual canonical publication helper, legacy
+writer definitions and ACLs from the SQL sources. Its explicit `initialize()`
+helper enables shared mode only for synthetic fixtures. Reads and applying the
+schema still never initialize or cut over a production workspace.
+
+Every mutation/publication locks the plan then workspace. Concurrency cases use
+independent `psql` connections: the first transaction retains its locks, the
+second is observed waiting in `pg_stat_activity`, then the first commits. Tests
+assert rider/group/workspace versions, event counts and hashes of published rows
+and audit effects. Coverage includes independent edits, entity/group conflicts,
+move/remove/reorder races, duplicate IDs, changed bodies, refreshed tokens, actor
+isolation, retained expired IDs, both save/publish orderings, competing publishers,
+first-publication UUID preservation, cross-plan UUID collision prevention,
+validation rollback and unexpected-error rollback over existing published rows.
+
+Activation accepts server-known driver slugs. Shared driver JSON contains only
+public metadata; candidate publication copies access hashes directly between
+server rows. Empty driver arrays are valid. Unassigned riders are retained with
+`unassigned: true`, and actual canonical publication validation rejects them.
+
+Legacy whole-draft save/clear/publish and plan-driver writers reject `shared` and
+`paused` plans before effects. Global People Bank/settings/import writers reject
+while any plan is shared or paused; this is transitional fencing until the
+versioned master/settings wrappers and frontend paths are installed in Task 4.
+These fences affect only the relevant Rides RPCs. Existing unrelated church
+objects and published driver data are preserved.
+
+The original fourteen publication tests still run both public legacy wrappers
+and their actual private canonical helper. A fifteenth source check verifies the
+identical canonical helper and matching wrapper behavior while preserving the
+existing setup-specific default dates. Private helper execution is denied to
+PUBLIC, anon and authenticated; no client-controlled GUC authorizes publication.
+
+Task 2 complete-suite evidence: 169 tests, 161 passed, zero failures, eight
+existing credential-gated integration skips. The disposable database cannot
+verify the deployed Supabase schema, gateway signatures, production audit
+triggers, browser wiring or rollout. No production calls or credentials are used.

@@ -42,7 +42,7 @@ const deleted = ['00000000-0000-0000-0000-000000000101'];
 
 for (const file of ['admin_ride_control.sql', 'sunday_reset.sql']) {
   const source = readFileSync(new URL(`../supabase/${file}`, import.meta.url), 'utf8');
-  const fn = definition(source, 'public.ride_admin_publish_plan');
+  const fn = definition(source, 'rides_private.ride_publish_plan_internal') + '\n' + definition(source, 'public.ride_admin_publish_plan');
   function setup() {
     sql('drop schema if exists rides_private cascade; drop function if exists public.ride_admin_snapshot(text,date);\n' + schema + helpers + fn);
   }
@@ -84,3 +84,11 @@ for (const file of ['admin_ride_control.sql', 'sunday_reset.sql']) {
     assert.equal(sql(baseline), before);
   });
 }
+
+
+test('both installations use identical canonical publication and preserve their legacy date defaults', () => {
+  const sunday=readFileSync(new URL('../supabase/sunday_reset.sql',import.meta.url),'utf8');
+  assert.equal(definition(control,'rides_private.ride_publish_plan_internal'),definition(sunday,'rides_private.ride_publish_plan_internal'));
+  const normalize=source=>source.replace("p_plan_date date default '2026-08-09'::date",'p_plan_date date default null').replaceAll("date '2026-08-09'",'rides_private.current_ride_plan_date()');
+  assert.equal(normalize(definition(control,'public.ride_admin_publish_plan')),definition(sunday,'public.ride_admin_publish_plan'));
+});

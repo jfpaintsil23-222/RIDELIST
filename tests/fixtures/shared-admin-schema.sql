@@ -59,3 +59,25 @@ create or replace function public.ride_admin_snapshot(p_admin_code text, p_plan_
     'destination', '{}'::jsonb, 'appSettings', '{}'::jsonb, 'drivers', '[]'::jsonb,
     'stops', '[]'::jsonb, 'people', '[]'::jsonb, 'driverPool', '[]'::jsonb, 'security', '{}'::jsonb);
 $$;
+
+create table rides_private.ride_admin_drafts (plan_date date, actor_key text, draft jsonb, saved_at timestamptz, updated_at timestamptz, primary key(plan_date,actor_key));
+create table rides_private.ride_drivers (
+ id uuid primary key default gen_random_uuid(), plan_id uuid references rides_private.ride_plans,
+ slug text, display_name text, full_name text, initials text, access_code_hash text,
+ subtitle text default '', route_notes text default '', sort_order integer, updated_at timestamptz default now(), unique(plan_id,slug)
+);
+create table rides_private.ride_stops (
+ id uuid primary key default gen_random_uuid(), driver_id uuid references rides_private.ride_drivers,
+ stop_order integer, rider_name text, phone text, address text, area text, pickup_time time, ready_by time,
+ route_label text, notes text, created_at timestamptz default now(), updated_at timestamptz default now(),
+ constraint synthetic_write_failure check(rider_name <> 'FORCE_DATABASE_ERROR')
+);
+create table rides_private.test_audit (operation text, stop_id uuid);
+create function rides_private.test_audit_stop() returns trigger language plpgsql as $$
+begin insert into rides_private.test_audit values(tg_op,coalesce(new.id,old.id)); return coalesce(new,old); end; $$;
+create trigger audit_stop after insert or update or delete on rides_private.ride_stops for each row execute function rides_private.test_audit_stop();
+insert into rides_private.ride_drivers (plan_id,slug,display_name,full_name,initials,access_code_hash,sort_order)
+select id,slug,'Synthetic driver','Synthetic Driver','SD',md5('synthetic-driver-secret'),ordinality
+from rides_private.ride_plans cross join unnest(array['driver-a','driver-b']) with ordinality d(slug,ordinality) where plan_date='2099-01-11';
+
+create table rides_private.ride_app_settings (id text primary key, active_plan_date date);

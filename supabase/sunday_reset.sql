@@ -499,11 +499,12 @@ begin
 end;
 $$;
 
-create or replace function public.ride_admin_publish_plan(
+create or replace function rides_private.ride_publish_plan_internal(
   p_admin_code text,
   p_plan_date date default null,
   p_stops jsonb default '[]'::jsonb,
-  p_deleted_stop_ids text[] default '{}'::text[]
+  p_deleted_stop_ids text[] default '{}'::text[],
+  p_preserve_ids boolean default false
 )
 returns jsonb
 language plpgsql
@@ -522,7 +523,7 @@ declare
   v_driver_slug text;
   v_validation_error jsonb;
 begin
-  if not rides_private.is_ride_admin_code(p_admin_code) then
+  if not p_preserve_ids and not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
   end if;
 
@@ -531,7 +532,7 @@ begin
   select p.id
   into v_plan
   from rides_private.ride_plans p
-  where p.plan_date = coalesce(p_plan_date, rides_private.current_ride_plan_date())
+  where p.plan_date = p_plan_date
   limit 1;
 
   if v_plan.id is null then
@@ -600,6 +601,13 @@ begin
         end;
 
         v_stop_id := nullif(btrim(coalesce(v_stop->>'id', '')), '');
+        if p_preserve_ids and (v_stop_id is null or exists (
+          select 1 from rides_private.ride_stops s join rides_private.ride_drivers d on d.id=s.driver_id
+          where s.id=v_stop_id::uuid and d.plan_id<>v_plan.id
+        )) then
+          v_validation_error := jsonb_build_object('ok', false, 'error', 'stop_id_conflict');
+          raise exception using errcode='RP001', message='ride_publish_validation_failed';
+        end if;
 
         if exists (
           select 1
@@ -636,6 +644,7 @@ begin
           where s.id::text = v_stop_id;
         else
           insert into rides_private.ride_stops (
+            id,
             driver_id,
             stop_order,
             rider_name,
@@ -648,6 +657,7 @@ begin
             notes
           )
           values (
+            case when p_preserve_ids then v_stop_id::uuid else gen_random_uuid() end,
             v_driver.id,
             v_stop_order,
             v_name,
@@ -685,10 +695,38 @@ begin
         updated_at = now()
     where d.plan_id = v_plan.id;
 
-    return public.ride_admin_snapshot(p_admin_code, coalesce(p_plan_date, rides_private.current_ride_plan_date()));
+    return public.ride_admin_snapshot(p_admin_code, p_plan_date);
   exception when sqlstate 'RP001' then
     return v_validation_error;
   end;
+end;
+$$;
+revoke execute on function rides_private.ride_publish_plan_internal(text,date,jsonb,text[],boolean) from public, anon, authenticated;
+
+create or replace function public.ride_admin_publish_plan(
+  p_admin_code text,
+  p_plan_date date default null,
+  p_stops jsonb default '[]'::jsonb,
+  p_deleted_stop_ids text[] default '{}'::text[]
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path to ''
+as $$
+begin
+  if not rides_private.is_ride_admin_code(p_admin_code) then
+    return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+  -- to_regclass keeps legacy-only installations compatible before additive schema.
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans where plan_date=coalesce(p_plan_date,rides_private.current_ride_plan_date()) for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where plan_date=coalesce(p_plan_date,rides_private.current_ride_plan_date()) and write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
+  end if;
+  return rides_private.ride_publish_plan_internal(p_admin_code,coalesce(p_plan_date,rides_private.current_ride_plan_date()),p_stops,p_deleted_stop_ids,false);
 end;
 $$;
 
@@ -807,6 +845,13 @@ begin
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
   end if;
 
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans where plan_date=v_plan_date for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where plan_date=v_plan_date and write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
+  end if;
+
   if not exists (
     select 1
     from rides_private.ride_plans p
@@ -897,6 +942,13 @@ begin
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
   end if;
 
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans where plan_date=v_plan_date for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where plan_date=v_plan_date and write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
+  end if;
+
   delete from rides_private.ride_admin_drafts d
   where d.plan_date = v_plan_date
     and d.actor_key = v_actor_key;
@@ -930,6 +982,13 @@ declare
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans order by plan_date for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
   end if;
 
   if p_primary_person_id is null or p_duplicate_person_id is null or p_primary_person_id = p_duplicate_person_id then
@@ -1006,6 +1065,13 @@ begin
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
   end if;
 
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans order by plan_date for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
+  end if;
+
   if p_person_id is null then
     return jsonb_build_object('ok', false, 'error', 'person_required');
   end if;
@@ -1052,6 +1118,13 @@ declare
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans order by plan_date for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
   end if;
 
   select p.id
@@ -1110,6 +1183,13 @@ declare
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans order by plan_date for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
   end if;
 
   if p_plan_date is null then
@@ -1264,6 +1344,13 @@ begin
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
   end if;
 
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans where plan_date=coalesce(p_plan_date,rides_private.current_ride_plan_date()) for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where plan_date=coalesce(p_plan_date,rides_private.current_ride_plan_date()) and write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
+  end if;
+
   select p.id
   into v_plan
   from rides_private.ride_plans p
@@ -1366,6 +1453,13 @@ declare
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
+  end if;
+
+  if to_regclass('rides_private.ride_shared_write_modes') is not null then
+    perform 1 from rides_private.ride_plans where plan_date=coalesce(p_plan_date,rides_private.current_ride_plan_date()) for update;
+    if exists(select 1 from rides_private.ride_shared_write_modes where plan_date=coalesce(p_plan_date,rides_private.current_ride_plan_date()) and write_mode<>'legacy') then
+      return jsonb_build_object('ok', false, 'code', 'update_required', 'error', 'update_required');
+    end if;
   end if;
 
   select p.id

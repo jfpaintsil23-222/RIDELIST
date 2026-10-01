@@ -32,6 +32,7 @@ async function loadApp(fetchImpl, options = {}) {
 
   const context = {
     console,
+    crypto: { randomUUID: () => "00000000-0000-0000-0000-000000009001" },
     encodeURIComponent,
     URLSearchParams,
     FormData: class {},
@@ -72,6 +73,7 @@ async function loadApp(fetchImpl, options = {}) {
   vm.runInContext(`${script}
     globalThis.__app = {
       state,
+      runAdminSharedSecondary: typeof runAdminSharedSecondary === "function" ? runAdminSharedSecondary : undefined,
       adminView,
       openAdminMenuPage: typeof openAdminMenuPage === "function" ? openAdminMenuPage : undefined,
       adminReviewView: typeof adminReviewView === "function" ? adminReviewView : undefined,
@@ -4002,4 +4004,60 @@ test("home summary shows the loaded total pickup count", async () => {
 
   const html = app.homeView();
   assert.match(html, /<strong class="count">35<\/strong>/);
+});
+
+function sharedSecondaryState(app) {
+  app.state.adminCode='synthetic-token'; app.state.planDate='2099-01-04';
+  app.state.admin={people:[{id:'person-one',name:'Before',recordVersion:3}],drivers:[],driverPool:[],stops:[]};
+  app.state.adminShared={actorKey:'profile:alpha',planDate:'2099-01-04',generation:1,
+    snapshot:{writeMode:'shared',planDate:'2099-01-04',draftRevision:4,baselinePublishedRevision:0,settingsVersion:1,drivers:[],riders:[],groupVersions:{'@drivers':1}},secondary:{brandingVersion:1}};
+  app.state.adminPersonDraft={id:'person-one',name:'Personal edit',phone:'000-111',recordVersion:3};
+  app.state.adminDraftStops=[{id:'personal-rider',name:'Personal unsaved'}];
+}
+test('secondary_save_preserves_form and shared draft; person response only patches authoritative master', async () => {
+  const calls=[]; const app=await loadApp(async(url,init)=>{if (!url.includes('ride_admin_')) return {ok:true,json:async()=>[]}; calls.push([url,JSON.parse(init?.body||'{}')]); return {ok:true,json:async()=>({ok:true,draftRevision:5,value:{person:{id:'person-one',name:'Saved',recordVersion:4}}})};});
+  sharedSecondaryState(app); const draft=app.state.adminDraftStops, form=app.state.adminPersonDraft, snapshot=app.state.adminShared.snapshot;
+  await app.saveAdminPersonDraft();
+  assert.ok(calls.some(([u])=>u.includes('ride_admin_shared_save_person')));
+  assert.equal(calls.some(([u])=>u.includes('ride_admin_snapshot')),false);
+  assert.equal(app.state.adminDraftStops,draft); assert.equal(app.state.adminPersonDraft,form); assert.equal(app.state.adminShared.snapshot,snapshot);
+  assert.equal(app.state.admin.people[0].name,'Saved'); assert.match(app.state.adminMessage,/contact.*saved|saved.*contact/i);
+});
+test('secondary responses are fenced after actor or plan generation changes', async () => {
+  let resolve; const response=new Promise(r=>resolve=r);
+  const app=await loadApp(async(url)=>url.includes('ride_admin_') ? ({ok:true,json:()=>response}) : ({ok:true,json:async()=>[]})); sharedSecondaryState(app);
+  const save=app.saveAdminPersonDraft(); app.state.adminShared={...app.state.adminShared,actorKey:'profile:beta',generation:2};
+  resolve({ok:true,value:{person:{id:'person-one',name:'Wrong actor response'}}}); await save;
+  assert.equal(app.state.admin.people[0].name,'Before');
+});
+test('legacy_secondary_writer_fenced for merge archive and AI apply in shared or paused mode', async () => {
+  const calls=[]; const app=await loadApp(async(url)=>{if (!url.includes('ride_admin_')) return {ok:true,json:async()=>[]}; calls.push(url);return {ok:true,json:async()=>({ok:true})};}); sharedSecondaryState(app);
+  app.state.adminSelectedPersonId='person-one'; const draft=app.state.adminDraftStops;
+  for (const mode of ['shared','paused']) {
+    app.state.adminShared.snapshot.writeMode=mode;
+    await app.saveAdminPersonMerge(); await app.saveAdminPersonArchive(); app.applyAdminAiDraft();
+    assert.equal(app.state.adminDraftStops,draft); assert.match(app.state.adminError,/shared|versioned|paused/i);
+  }
+  assert.equal(calls.length,0);
+});
+
+test('shared availability sends empty list and captured dependencies without altering personal input', async () => {
+  const calls=[]; const app=await loadApp(async(url,init)=>{if (!url.includes('ride_admin_')) return {ok:true,json:async()=>[]}; calls.push(JSON.parse(init.body)); return {ok:true,json:async()=>({ok:true,draftRevision:7})};});
+  sharedSecondaryState(app); const draft=app.state.adminDraftStops;
+  const base={...app.state.adminShared.snapshot,drivers:[{slug:'a'}],riders:[{driverSlug:'a'}],groupVersions:{'@drivers':3,a:5,'':2}};
+  await app.saveAdminDriverAvailability([],base);
+  assert.deepEqual(calls[0].p_operation.expectedGroupVersions,{'@drivers':3,a:5,'':2});
+  assert.deepEqual(calls[0].p_operation.payload.driverSlugs,[]); assert.equal(app.state.adminDraftStops,draft);
+});
+test('uncertain secondary response retains exact operation for status lookup and prevents automatic replay', async () => {
+  let calls=0; const app=await loadApp(async(url)=>{if (!url.includes('ride_admin_')) return {ok:true,json:async()=>[]}; calls++; throw new Error('connection lost');});
+  sharedSecondaryState(app); const form=app.state.adminPersonDraft;
+  await app.saveAdminPersonDraft(); const pending=app.state.adminShared.pendingSecondary;
+  assert.ok(pending.operationId); assert.equal(pending.kind,'person'); assert.equal(app.state.adminPersonDraft,form);
+  await app.saveAdminPersonDraft(); assert.equal(calls,1); assert.equal(app.state.adminShared.pendingSecondary,pending);
+});
+test('shared linked rider edit retains explicit identity and version without matching its name', async () => {
+  const app=await loadApp(); sharedSecondaryState(app);
+  app.state.adminSelectedStopId='personal-rider'; app.state.adminDraftStops=[{id:'personal-rider',name:'Arbitrary name',personId:'explicit-person',personVersion:7}];
+  const view=app.adminEditView(); assert.match(view,/name="personId" value="explicit-person"/); assert.match(view,/name="personVersion" value="7"/);
 });

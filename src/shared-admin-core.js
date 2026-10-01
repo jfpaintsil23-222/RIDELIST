@@ -40,3 +40,12 @@ export function reconcileSnapshot(current, incoming, { actorId, planDate, reques
       && incoming.eventCursor < current.eventCursor)) return current;
   return { ...current, ...incoming, actorId, planDate, requestGeneration, personalForms };
 }
+
+// Only a selected protected People Bank record can establish a master dependency.
+// Unknown legacy links remain unknown; names/phones are never identity evidence.
+export function personDependency(person) {
+  if (!person?.id) return { personId: null, personVersion: null };
+  if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(person.id)) throw new TypeError('Stable person UUID required');
+  if (!Number.isSafeInteger(person.recordVersion) || person.recordVersion < 1) throw new TypeError('Known person record version required');
+  return { personId: person.id, personVersion: person.recordVersion };
+}

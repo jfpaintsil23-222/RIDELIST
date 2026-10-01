@@ -6374,6 +6374,8 @@
     function adminComparableStop(stop) {
       return {
         id: String(stop.id || ""),
+        personId: stop.personId || null,
+        personVersion: stop.personVersion ?? null,
         driverSlug: stop.driverSlug || "",
         stopOrder: Number(stop.stopOrder || 0),
         name: stop.name || "",
@@ -7010,6 +7012,7 @@
 
     function adminPersonEditable(person) {
       return {
+        recordVersion: person?.recordVersion,
         id: person?.id || "",
         name: person?.name || "",
         phone: person?.phone || "",
@@ -7027,6 +7030,7 @@
       const preferredAddressType = String(formData.get("preferredAddressType") || "home");
       const draft = {
         id: String(formData.get("id") || ""),
+        recordVersion: state.adminPersonDraft?.recordVersion,
         name: String(formData.get("name") || "").trim(),
         phone: String(formData.get("phone") || "").trim(),
         campusAddress: String(formData.get("campusAddress") || "").trim(),
@@ -7249,6 +7253,8 @@
       const formData = new FormData(form);
       const stop = {
         id: formData.get("id") || `temp-${Date.now()}`,
+        personId: String(formData.get("personId") || "") || null,
+        personVersion: formData.get("personVersion") ? Number(formData.get("personVersion")) : null,
         driverSlug: String(formData.get("driverSlug") || ""),
         stopOrder: Number(formData.get("stopOrder") || 1),
         name: String(formData.get("name") || "").trim(),
@@ -7692,9 +7698,133 @@
       return "Could not save event setup.";
     }
 
+    // Task 5 supplies verified context and refreshes through its form-preserving reconciler.
+    // Changing identity/plan must replace context and increment generation.
+    function adminSharedSecondaryMode() {
+      return state.adminShared?.snapshot?.writeMode || state.admin?.writeMode || "legacy";
+    }
+
+    function adminSharedSecondaryNotice() {
+      const target = document.querySelector("[data-shared-secondary-status]");
+      if (target) target.textContent = state.adminError || state.adminMessage || "";
+    }
+
+    function fenceAdminSharedBypass() {
+      if (adminSharedSecondaryMode() === "legacy") return false;
+      state.adminError = "This action is unavailable for a shared or paused draft. Use versioned shared edits.";
+      adminSharedSecondaryNotice();
+      return true;
+    }
+
+    async function runAdminSharedSecondary(kind, payload, expected = {}) {
+      const context = state.adminShared;
+      if (!context?.actorKey || context.planDate !== activePlanDate() || context.snapshot?.writeMode !== "shared") {
+        state.adminError = "Shared editing is paused or requires a fresh authenticated workspace.";
+        adminSharedSecondaryNotice();
+        return { ok: false, code: "update_required" };
+      }
+      if (context.pendingSecondary) {
+        state.adminError = "Resolve the pending shared save before sending another change.";
+        adminSharedSecondaryNotice();
+        return { ok: false, code: "operation_pending" };
+      }
+      const scope = { actorKey: context.actorKey, planDate: context.planDate, generation: context.generation };
+      const matches = () => state.adminShared?.actorKey === scope.actorKey && state.adminShared?.planDate === scope.planDate
+        && state.adminShared?.generation === scope.generation && activePlanDate() === scope.planDate;
+      const operationId = crypto.randomUUID();
+      const snapshot = expected.snapshot || context.snapshot;
+      const args = { p_admin_code: state.adminCode, p_plan_date: scope.planDate, p_operation_id: operationId };
+      let name;
+      if (kind === "person") {
+        name = "ride_admin_shared_save_person";
+        Object.assign(args, { p_person: payload, p_expected_version: expected.recordVersion });
+      } else if (kind === "route" || kind === "branding") {
+        name = "ride_admin_shared_save_settings";
+        Object.assign(args, { p_scope: kind, p_settings: payload, p_expected_version: expected.recordVersion,
+          p_expected_baseline_revision: snapshot.baselinePublishedRevision });
+      } else if (kind === "catalog") {
+        name = "ride_admin_shared_add_driver"; args.p_driver = payload;
+      } else if (kind === "availability" || kind === "person_pickup") {
+        name = "ride_admin_shared_mutate"; delete args.p_operation_id;
+        let groups = {};
+        if (kind === "availability") {
+          const selected = new Set(payload.driverSlugs);
+          const active = new Set(snapshot.drivers.map(driver => driver.slug));
+          const keys = new Set(["@drivers"]);
+          for (const slug of selected) if (!active.has(slug)) keys.add(slug);
+          for (const slug of active) if (!selected.has(slug)) keys.add(slug);
+          if (snapshot.riders.some(rider => rider.driverSlug && !selected.has(rider.driverSlug))) keys.add("");
+          groups = Object.fromEntries([...keys].map(key => [key, snapshot.groupVersions[key] || 0]));
+        }
+        args.p_operation = { operationId, planDate: scope.planDate, kind: kind === "availability" ? "plan_drivers" : kind,
+          expectedBaselinePublishedRevision: snapshot.baselinePublishedRevision, expectedGroupVersions: groups,
+          ...(kind === "person_pickup" ? { entityId: expected.entityId, expectedEntityVersion: expected.entityVersion } : {}), payload };
+      } else return { ok: false, code: "validation_failed" };
+      // Keep the exact request/ID for status lookup after response uncertainty. Never replay a snapshot.
+      context.pendingSecondary = { operationId, name, args, scope, kind };
+      try {
+        const saved = await rpc(name, args, adminRpcOptions());
+        if (!matches()) return { ok: false, code: "stale_response" };
+        context.pendingSecondary = null;
+        if (!saved?.ok) {
+          context.secondaryConflict = saved;
+          state.adminError = saved?.code === "conflict" ? "Shared details changed. Your input is preserved; review the current record before saving again."
+            : "Shared save was rejected. Your input is preserved.";
+          adminSharedSecondaryNotice();
+          context.onChange?.({ kind, result: saved, scope });
+          return saved;
+        }
+        context.secondaryConflict = null;
+        context.review = null;
+        if (kind === "person" && saved.value?.person) {
+          const person = saved.value.person;
+          state.admin.people = [...(state.admin.people || []).filter(item => item.id !== person.id), person];
+          state.adminMessage = "Contact details saved to People Bank. Use Apply saved contact to a linked pickup to change the shared route.";
+        } else if (kind === "catalog" && saved.value?.driver) {
+          const driver = saved.value.driver;
+          state.admin.driverPool = [...(state.admin.driverPool || []).filter(item => item.slug !== driver.slug), driver];
+          state.adminMessage = "Driver saved to the catalog. Select availability to add this driver to the shared draft.";
+        } else if (kind === "branding") {
+          context.secondary = { ...context.secondary, brandingVersion: saved.value.recordVersion,
+            branding: { ...context.secondary?.branding, ...saved.value.branding } };
+          state.appSettings = normalizeAppSettings({ ...state.appSettings, ...saved.value.branding });
+          state.adminMessage = "Home branding applied immediately.";
+        } else state.adminMessage = "Saved to shared draft. Review and publish to update driver routes.";
+        state.adminError = "";
+        adminSharedSecondaryNotice();
+        // Callback requests authoritative shared detail; it must preserve personal forms/DOM.
+        context.onChange?.({ kind, result: saved, scope });
+        return saved;
+      } catch (error) {
+        if (!matches()) return { ok: false, code: "stale_response" };
+        state.adminError = "Save outcome is unknown. Your input is preserved; check operation status before retrying.";
+        adminSharedSecondaryNotice();
+        context.onChange?.({ kind, result: { ok: false, code: "outcome_unknown" }, scope });
+        return { ok: false, code: "outcome_unknown", operationId };
+      }
+    }
+
+    function saveAdminSharedBrandingFromForm(form) {
+      const payload = eventSetupPayloadFromForm(form);
+      return runAdminSharedSecondary("branding", Object.fromEntries(["homeTitle", "homeSubtitle", "homeCoverUrl", "homeCoverAlt"].map(key => [key, payload[key]])),
+        { recordVersion: Number(form.dataset.sharedBrandingVersion) });
+    }
+
+    function applyAdminSharedPersonPickup(riderId) {
+      const rider = state.adminShared?.snapshot?.riders.find(item => item.id === riderId);
+      const person = adminPersonById(rider?.personId);
+      if (!rider || !person) return;
+      return runAdminSharedSecondary("person_pickup", { personId: person.id, personVersion: person.recordVersion },
+        { entityId: rider.id, entityVersion: rider.entityVersion });
+    }
+
     async function saveAdminEventSetup(form) {
       if (!state.adminCode && !state.adminSession?.access_token) return;
       const payload = eventSetupPayloadFromForm(form);
+      if (adminSharedSecondaryMode() !== "legacy") {
+        return runAdminSharedSecondary("route", Object.fromEntries(["planTitle", "serviceDay", "destinationLabel", "destinationAddress"].map(key => [key, payload[key]])),
+          { recordVersion: Number(form.dataset.sharedSettingsVersion) });
+      }
       if (!payload.homeTitle || !payload.planTitle || !payload.serviceDay) {
         state.adminError = "Home title, ride list title, and service day are required.";
         render();
@@ -7803,7 +7933,8 @@
       return { activated, deactivated };
     }
 
-    async function saveAdminDriverAvailability(selectedSlugs = []) {
+    async function saveAdminDriverAvailability(selectedSlugs = [], snapshot) {
+      if (adminSharedSecondaryMode() !== "legacy") return runAdminSharedSecondary("availability", { driverSlugs: selectedSlugs }, { snapshot });
       if (isRehearsalMode()) {
         const activated = applyAdminDriverActivation(selectedSlugs);
         state.adminDriverAddOpen = false;
@@ -7886,6 +8017,10 @@
         return;
       }
 
+      if (adminSharedSecondaryMode() !== "legacy") return runAdminSharedSecondary("catalog", {
+        name: draft.driverName, initials: draft.driverInitials, phone: draft.driverPhone, passcode: draft.driverPasscode,
+      });
+
       if (isRehearsalMode()) {
         const pool = adminDriverPool();
         const nextDriver = normalizeAdminDriver({
@@ -7960,6 +8095,8 @@
 
     async function saveAdminPersonDraft() {
       if (!state.adminPersonDraft) return;
+      if (adminSharedSecondaryMode() !== "legacy") return runAdminSharedSecondary("person", adminPersonWithPreferredAddress(state.adminPersonDraft),
+        { recordVersion: state.adminPersonDraft.recordVersion });
       const before = adminPersonById(state.adminSelectedPersonId);
       const draft = adminPersonWithPreferredAddress(state.adminPersonDraft);
       state.adminPersonDraft = draft;
@@ -8019,6 +8156,7 @@
     }
 
     async function saveAdminPersonMerge() {
+      if (fenceAdminSharedBypass()) return;
       const draft = adminMergeDraft();
       if (!draft) {
         state.adminError = "Choose the primary person before merging.";
@@ -8078,6 +8216,7 @@
     }
 
     async function saveAdminPersonArchive() {
+      if (fenceAdminSharedBypass()) return;
       const person = adminPersonById(state.adminSelectedPersonId);
       if (!person) return;
 
@@ -8548,7 +8687,7 @@
 
     function adminDriverAvailabilityRow(driver) {
       const active = Boolean(driver.active);
-      const locked = active && adminDriverHasStops(driver.slug);
+      const locked = adminSharedSecondaryMode() === "legacy" && active && adminDriverHasStops(driver.slug);
       const avatarClass = String(driver.initials || "").length > 2 ? "avatar small three-letter" : "avatar small";
       const status = active ? escapeHtml(pickupCountLabel(driverPickupCountValue(driver))) : "Inactive";
       const stateCopy = active && locked ? "Move pickups before turning off" : active ? "Active for this plan" : "Saved driver";
@@ -8569,7 +8708,7 @@
         <form class="admin-driver-add-form" data-admin-form="driver-add">
           <span class="admin-driver-add-title">
             <strong>Add driver</strong>
-            <span>They can use the simple driver passcode after saving.</span>
+            <span>${adminSharedSecondaryMode() === "legacy" ? "They can use the simple driver passcode after saving." : "Saving adds to the catalog. Activate in the shared draft, then publish."}</span>
           </span>
           <label>
             <span>Name</span>
@@ -8609,11 +8748,12 @@
           </div>
         </section>
         ${state.adminDriverAddOpen ? adminDriverAddForm() : ""}
-        <form class="admin-driver-availability" data-admin-form="driver-availability">
+        <form class="admin-driver-availability" data-admin-form="driver-availability" data-shared-snapshot="${escapeHtml(JSON.stringify(state.adminShared?.snapshot || null))}">
+          ${adminSharedSecondaryMode() !== "legacy" ? `<p data-shared-secondary-status role="status">Availability is saved to the shared draft. Drivers see it after publication.</p>` : ""}
           <section class="admin-driver-availability-card" aria-label="Saved drivers">
             ${pool.length ? pool.map(adminDriverAvailabilityRow).join("") : `<section class="empty-card"><p>No saved drivers yet. Add a driver to start.</p></section>`}
           </section>
-          <button class="secondary-action" type="submit">${state.adminLoading ? "Saving..." : "Save availability"}</button>
+          <button class="secondary-action" type="submit">${state.adminLoading ? "Saving..." : (adminSharedSecondaryMode() === "legacy" ? "Save availability" : "Save availability to shared draft")}</button>
         </form>`;
     }
 
@@ -8632,8 +8772,9 @@
     function adminSettingsView() {
       const settings = normalizeAppSettings(state.appSettings || {});
       const branding = activeRideBranding();
-      const destination = destinationSummary();
-      const plan = state.plan || {};
+      const sharedSettings = adminSharedSecondaryMode() !== "legacy" ? state.adminShared?.snapshot?.settings || {} : {};
+      const destination = { ...destinationSummary(), ...(sharedSettings.destinationLabel !== undefined ? { label: sharedSettings.destinationLabel } : {}), ...(sharedSettings.destinationAddress !== undefined ? { address: sharedSettings.destinationAddress } : {}) };
+      const plan = { ...state.plan, ...(sharedSettings.planTitle !== undefined ? { title: sharedSettings.planTitle } : {}), ...(sharedSettings.serviceDay !== undefined ? { serviceDay: sharedSettings.serviceDay } : {}) };
       const homeTitle = settings.homeTitle || branding.title;
       const homeSubtitle = settings.homeSubtitle || "";
       const homeCoverUrl = settings.homeCoverUrl || branding.coverSrc;
@@ -8653,7 +8794,7 @@
             </button>
           </div>
         </section>
-        <form class="admin-form-grid" data-admin-form="event-setup">
+        <form class="admin-form-grid" data-admin-form="event-setup" data-shared-settings-version="${state.adminShared?.snapshot?.settingsVersion ?? ""}" data-shared-branding-version="${state.adminShared?.secondary?.brandingVersion ?? ""}">
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           <section class="admin-form-card" aria-label="Home page setup">
@@ -8697,7 +8838,8 @@
               <input name="destinationAddress" value="${escapeHtml(destination.address)}" autocomplete="off" required>
             </label>
           </section>
-          <button class="secondary-action" type="submit">${state.adminLoading ? "Saving..." : "Save event setup"}</button>
+          ${adminSharedSecondaryMode() !== "legacy" ? `<p data-shared-secondary-status role="status">Route settings take effect after publication. Home branding applies immediately.</p><button class="secondary-action" type="button" data-action="adminSharedBranding">Apply home branding now</button>` : ""}
+          <button class="secondary-action" type="submit">${state.adminLoading ? "Saving..." : (adminSharedSecondaryMode() === "legacy" ? "Save event setup" : "Apply route settings to shared draft")}</button>
         </form>`;
     }
 
@@ -9021,6 +9163,7 @@
             ${peopleDetailRow("notes", "Notes", person.notes || "No notes saved")}
           </section>
 
+          ${adminSharedSecondaryMode() !== "legacy" ? `<p data-shared-secondary-status role="status">Contact saves update People Bank only. Apply saved contact explicitly to linked pickups, then publish.</p>${(state.adminShared?.snapshot?.riders || []).filter(rider => rider.personId === person.id).map(rider => `<button type="button" class="secondary-action" data-shared-person-pickup="${escapeHtml(rider.id)}">Apply saved contact to ${escapeHtml(rider.name)} pickup</button>`).join("")}` : ""}
           <div class="people-detail-primary-actions">
             <button class="people-detail-action primary" type="button" data-admin-add-person="${escapeHtml(person.id)}">
               <span class="people-detail-action-icon">${peopleDetailIcon("send")}</span>
@@ -9152,7 +9295,8 @@
 
             ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
 
-            <section class="admin-change-list" aria-label="PeopleData archive review">
+            ${adminSharedSecondaryMode() !== "legacy" ? `<p data-shared-secondary-status role="status">Save contact details only. Linked pickup changes require a separate shared operation.</p>` : ""}
+          <section class="admin-change-list" aria-label="PeopleData archive review">
               <article class="admin-change-card">
                 <span class="admin-change-badge">-</span>
                 <span class="admin-change-copy">
@@ -9223,7 +9367,7 @@
 
           <div class="admin-form-actions">
             <button class="secondary-action" type="button" data-action="adminPersonEditBack">Back</button>
-            <button class="primary-action" type="button" data-action="adminPersonConfirmSave" ${changes.length ? "" : "disabled"}>${state.adminLoading ? "Saving..." : "Confirm save"}</button>
+            <button class="primary-action" type="button" data-action="adminPersonConfirmSave" ${changes.length ? "" : "disabled"}>${state.adminLoading ? "Saving..." : (adminSharedSecondaryMode() === "legacy" ? "Confirm save" : "Save contact details only")}</button>
           </div>
         </div>`;
     }
@@ -9416,6 +9560,7 @@
     }
 
     function applyAdminAiDraft() {
+      if (fenceAdminSharedBypass()) return;
       const assignments = adminAiAssignments();
       if (!assignments.length) {
         state.adminAiError = "No AI assignments to apply yet.";
@@ -9916,7 +10061,8 @@
 
           <section class="admin-form-card">
             <input type="hidden" name="id" value="${escapeHtml(stop.id || "")}">
-            <input type="hidden" name="personId" value="${escapeHtml(state.adminPersonSeed?.id || "")}">
+            <input type="hidden" name="personId" value="${escapeHtml(state.adminPersonSeed?.id || stop.personId || "")}">
+            <input type="hidden" name="personVersion" value="${state.adminPersonSeed?.recordVersion ?? stop.personVersion ?? ""}">
             <label>
               <span>Driver</span>
               <select name="driverSlug">${adminDriverOptionList(stop.driverSlug)}</select>
@@ -10507,6 +10653,9 @@
         render();
       }
       if (action === "adminAiOrganize") requestAdminAiRoutes();
+      if (action === "adminSharedBranding") saveAdminSharedBrandingFromForm(event.target.closest("form"));
+      const sharedPickup = event.target.closest("[data-shared-person-pickup]");
+      if (sharedPickup) applyAdminSharedPersonPickup(sharedPickup.dataset.sharedPersonPickup);
       if (action === "adminAiApplyDraft") applyAdminAiDraft();
       if (action === "adminAiClear") {
         state.adminAiPrompt = "";
@@ -10768,7 +10917,7 @@
       const driverAvailabilityForm = event.target.closest("[data-admin-form='driver-availability']");
       if (driverAvailabilityForm) {
         event.preventDefault();
-        saveAdminDriverAvailability(adminDriverSlugsFromAvailabilityForm(driverAvailabilityForm));
+        saveAdminDriverAvailability(adminDriverSlugsFromAvailabilityForm(driverAvailabilityForm), JSON.parse(driverAvailabilityForm.dataset.sharedSnapshot || "null"));
         return;
       }
 

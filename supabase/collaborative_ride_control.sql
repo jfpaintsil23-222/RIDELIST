@@ -53,6 +53,45 @@ create table if not exists rides_private.ride_shared_settings_versions (
   updated_at timestamptz not null default now()
 );
 
+-- Catalog identity is the stable slug; plan driver rows may be removed/recreated.
+-- Credentials remain private and use the existing legacy hash implementation.
+create table if not exists rides_private.ride_driver_catalog (
+  slug text primary key, id uuid not null default gen_random_uuid() unique, display_name text not null, full_name text not null,
+  initials text not null, route_notes text not null default '', access_code_hash text not null,
+  created_at timestamptz not null default now()
+);
+alter table rides_private.ride_driver_catalog enable row level security;
+alter table rides_private.ride_driver_catalog force row level security;
+revoke all on rides_private.ride_driver_catalog from public,anon,authenticated;
+insert into rides_private.ride_driver_catalog(slug,display_name,full_name,initials,route_notes,access_code_hash)
+select distinct on (slug) slug,display_name,full_name,initials,coalesce(route_notes,''),access_code_hash
+from rides_private.ride_drivers order by slug,updated_at desc,id
+on conflict(slug) do nothing;
+
+-- Resolve explicit UUID spellings only. Malformed legacy links remain unknown.
+create or replace function rides_private.ride_shared_person_id(p_payload jsonb)
+returns uuid language plpgsql immutable set search_path to '' as $$
+begin
+  return nullif(p_payload->>'personId','')::uuid;
+exception when invalid_text_representation then return null;
+end;
+$$;
+revoke execute on function rides_private.ride_shared_person_id(jsonb) from public,anon,authenticated;
+
+-- A protected master projection: versions default to 1 for existing legacy records.
+create or replace function rides_private.ride_shared_person_json(p_id uuid)
+returns jsonb language sql stable security definer set search_path to '' as $$
+  select jsonb_build_object('id',p.id,'name',p.name,'phone',p.phone,
+    'homeAddress',p.home_address,'campusAddress',p.campus_address,
+    'homeGoogleMaps',p.home_google_maps,'homeAppleMaps',p.home_apple_maps,
+    'campusGoogleMaps',p.campus_google_maps,'campusAppleMaps',p.campus_apple_maps,
+    'preferredAddressType',p.preferred_address_type,'sourceLabel',p.source_label,
+    'notes',p.notes,'active',p.active,'recordVersion',coalesce(v.record_version,1))
+  from rides_private.ride_people p left join rides_private.ride_shared_person_versions v on v.person_id=p.id
+  where p.id=p_id;
+$$;
+revoke execute on function rides_private.ride_shared_person_json(uuid) from public,anon,authenticated;
+
 -- IDs order committed events when writers hold the workspace lock. No rider/contact
 -- payload belongs here; readers fetch protected detail through the snapshot RPC.
 create table if not exists rides_private.ride_shared_events (
@@ -232,7 +271,9 @@ begin
   select * into v_workspace from rides_private.ride_shared_workspaces where plan_date = p_plan_date;
   if v_workspace.plan_date is null then return jsonb_build_object('ok', false, 'code', 'not_initialized'); end if;
   select write_mode into v_mode from rides_private.ride_shared_write_modes where plan_date = p_plan_date;
-  select coalesce(jsonb_agg(r.payload || jsonb_build_object(
+  select coalesce(jsonb_agg(r.payload || case when rides_private.ride_shared_person_id(r.payload) is not null
+    then jsonb_build_object('personId',rides_private.ride_shared_person_id(r.payload),'personLinkStatus','linked')
+    else jsonb_build_object('personLinkStatus','unknown') end || jsonb_build_object(
     'id', r.id::text, 'entityVersion', r.entity_version, 'driverSlug', r.driver_slug,
     'lastActorKey', r.last_actor_key, 'unassigned', r.driver_slug = ''
   ) order by r.driver_slug, r.id), '[]'::jsonb) into v_riders
@@ -243,7 +284,10 @@ begin
     'ok', true, 'planDate', p_plan_date,
     'draftRevision', v_workspace.draft_revision, 'publishedRevision', v_workspace.published_revision,
     'baselinePublishedRevision', v_workspace.baseline_published_revision,
-    'eventCursor', v_workspace.event_cursor, 'drivers', v_workspace.drivers,
+    'eventCursor', v_workspace.event_cursor, 'drivers', (
+      select coalesce(jsonb_agg(item.value || jsonb_build_object('driverId',catalog.id) order by item.ordinality),'[]'::jsonb)
+      from jsonb_array_elements(v_workspace.drivers) with ordinality item(value,ordinality)
+      left join rides_private.ride_driver_catalog catalog on catalog.slug=item.value->>'slug'),
     'riders', v_riders, 'groupVersions', v_groups, 'settings', v_workspace.settings,
     'settingsVersion', v_workspace.settings_version, 'writeMode', coalesce(v_mode, 'legacy'),
     'status', v_workspace.status, 'lastActorKey', v_workspace.last_actor_key,
@@ -287,14 +331,22 @@ declare
   v_result jsonb; v_value jsonb; v_cursor bigint; v_code text; v_conflict jsonb;
   v_drivers jsonb; v_ids jsonb; v_plan_id uuid; v_stops jsonb; v_deleted text[];
   v_before_stops jsonb; v_before_stop jsonb; v_after_stop jsonb;
+  v_person uuid; v_person_json jsonb; v_master_version bigint; v_other date;
+  v_settings_key text; v_fields text[];
 begin
   if v_actor is null then return jsonb_build_object('ok',false,'code','invalid_admin_code'); end if;
   if p_request is null or jsonb_typeof(p_request)<>'object' then return jsonb_build_object('ok',false,'code','validation_failed'); end if;
   begin v_id:=(p_request->>'operationId')::uuid;
   exception when invalid_text_representation then return jsonb_build_object('ok',false,'code','validation_failed'); end;
   if v_id is null then return jsonb_build_object('ok',false,'code','validation_failed'); end if;
-  -- Lock order also serializes legacy writers and future operator cutover: plan, workspace.
-  perform 1 from rides_private.ride_plans where plan_date=p_plan_date for update;
+  -- Global master writers lock ALL plans in date order before any workspace/master.
+  -- Publication holds its plan lock through dependency checks and all live writes.
+  v_kind:=p_request->>'kind';
+  if v_kind in ('person_save','settings_branding','catalog_add') then
+    perform 1 from rides_private.ride_plans order by plan_date for update;
+  else
+    perform 1 from rides_private.ride_plans where plan_date=p_plan_date for update;
+  end if;
   select * into w from rides_private.ride_shared_workspaces where plan_date=p_plan_date for update;
   if w.plan_date is null then return jsonb_build_object('ok',false,'code','not_initialized','operationId',v_id); end if;
   select * into previous from rides_private.ride_shared_operations where plan_date=p_plan_date and actor_key=v_actor->>'actorKey' and operation_id=v_id;
@@ -319,13 +371,33 @@ begin
     if (p_request->>'planDate')::date is distinct from p_plan_date or jsonb_typeof(v_payload) is distinct from 'object' or jsonb_typeof(v_groups) is distinct from 'object' then
       v_code:='validation_failed'; raise exception using errcode='RS001';
     end if;
-    if (p_request->>'expectedBaselinePublishedRevision')::bigint is distinct from w.baseline_published_revision then
+    if v_kind not in ('person_save','settings_branding','catalog_add') and (p_request->>'expectedBaselinePublishedRevision')::bigint is distinct from w.baseline_published_revision then
       v_code:='conflict'; v_conflict:=jsonb_build_object('type','baseline','actualVersion',w.baseline_published_revision); raise exception using errcode='RS001';
+    end if;
+    if v_kind in ('publish','plan_drivers') then
+      -- Legacy plans may add catalog entries after this file was installed. Capture
+      -- missing identities under the plan lock before any plan-row removal.
+      insert into rides_private.ride_driver_catalog(slug,display_name,full_name,initials,route_notes,access_code_hash)
+        select distinct on (slug) slug,display_name,full_name,initials,coalesce(route_notes,''),access_code_hash
+        from rides_private.ride_drivers order by slug,updated_at desc,id on conflict(slug) do nothing;
     end if;
     if v_kind='publish' then
       if (v_payload->>'expectedDraftRevision')::bigint is distinct from w.draft_revision then
         v_code:='conflict'; v_conflict:=jsonb_build_object('type','draft','actualVersion',w.draft_revision); raise exception using errcode='RS001';
       end if;
+      -- Lock each explicit master dependency in stable UUID order. Unknown legacy
+      -- links never infer identity by name; master saves invalidate their review.
+      for v_person in select distinct (payload->>'personId')::uuid from rides_private.ride_shared_riders
+        where plan_date=p_plan_date and not deleted and nullif(payload->>'personId','') is not null order by 1 loop
+        perform 1 from rides_private.ride_people where id=v_person for update;
+        v_person_json:=rides_private.ride_shared_person_json(v_person);
+        if v_person_json is null or exists(select 1 from rides_private.ride_shared_riders
+          where plan_date=p_plan_date and not deleted and rides_private.ride_shared_person_id(payload)=v_person
+          and (payload->>'personVersion')::bigint is distinct from (v_person_json->>'recordVersion')::bigint) then
+          v_code:='conflict'; v_conflict:=jsonb_build_object('type','person','personId',v_person,
+            'actualVersion',v_person_json->'recordVersion'); raise exception using errcode='RS001';
+        end if;
+      end loop;
       perform set_config('request.ride_admin_code',coalesce(p_admin_code,''),true);
       select id into v_plan_id from rides_private.ride_plans where plan_date=p_plan_date;
       select coalesce(jsonb_agg(to_jsonb(stop) order by stop.id),'[]'::jsonb)
@@ -335,13 +407,13 @@ begin
 
       -- Candidate drivers derive metadata and secret hashes solely from server records.
       -- No hash is ever written to shared JSON or returned to the browser.
-      if exists(select 1 from jsonb_array_elements(w.drivers) d where not exists(select 1 from rides_private.ride_drivers x where x.slug=d->>'slug')) then
+      if exists(select 1 from jsonb_array_elements(w.drivers) d where not exists(select 1 from rides_private.ride_driver_catalog x where x.slug=d->>'slug')) then
         v_code:='validation_failed'; v_value:=jsonb_build_object('error','driver_not_found'); raise exception using errcode='RS001';
       end if;
       insert into rides_private.ride_drivers(plan_id,slug,display_name,full_name,initials,subtitle,route_notes,access_code_hash,sort_order)
-      select v_plan_id,source.slug,source.display_name,source.full_name,source.initials,'No pickups assigned','No pickups assigned yet.',source.access_code_hash,d.ordinality::integer
+      select v_plan_id,source.slug,source.display_name,source.full_name,source.initials,'No pickups assigned',coalesce(nullif(source.route_notes,''),'No pickups assigned yet.'),source.access_code_hash,d.ordinality::integer
       from jsonb_array_elements(w.drivers) with ordinality d(value,ordinality)
-      cross join lateral(select x.* from rides_private.ride_drivers x where x.slug=d.value->>'slug' order by (x.plan_id=v_plan_id) desc,x.updated_at desc,x.id limit 1) source
+      cross join lateral(select x.* from rides_private.ride_driver_catalog x where x.slug=d.value->>'slug') source
       on conflict(plan_id,slug) do update set sort_order=excluded.sort_order,updated_at=now();
       -- Only genuine removals are deleted. Surviving UUIDs keep their rows and
       -- creation metadata; canonical publication handles collision-free moves.
@@ -353,6 +425,13 @@ begin
         where rider.plan_date=p_plan_date and not rider.deleted and rider.id=stop.id
       );
       select coalesce(jsonb_agg(payload || jsonb_build_object('id',id::text,'driverSlug',driver_slug) order by driver_slug,(payload->>'stopOrder')::integer,id),'[]'::jsonb) into v_stops from rides_private.ride_shared_riders where plan_date=p_plan_date and not deleted;
+      -- Route settings become driver-visible only in this same rollback boundary.
+      update rides_private.ride_plans set
+        title=coalesce(w.settings->>'planTitle',title),
+        service_day=coalesce(w.settings->>'serviceDay',service_day),
+        destination_label=coalesce(w.settings->>'destinationLabel',destination_label),
+        destination_address=coalesce(w.settings->>'destinationAddress',destination_address)
+      where id=v_plan_id;
       v_value:=rides_private.ride_publish_plan_internal(p_admin_code,p_plan_date,v_stops,v_deleted,true);
       if (v_value->>'ok')::boolean is distinct from true then v_code:='validation_failed'; raise exception using errcode='RS001'; end if;
       delete from rides_private.ride_drivers driver
@@ -386,7 +465,7 @@ begin
       -- Existing snapshot may contain admin-only pool detail: result uses revisions only.
       v_value:=jsonb_build_object('publishedRevision',w.published_revision,'baselinePublishedRevision',w.baseline_published_revision);
     else
-      if v_kind in ('rider_add','rider_update','rider_move','rider_remove') then
+      if v_kind in ('rider_add','rider_update','rider_move','rider_remove','person_pickup') then
         v_entity:=(p_request->>'entityId')::uuid;
         if v_entity is null then v_code:='validation_failed'; raise exception using errcode='RS001'; end if;
         select * into v_rider from rides_private.ride_shared_riders where plan_date=p_plan_date and id=v_entity;
@@ -400,6 +479,29 @@ begin
         if (v_kind='rider_move' and (v_payload - array['driverSlug','stopOrder'])<>'{}'::jsonb)
           or (v_kind='rider_remove' and v_payload<>'{}'::jsonb) then
           v_code:='validation_failed'; raise exception using errcode='RS001';
+        end if;
+        if v_kind='person_pickup' or v_payload ? 'personId' or v_payload ? 'personVersion' then
+          v_person:=nullif(v_payload->>'personId','')::uuid;
+          if v_kind='person_pickup' and ((v_payload-array['personId','personVersion'])<>'{}'::jsonb or v_person is null or rides_private.ride_shared_person_id(v_rider.payload) is distinct from v_person) then
+            v_code:='validation_failed'; raise exception using errcode='RS001';
+          end if;
+          if v_person is not null then
+            v_payload:=v_payload || jsonb_build_object('personId',v_person);
+            perform 1 from rides_private.ride_people where id=v_person for update;
+            v_person_json:=rides_private.ride_shared_person_json(v_person);
+            if v_person_json is null or (v_payload->>'personVersion')::bigint is distinct from (v_person_json->>'recordVersion')::bigint then
+              v_code:='conflict'; v_conflict:=jsonb_build_object('type','person','personId',v_person,'actualVersion',v_person_json->'recordVersion'); raise exception using errcode='RS001';
+            end if;
+            if v_kind='person_pickup' then
+              v_payload:=jsonb_build_object('personId',v_person,'personVersion',v_person_json->'recordVersion',
+                'name',v_person_json->>'name','phone',v_person_json->>'phone',
+                'address',coalesce(nullif(case when v_person_json->>'preferredAddressType'='campus' then v_person_json->>'campusAddress' else v_person_json->>'homeAddress' end,''),
+                  nullif(v_person_json->>'homeAddress',''),v_person_json->>'campusAddress'),
+                'area',case when v_person_json->>'preferredAddressType'='campus' then 'Campus' else 'Home' end);
+            end if;
+          elsif v_payload ? 'personVersion' and v_payload->'personVersion'<>'null'::jsonb then
+            v_code:='validation_failed'; raise exception using errcode='RS001';
+          end if;
         end if;
         v_old_slug:=coalesce(v_rider.driver_slug,''); v_slug:=v_old_slug;
         if v_kind in ('rider_add','rider_move') then v_slug:=lower(btrim(coalesce(v_payload->>'driverSlug',''))); end if;
@@ -418,16 +520,54 @@ begin
       elsif v_kind='plan_drivers' then
         v_ids:=v_payload->'driverSlugs';
         if jsonb_typeof(v_ids) is distinct from 'array' or exists(select 1 from jsonb_array_elements(v_ids) x where jsonb_typeof(x)<>'string') or (select count(distinct value) from jsonb_array_elements_text(v_ids))<>jsonb_array_length(v_ids) then v_code:='validation_failed'; raise exception using errcode='RS001'; end if;
-        if exists(select 1 from jsonb_array_elements_text(v_ids) x where x.value<>lower(btrim(x.value)) or x.value='' or not exists(select 1 from rides_private.ride_drivers d where d.slug=x.value)) then v_code:='validation_failed'; raise exception using errcode='RS001'; end if;
+        if exists(select 1 from jsonb_array_elements_text(v_ids) x where x.value<>lower(btrim(x.value)) or x.value='' or not exists(select 1 from rides_private.ride_driver_catalog d where d.slug=x.value)) then v_code:='validation_failed'; raise exception using errcode='RS001'; end if;
         select array_agg(distinct slug) into v_affected from (
           select '@drivers' slug union all
           select x.value from jsonb_array_elements_text(v_ids) x where not exists(select 1 from jsonb_array_elements(w.drivers) d where d->>'slug'=x.value)
           union all select d->>'slug' from jsonb_array_elements(w.drivers) d where not exists(select 1 from jsonb_array_elements_text(v_ids) x where x.value=d->>'slug')
           union all select '' where exists(select 1 from rides_private.ride_shared_riders r where r.plan_date=p_plan_date and not r.deleted and r.driver_slug<>'' and not exists(select 1 from jsonb_array_elements_text(v_ids) x where x.value=r.driver_slug))
         ) changed;
-        select coalesce(jsonb_agg(jsonb_build_object('slug',source.slug,'displayName',source.display_name,'fullName',source.full_name,'initials',source.initials) order by x.ordinality),'[]') into v_drivers
+        select coalesce(jsonb_agg(jsonb_build_object('slug',source.slug,'driverId',source.id,'displayName',source.display_name,'fullName',source.full_name,'initials',source.initials) order by x.ordinality),'[]') into v_drivers
           from jsonb_array_elements_text(v_ids) with ordinality x(value,ordinality)
-          cross join lateral(select d.* from rides_private.ride_drivers d where d.slug=x.value order by d.updated_at desc,d.id limit 1) source;
+          cross join lateral(select d.* from rides_private.ride_driver_catalog d where d.slug=x.value) source;
+      elsif v_kind in ('person_save','settings_route','settings_branding','catalog_add') then
+        -- Typed public wrappers feed this same authenticated, deduplicated engine.
+        if v_kind='person_save' then
+          v_person:=(v_payload->>'id')::uuid;
+          if v_person is null or jsonb_typeof(v_payload->'name') is distinct from 'string' or btrim(v_payload->>'name')='' then
+            v_code:='validation_failed'; raise exception using errcode='RS001';
+          end if;
+          perform 1 from rides_private.ride_people where id=v_person for update;
+          v_person_json:=rides_private.ride_shared_person_json(v_person);
+          v_master_version:=coalesce((v_person_json->>'recordVersion')::bigint,0);
+          if (p_request->>'expectedRecordVersion')::bigint is distinct from v_master_version then
+            v_code:='conflict'; v_conflict:=jsonb_build_object('type','person','personId',v_person,'actualVersion',v_master_version,'current',v_person_json); raise exception using errcode='RS001';
+          end if;
+          v_payload:=coalesce(v_person_json,'{}') || v_payload;
+          if coalesce(v_payload->>'preferredAddressType','home') not in ('home','campus')
+            or exists(select 1 from rides_private.ride_people where name_key=rides_private.ride_people_name_key(v_payload->>'name') and id<>v_person) then
+            v_code:='validation_failed'; raise exception using errcode='RS001';
+          end if;
+        elsif v_kind in ('settings_route','settings_branding') then
+          v_fields:=case when v_kind='settings_route' then array['planTitle','serviceDay','destinationLabel','destinationAddress'] else array['homeTitle','homeSubtitle','homeCoverUrl','homeCoverAlt'] end;
+          if (v_payload-v_fields)<>'{}'::jsonb or exists(select 1 from jsonb_each(v_payload) where jsonb_typeof(value)<>'string')
+            or (v_payload ? 'planTitle' and btrim(v_payload->>'planTitle')='') then
+            v_code:='validation_failed'; raise exception using errcode='RS001';
+          end if;
+          v_master_version:=w.settings_version;
+          if v_kind='settings_branding' then
+            perform 1 from rides_private.ride_app_settings where id='main' for update;
+            select coalesce((select record_version from rides_private.ride_shared_settings_versions where settings_key='branding'),1) into v_master_version;
+          end if;
+          if (p_request->>'expectedRecordVersion')::bigint is distinct from v_master_version then
+            v_code:='conflict'; v_conflict:=jsonb_build_object('type','settings','actualVersion',v_master_version); raise exception using errcode='RS001';
+          end if;
+        else
+          v_slug:=trim(both '-' from regexp_replace(lower(btrim(v_payload->>'name')),'[^a-z0-9]+','-','g'));
+          if coalesce(v_slug,'')='' or coalesce(btrim(v_payload->>'initials'),'')='' or exists(select 1 from rides_private.ride_driver_catalog where slug=v_slug) then
+            v_code:='validation_failed'; raise exception using errcode='RS001';
+          end if;
+        end if;
       else v_code:='validation_failed'; raise exception using errcode='RS001'; end if;
       for v_key in select distinct key from (select unnest(v_affected) key union all select jsonb_object_keys(v_groups)) dependencies loop
         select group_version into v_version from rides_private.ride_shared_groups where plan_date=p_plan_date and group_key=v_key;
@@ -443,7 +583,7 @@ begin
       -- Validation complete. Any later error escapes or rolls back this whole subtransaction.
       if v_kind='rider_add' then
         insert into rides_private.ride_shared_riders(plan_date,id,driver_slug,payload,last_actor_key) values(p_plan_date,v_entity,v_slug,(v_payload - array['id','entityVersion','lastActorKey','driverSlug']) || jsonb_build_object('stopOrder',coalesce((v_payload->>'stopOrder')::integer,2147483647)),v_actor->>'actorKey'); v_new:=true;
-      elsif v_kind in ('rider_update','rider_move','rider_remove') then
+      elsif v_kind in ('rider_update','rider_move','rider_remove','person_pickup') then
         update rides_private.ride_shared_riders set payload=payload || (v_payload - array['id','entityVersion','lastActorKey','driverSlug']),driver_slug=v_slug,deleted=(v_kind='rider_remove') where plan_date=p_plan_date and id=v_entity;
         v_changed:=array[v_entity];
       elsif v_kind='reorder' then
@@ -453,6 +593,49 @@ begin
         with changed as(update rides_private.ride_shared_riders r set driver_slug='' where r.plan_date=p_plan_date and not r.deleted and r.driver_slug<>'' and not exists(select 1 from jsonb_array_elements_text(v_ids) x where x.value=r.driver_slug) returning r.id)
         select coalesce(array_agg(id),array[]::uuid[]) into v_changed from changed;
         w.drivers:=v_drivers;
+      elsif v_kind='person_save' then
+        insert into rides_private.ride_people(id,name,name_key,phone,home_address,campus_address,
+          home_google_maps,home_apple_maps,campus_google_maps,campus_apple_maps,preferred_address_type,source_label,notes)
+        values(v_person,btrim(v_payload->>'name'),rides_private.ride_people_name_key(v_payload->>'name'),
+          coalesce(v_payload->>'phone',''),coalesce(v_payload->>'homeAddress',''),coalesce(v_payload->>'campusAddress',''),
+          coalesce(v_payload->>'homeGoogleMaps',''),coalesce(v_payload->>'homeAppleMaps',''),coalesce(v_payload->>'campusGoogleMaps',''),coalesce(v_payload->>'campusAppleMaps',''),
+          coalesce(v_payload->>'preferredAddressType','home'),coalesce(v_payload->>'sourceLabel','PeopleData'),coalesce(v_payload->>'notes',''))
+        on conflict(id) do update set name=excluded.name,name_key=excluded.name_key,phone=excluded.phone,
+          home_address=excluded.home_address,campus_address=excluded.campus_address,home_google_maps=excluded.home_google_maps,
+          home_apple_maps=excluded.home_apple_maps,campus_google_maps=excluded.campus_google_maps,campus_apple_maps=excluded.campus_apple_maps,
+          preferred_address_type=excluded.preferred_address_type,source_label=excluded.source_label,notes=excluded.notes,updated_at=now();
+        insert into rides_private.ride_shared_person_versions(person_id,record_version,last_actor_key) values(v_person,v_master_version+1,v_actor->>'actorKey')
+          on conflict(person_id) do update set record_version=excluded.record_version,last_actor_key=excluded.last_actor_key,updated_at=now();
+        -- Known links invalidate their plans; unknown legacy links conservatively
+        -- invalidate every such plan. Never infer a link or copy a contact by name.
+        for v_other in select workspace.plan_date from rides_private.ride_shared_workspaces workspace
+          join rides_private.ride_shared_write_modes mode using(plan_date)
+          where workspace.plan_date<>p_plan_date and mode.write_mode<>'legacy' and exists(
+            select 1 from rides_private.ride_shared_riders rider where rider.plan_date=workspace.plan_date and not rider.deleted
+            and (rides_private.ride_shared_person_id(rider.payload) is null or rides_private.ride_shared_person_id(rider.payload)=v_person)) order by workspace.plan_date loop
+          update rides_private.ride_shared_workspaces set draft_revision=draft_revision+1,status='draft',last_actor_key=v_actor->>'actorKey',updated_at=now() where plan_date=v_other;
+          insert into rides_private.ride_shared_events(plan_date,draft_revision,actor_key,event_type)
+            select v_other,draft_revision,v_actor->>'actorKey','person_changed' from rides_private.ride_shared_workspaces where plan_date=v_other returning event_id into v_cursor;
+          update rides_private.ride_shared_workspaces set event_cursor=v_cursor where plan_date=v_other;
+        end loop;
+        v_value:=jsonb_build_object('person',rides_private.ride_shared_person_json(v_person),'routeStopsUpdated',0);
+      elsif v_kind='settings_route' then
+        w.settings:=w.settings || v_payload; w.settings_version:=w.settings_version+1;
+        v_value:=jsonb_build_object('settings',w.settings,'settingsVersion',w.settings_version);
+      elsif v_kind='settings_branding' then
+        update rides_private.ride_app_settings set home_title=coalesce(v_payload->>'homeTitle',home_title),
+          home_subtitle=coalesce(v_payload->>'homeSubtitle',home_subtitle),home_cover_url=coalesce(v_payload->>'homeCoverUrl',home_cover_url),
+          home_cover_alt=coalesce(v_payload->>'homeCoverAlt',home_cover_alt),updated_at=now() where id='main';
+        insert into rides_private.ride_shared_settings_versions(settings_key,record_version,last_actor_key) values('branding',v_master_version+1,v_actor->>'actorKey')
+          on conflict(settings_key) do update set record_version=excluded.record_version,last_actor_key=excluded.last_actor_key,updated_at=now();
+        v_value:=jsonb_build_object('branding',v_payload,'recordVersion',v_master_version+1);
+      elsif v_kind='catalog_add' then
+        insert into rides_private.ride_driver_catalog(slug,display_name,full_name,initials,route_notes,access_code_hash)
+          values(v_slug,btrim(v_payload->>'name'),btrim(v_payload->>'name'),upper(btrim(v_payload->>'initials')),
+            case when coalesce(v_payload->>'phone','')='' then '' else 'Phone: ' || (v_payload->>'phone') end,
+            rides_private.hash_driver_code(coalesce(nullif(v_payload->>'passcode',''),'rides123')));
+        v_value:=jsonb_build_object('driver',jsonb_build_object('slug',v_slug,'driverId',(select id from rides_private.ride_driver_catalog where slug=v_slug),'displayName',btrim(v_payload->>'name'),
+          'fullName',btrim(v_payload->>'name'),'initials',upper(btrim(v_payload->>'initials')),'active',false));
       end if;
       -- Normalize affected route orders and version any rider whose position changed.
       with ordered as(select id,row_number() over(partition by driver_slug order by (payload->>'stopOrder')::integer,id)::integer n from rides_private.ride_shared_riders where plan_date=p_plan_date and not deleted and driver_slug=any(v_affected)), changed as(
@@ -466,7 +649,7 @@ begin
       if v_entity is not null then select payload || jsonb_build_object('id',id,'entityVersion',entity_version,'driverSlug',driver_slug,'deleted',deleted) into v_value from rides_private.ride_shared_riders where plan_date=p_plan_date and id=v_entity; end if;
     end if;
     insert into rides_private.ride_shared_events(plan_date,draft_revision,actor_key,event_type) values(p_plan_date,w.draft_revision,v_actor->>'actorKey',v_kind) returning event_id into v_cursor;
-    update rides_private.ride_shared_workspaces set draft_revision=w.draft_revision,published_revision=w.published_revision,baseline_published_revision=w.baseline_published_revision,event_cursor=v_cursor,drivers=w.drivers,status=w.status,last_actor_key=v_actor->>'actorKey',updated_at=now() where plan_date=p_plan_date;
+    update rides_private.ride_shared_workspaces set draft_revision=w.draft_revision,published_revision=w.published_revision,baseline_published_revision=w.baseline_published_revision,event_cursor=v_cursor,drivers=w.drivers,settings=w.settings,settings_version=w.settings_version,status=w.status,last_actor_key=v_actor->>'actorKey',updated_at=now() where plan_date=p_plan_date;
     v_result:=jsonb_build_object('ok',true,'code','ok','operationId',v_id,'draftRevision',w.draft_revision,'eventCursor',v_cursor,'value',v_value);
   exception
     when sqlstate 'RS001' then
@@ -576,7 +759,7 @@ begin
     'fullName',d.full_name,'initials',d.initials,'subtitle',d.subtitle,'routeNotes',d.route_notes)
     order by d.sort_order,d.slug),'[]'::jsonb) into v_drivers
   from rides_private.ride_drivers d where d.plan_id=v_plan_id;
-  select jsonb_build_object('title',to_jsonb(p)->>'title','serviceDay',to_jsonb(p)->>'service_day',
+  select jsonb_build_object('planTitle',to_jsonb(p)->>'title','serviceDay',to_jsonb(p)->>'service_day',
     'destinationLabel',to_jsonb(p)->>'destination_label','destinationAddress',to_jsonb(p)->>'destination_address')
     into v_settings from rides_private.ride_plans p where p.id=v_plan_id;
   select md5(jsonb_build_object('plan',to_jsonb(p),
@@ -631,7 +814,7 @@ begin
     'fullName',d.full_name,'initials',d.initials,'subtitle',d.subtitle,'routeNotes',d.route_notes)
     order by d.sort_order,d.slug),'[]'::jsonb) into v_drivers
   from rides_private.ride_drivers d where d.plan_id=v_plan_id;
-  select jsonb_build_object('title',to_jsonb(p)->>'title','serviceDay',to_jsonb(p)->>'service_day',
+  select jsonb_build_object('planTitle',to_jsonb(p)->>'title','serviceDay',to_jsonb(p)->>'service_day',
     'destinationLabel',to_jsonb(p)->>'destination_label','destinationAddress',to_jsonb(p)->>'destination_address')
     into v_settings from rides_private.ride_plans p where p.id=v_plan_id;
   select md5(jsonb_build_object('plan',to_jsonb(p),
@@ -849,5 +1032,37 @@ end;
 $$;
 revoke execute on function public.ride_admin_shared_import(text,date,uuid,bigint,bigint,uuid) from public;
 grant execute on function public.ride_admin_shared_import(text,date,uuid,bigint,bigint,uuid) to anon,authenticated;
+
+create or replace function public.ride_admin_shared_save_person(p_admin_code text,p_plan_date date,p_person jsonb,p_expected_version bigint,p_operation_id uuid)
+returns jsonb language sql volatile security definer set search_path to '' as $$
+  select rides_private.ride_shared_apply(p_admin_code,p_plan_date,jsonb_build_object('operationId',p_operation_id,'planDate',p_plan_date,
+    'kind','person_save','payload',p_person,'expectedRecordVersion',p_expected_version,'expectedGroupVersions','{}'::jsonb));
+$$;
+create or replace function public.ride_admin_shared_save_settings(p_admin_code text,p_plan_date date,p_scope text,p_settings jsonb,p_expected_version bigint,p_expected_baseline_revision bigint,p_operation_id uuid)
+returns jsonb language sql volatile security definer set search_path to '' as $$
+  select rides_private.ride_shared_apply(p_admin_code,p_plan_date,jsonb_build_object('operationId',p_operation_id,'planDate',p_plan_date,
+    'kind',case when p_scope in ('route','branding') then 'settings_' || p_scope else 'invalid' end,'payload',p_settings,
+    'expectedRecordVersion',p_expected_version,'expectedBaselinePublishedRevision',p_expected_baseline_revision,'expectedGroupVersions','{}'::jsonb));
+$$;
+create or replace function public.ride_admin_shared_add_driver(p_admin_code text,p_plan_date date,p_driver jsonb,p_operation_id uuid)
+returns jsonb language sql volatile security definer set search_path to '' as $$
+  select rides_private.ride_shared_apply(p_admin_code,p_plan_date,jsonb_build_object('operationId',p_operation_id,'planDate',p_plan_date,
+    'kind','catalog_add','payload',p_driver,'expectedGroupVersions','{}'::jsonb));
+$$;
+create or replace function public.ride_admin_shared_secondary(p_admin_code text,p_plan_date date)
+returns jsonb language plpgsql stable security definer set search_path to '' as $$
+declare v_actor jsonb:=rides_private.ride_shared_actor(p_admin_code); v_result jsonb;
+begin
+  if v_actor is null then return jsonb_build_object('ok',false,'code','invalid_admin_code'); end if;
+  select jsonb_build_object('ok',true,'actorKey',v_actor->>'actorKey','planDate',p_plan_date,
+    'people',(select coalesce(jsonb_agg(rides_private.ride_shared_person_json(id) order by name),'[]') from rides_private.ride_people where active),
+    'driverPool',(select coalesce(jsonb_agg(jsonb_build_object('slug',slug,'driverId',id,'displayName',display_name,'fullName',full_name,'initials',initials) order by slug),'[]') from rides_private.ride_driver_catalog),
+    'brandingVersion',coalesce((select record_version from rides_private.ride_shared_settings_versions where settings_key='branding'),1),
+    'branding',(select jsonb_build_object('homeTitle',home_title,'homeSubtitle',home_subtitle,'homeCoverUrl',home_cover_url,'homeCoverAlt',home_cover_alt) from rides_private.ride_app_settings where id='main')) into v_result;
+  return v_result;
+end;
+$$;
+revoke execute on function public.ride_admin_shared_save_person(text,date,jsonb,bigint,uuid),public.ride_admin_shared_save_settings(text,date,text,jsonb,bigint,bigint,uuid),public.ride_admin_shared_add_driver(text,date,jsonb,uuid),public.ride_admin_shared_secondary(text,date) from public;
+grant execute on function public.ride_admin_shared_save_person(text,date,jsonb,bigint,uuid),public.ride_admin_shared_save_settings(text,date,text,jsonb,bigint,bigint,uuid),public.ride_admin_shared_add_driver(text,date,jsonb,uuid),public.ride_admin_shared_secondary(text,date) to anon,authenticated;
 
 commit;

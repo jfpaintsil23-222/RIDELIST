@@ -78,3 +78,7 @@ select id,slug,'Synthetic driver','Synthetic Driver','SD',md5('synthetic-driver-
 from rides_private.ride_plans cross join unnest(array['driver-a','driver-b']) with ordinality d(slug,ordinality) where plan_date='2099-01-11';
 
 create table rides_private.ride_app_settings (id text primary key, active_plan_date date);
+
+alter table rides_private.ride_plans add column title text default 'Synthetic plan', add column service_day text default 'Sunday', add column destination_label text default 'Synthetic destination', add column destination_address text default 'Old destination', add column updated_at timestamptz default now();
+alter table rides_private.ride_app_settings add column home_title text default 'Synthetic home', add column home_subtitle text default '', add column home_cover_url text default '', add column home_cover_alt text default '', add column updated_at timestamptz default now();
+insert into rides_private.ride_app_settings(id,active_plan_date) values('main','2099-01-04');

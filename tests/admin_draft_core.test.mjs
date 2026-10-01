@@ -88,6 +88,7 @@ test("builds stable draft snapshots for comparison", () => {
     routeLabel: "",
     notes: "",
     personId: "",
+    personVersion: null,
     addressType: "",
   });
 });
@@ -99,4 +100,10 @@ test("picks the newest local or server draft by savedAt timestamp", () => {
   assert.equal(newestAdminDraft(older, newer), newer);
   assert.equal(newestAdminDraft(newer, older), newer);
   assert.equal(draftTimestamp({ savedAt: "bad-date" }), 0);
+});
+
+test('draft recovery preserves the explicit master dependency version', () => {
+  const backup=normalizeDraftBackup({planDate:'2099-01-04',stops:[{id:'rider',name:'Synthetic',personId:'00000000-0000-0000-0000-000000000001',personVersion:3}]});
+  assert.equal(backup.stops[0].personVersion,3);
+  assert.notDeepEqual(normalizedDraftSnapshot(backup.stops),normalizedDraftSnapshot([{...backup.stops[0],personVersion:4}]));
 });

@@ -12,6 +12,7 @@ export function comparableDraftStop(stop = {}) {
     routeLabel: String(stop.routeLabel || stop.route_label || "").trim(),
     notes: String(stop.notes || "").trim(),
     personId: String(stop.personId || stop.person_id || "").trim(),
+    personVersion: Number.isSafeInteger(stop.personVersion) && stop.personVersion > 0 ? stop.personVersion : null,
     addressType: String(stop.addressType || stop.address_type || "").trim(),
   };
 }

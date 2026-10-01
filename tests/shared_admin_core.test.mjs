@@ -95,3 +95,11 @@ test('reconcile initializes the first matching snapshot with private form intact
   assert.equal(result.requestGeneration,8);
   assert.equal(result.personalForms,form);
 });
+
+test('explicit person dependency never infers a master from name alone', async () => {
+  const core=await import('../src/shared-admin-core.js');
+  assert.equal(typeof core.personDependency,'function');
+  assert.deepEqual(core.personDependency({name:'Same Name'}),{personId:null,personVersion:null});
+  assert.deepEqual(core.personDependency({id:'00000000-0000-0000-0000-000000000001',recordVersion:4}),{personId:'00000000-0000-0000-0000-000000000001',personVersion:4});
+  assert.throws(()=>core.personDependency({id:'00000000-0000-0000-0000-000000000001'}),/version/);
+});

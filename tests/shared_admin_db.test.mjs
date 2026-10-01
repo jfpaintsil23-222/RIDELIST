@@ -59,7 +59,9 @@ before(() => {
   const auditTable=security.slice(auditStart,security.indexOf(');',auditStart)+2);
   const auditFunctions=['rides_private.ride_admin_actor','rides_private.log_ride_admin_event','rides_private.log_ride_stop_admin_change'].map(name=>definition(security,name)).join('\n');
   const auditTrigger='create trigger ride_admin_audit_stops after insert or update or delete on rides_private.ride_stops for each row execute function rides_private.log_ride_stop_admin_change();';
-  sql(fixture + '\n' + auditTable + '\n' + auditFunctions + '\n' + auditTrigger + '\n' + authHelpers + '\n' + legacy + '\n' + otherWriters + '\n' + internal + '\n' +
+  const peopleStart=control.indexOf('create table if not exists rides_private.ride_people (');
+  const peopleTable=control.slice(peopleStart,control.indexOf('\n);',peopleStart)+4);
+  sql(fixture + '\n' + peopleTable + '\n' + auditTable + '\n' + auditFunctions + '\n' + auditTrigger + '\n' + authHelpers + '\n' + legacy + '\n' + otherWriters + '\n' + internal + '\n' +
     (existsSync(path) ? readFileSync(path, 'utf8') : ''));
 });
 
@@ -600,4 +602,151 @@ test('pending_publication_marker_and_actual_audit_roll_back_on_all_failures', {s
   const after=published(), draft=sharedHash(); const validation=JSON.parse(sql(publishSql(2,1)));
   assert.equal(validation.code,'validation_failed');assert.equal(published(),after);assert.equal(sharedHash(),draft);
   assert.equal(sql("select count(*) from rides_private.ride_shared_operations where result ? 'auditTransaction';"),'0');
+});
+
+// Task 4: actual master writes, draft-only secondary changes, and atomic dependencies.
+const personId = '00000000-0000-0000-0000-000000008001';
+function secondaryInit() {
+  initialize();
+  sql(`delete from rides_private.ride_shared_person_versions; delete from rides_private.ride_people;
+    insert into rides_private.ride_people(id,name,name_key,phone,home_address) values('${personId}','Synthetic Person','synthetic person','000-111','Old address');`);
+}
+function personSaveSql(version=1, id=operationId(), token='alpha-token') {
+  return `set role anon; select public.ride_admin_shared_save_person('${token}','2099-01-04','{"id":"${personId}","name":"Synthetic Person","phone":"000-222","homeAddress":"New address"}',${version},'${id}');`;
+}
+test('availability_stays_draft', {skip:!enabled}, () => {
+  initialize(); const live=driverVisible();
+  assert.equal(mutate(operation('plan_drivers',null,{driverSlugs:[]},{'@drivers':1,'driver-a':1,'driver-b':1,'':0})).ok,true);
+  assert.equal(driverVisible(),live); assert.deepEqual(rpc('ride_admin_shared_snapshot','alpha-token').drivers,[]);
+});
+test('master_person_version_conflict and person_change_invalidates_publish_review', {skip:!enabled}, () => {
+  secondaryInit(); const live=driverVisible(); const id=operationId();
+  const saved=JSON.parse(sql(personSaveSql(1,id))); assert.equal(saved.ok,true); assert.equal(saved.value.person.recordVersion,2);
+  assert.equal(saved.value.person.phone,'000-222'); assert.equal(driverVisible(),live);
+  assert.equal(JSON.parse(sql(personSaveSql(1))).code,'conflict');
+  assert.deepEqual(JSON.parse(sql(personSaveSql(1,id,'alpha-refreshed-token'))),saved);
+  assert.equal(JSON.parse(sql(publishSql())).code,'conflict');
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token').riders[0].name,'Synthetic A','Unknown links never copy by name');
+});
+test('person_pickup explicitly copies only a stable link and publication checks its master version', {skip:!enabled}, () => {
+  secondaryInit();
+  assert.equal(mutate(operation('rider_update',riderA,{personId,personVersion:1})).ok,true);
+  assert.equal(JSON.parse(sql(personSaveSql())).ok,true);
+  let snap=rpc('ride_admin_shared_snapshot','alpha-token');
+  assert.equal(JSON.parse(sql(publishSql(snap.draftRevision))).conflict.type,'person');
+  const op=operation('person_pickup',riderA,{personId,personVersion:2}); op.expectedEntityVersion=2;
+  const live=driverVisible(); assert.equal(mutate(op).ok,true); assert.equal(driverVisible(),live);
+  snap=rpc('ride_admin_shared_snapshot','alpha-token'); assert.equal(snap.riders.find(r=>r.id===riderA).address,'New address');
+  assert.equal(JSON.parse(sql(publishSql(snap.draftRevision))).ok,true);
+});
+test('catalog_add_does_not_activate_plan and survives plan row removal', {skip:!enabled}, () => {
+  initialize(); const live=driverVisible();
+  const saved=rpc('ride_admin_shared_add_driver','alpha-token',undefined,`, '{"name":"Catalog Only","initials":"CO","passcode":"synthetic-secret"}', '${operationId()}'`);
+  assert.equal(saved.ok,true); assert.equal(driverVisible(),live);
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token').drivers.some(d=>d.slug==='catalog-only'),false);
+  assert.equal(mutate(operation('plan_drivers',null,{driverSlugs:['catalog-only']},{'@drivers':1,'driver-a':1,'driver-b':1,'catalog-only':0,'':0})).ok,true);
+  assert.equal(rpc('ride_admin_shared_secondary','alpha-token').driverPool.some(d=>d.slug==='catalog-only'),true);
+});
+test('route_settings_stay_draft and apply only inside successful atomic publication', {skip:!enabled}, () => {
+  initialize(); const before=sql("select to_jsonb(p) from rides_private.ride_plans p where plan_date='2099-01-04';");
+  const extra=`, 'route', '{"planTitle":"New plan","serviceDay":"Sunday","destinationLabel":"New place","destinationAddress":"New destination"}', 1, 0, '${operationId()}'`;
+  const saved=rpc('ride_admin_shared_save_settings','alpha-token',undefined,extra); assert.equal(saved.ok,true);
+  assert.equal(sql("select to_jsonb(p) from rides_private.ride_plans p where plan_date='2099-01-04';"),before);
+  assert.equal(JSON.parse(sql(publishSql(1))).ok,true);
+  assert.equal(sql("select destination_address from rides_private.ride_plans where plan_date='2099-01-04';"),'New destination');
+  assert.equal(rpc('ride_admin_shared_save_settings','alpha-token',undefined,extra.replace(/00000000-0000-0000-0000-[0-9]{12}/,operationId())).code,'conflict');
+});
+test('master save versus publish uses real concurrent connections in both orders', {skip:!enabled}, async () => {
+  secondaryInit(); const live=driverVisible();
+  const [save,pub]=await race(personSaveSql(),publishSql()); assert.equal(save.ok,true); assert.equal(pub.code,'conflict'); assert.equal(driverVisible(),live);
+  secondaryInit(); const [pub2,save2]=await race(publishSql(),personSaveSql()); assert.equal(pub2.ok,true); assert.equal(save2.ok,true);
+  assert.equal(sql(`select phone from rides_private.ride_stops where id='${riderA}';`),'','Master save never rewrites published stops');
+});
+
+test('catalog stable identity survives publishing an empty plan and later reactivation', {skip:!enabled}, () => {
+  initialize(); sql('delete from rides_private.ride_shared_riders;');
+  const first=rpc('ride_admin_shared_secondary','alpha-token').driverPool.find(d=>d.slug==='driver-a');
+  assert.match(first.driverId,/^[0-9a-f-]{36}$/);
+  assert.equal(JSON.parse(sql(publishSql())).ok,true);
+  const off=operation('plan_drivers',null,{driverSlugs:[]},{'@drivers':1,'driver-a':1,'driver-b':1}); off.expectedBaselinePublishedRevision=1;
+  assert.equal(mutate(off).ok,true); assert.equal(JSON.parse(sql(publishSql(1,1))).ok,true);
+  assert.equal(sql("select count(*) from rides_private.ride_drivers where plan_id=(select id from rides_private.ride_plans where plan_date='2099-01-04');"),'0');
+  const on=operation('plan_drivers',null,{driverSlugs:['driver-a']},{'@drivers':2,'driver-a':2}); on.expectedBaselinePublishedRevision=2;
+  assert.equal(mutate(on).ok,true); assert.equal(JSON.parse(sql(publishSql(2,2))).ok,true);
+  const again=rpc('ride_admin_shared_secondary','alpha-token').driverPool.find(d=>d.slug==='driver-a');
+  assert.equal(again.driverId,first.driverId);
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token').drivers[0].driverId,first.driverId);
+});
+test('legacy catalog additions after installation can be activated by the shared draft', {skip:!enabled}, () => {
+  initialize();
+  sql("insert into rides_private.ride_drivers(plan_id,slug,display_name,full_name,initials,access_code_hash) select id,'later-legacy','Later legacy','Later Legacy','LL','synthetic-hash' from rides_private.ride_plans where plan_date='2099-01-11';");
+  assert.equal(mutate(operation('plan_drivers',null,{driverSlugs:['driver-a','driver-b','later-legacy']},{'@drivers':1,'later-legacy':0})).ok,true);
+});
+test('branding versions apply immediately and secondary records require validated actors and private ACLs', {skip:!enabled}, () => {
+  secondaryInit(); const live=driverVisible();
+  const save=()=>rpc('ride_admin_shared_save_settings','alpha-token',undefined,`, 'branding', '{"homeTitle":"New home","homeSubtitle":"Sub","homeCoverUrl":"/synthetic.png","homeCoverAlt":"Synthetic"}', 1, 0, '${operationId()}'`);
+  const result=save(); assert.equal(result.ok,true); assert.equal(result.value.recordVersion,2);
+  assert.equal(sql("select home_title from rides_private.ride_app_settings where id='main';"),'New home');
+  assert.equal(save().code,'conflict'); assert.equal(driverVisible(),live);
+  assert.equal(rpc('ride_admin_shared_secondary','wrong').code,'invalid_admin_code');
+  assert.equal(JSON.parse(sql(personSaveSql(1,operationId(),'wrong'))).code,'invalid_admin_code');
+  for (const role of ['anon','authenticated']) {
+    sql(`set role ${role}; select * from rides_private.ride_driver_catalog;`,database,true);
+    sql(`set role ${role}; select rides_private.ride_shared_person_json('${personId}');`,database,true);
+  }
+  const projection=JSON.stringify(rpc('ride_admin_shared_secondary','alpha-token'));
+  assert.equal(/access_code_hash|synthetic-hash|synthetic-secret|passcode/.test(projection),false);
+});
+test('invalid publication rolls back staged route settings together with all driver-visible rows', {skip:!enabled}, () => {
+  initialize();
+  const before=sql("select to_jsonb(p) from rides_private.ride_plans p where plan_date='2099-01-04';");
+  assert.equal(rpc('ride_admin_shared_save_settings','alpha-token',undefined,`, 'route', '{"destinationAddress":"Never live"}', 1, 0, '${operationId()}'`).ok,true);
+  assert.equal(mutate(operation('rider_update',riderA,{name:'FORCE_DATABASE_ERROR'})).ok,true);
+  const live=driverVisible(); assert.throws(()=>sql(publishSql(2)),/synthetic_write_failure/);
+  assert.equal(driverVisible(),live); assert.equal(sql("select to_jsonb(p) from rides_private.ride_plans p where plan_date='2099-01-04';"),before);
+});
+
+test('prepared shared snapshot exposes the same protected catalog UUID without an activation edit', {skip:!enabled}, () => {
+  initialize();
+  const catalog=rpc('ride_admin_shared_secondary','alpha-token').driverPool.find(d=>d.slug==='driver-a');
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token').drivers[0].driverId,catalog.driverId);
+});
+test('explicit pickup refresh rejects unrelated payload intent', {skip:!enabled}, () => {
+  secondaryInit(); assert.equal(mutate(operation('rider_update',riderA,{personId,personVersion:1})).ok,true);
+  const op=operation('person_pickup',riderA,{personId,personVersion:1,name:'Ignored unauthorized intent'}); op.expectedEntityVersion=2;
+  assert.equal(mutate(op).code,'validation_failed');
+});
+test('master save invalidates linked or unknown other workspaces but leaves unrelated legacy plan untouched', {skip:!enabled}, () => {
+  secondaryInit();
+  sql(`insert into rides_private.ride_shared_workspaces(plan_date) values('2099-01-11');
+    insert into rides_private.ride_shared_write_modes(plan_date,write_mode) values('2099-01-11','shared');
+    insert into rides_private.ride_shared_riders(plan_date,id,payload) values('2099-01-11',gen_random_uuid(),'{"name":"Unknown legacy identity","stopOrder":1}');`);
+  const live=driverVisible(); assert.equal(JSON.parse(sql(personSaveSql())).ok,true);
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token','2099-01-11').draftRevision,1); assert.equal(driverVisible(),live);
+  sql("update rides_private.ride_shared_write_modes set write_mode='legacy' where plan_date='2099-01-11';");
+  assert.equal(JSON.parse(sql(personSaveSql(2))).ok,true);
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token','2099-01-11').draftRevision,1);
+  assert.equal(driverVisible(),live);
+});
+
+test('noncanonical UUID links cannot bypass master dependency checks or cross-plan invalidation', {skip:!enabled}, () => {
+  secondaryInit();
+  const compact=personId.replaceAll('-','');
+  sql(`update rides_private.ride_shared_riders set payload=payload || '{"personId":"${compact}","personVersion":0}' where id='${riderA}';`);
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token').riders.find(r=>r.id===riderA).personId,personId);
+  assert.equal(JSON.parse(sql(publishSql())).code,'conflict');
+  sql(`insert into rides_private.ride_shared_workspaces(plan_date) values('2099-01-11');
+    insert into rides_private.ride_shared_write_modes(plan_date,write_mode) values('2099-01-11','shared');
+    insert into rides_private.ride_shared_riders(plan_date,id,payload) values('2099-01-11',gen_random_uuid(),'{"name":"Legacy compact link","personId":"${compact}","personVersion":1,"stopOrder":1}');`);
+  assert.equal(JSON.parse(sql(personSaveSql())).ok,true);
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token','2099-01-11').draftRevision,1);
+});
+
+test('catalog phone note and existing credential hash survive activation and publication', {skip:!enabled}, () => {
+  initialize(); sql('delete from rides_private.ride_shared_riders;');
+  assert.equal(rpc('ride_admin_shared_add_driver','alpha-token',undefined,`, '{"name":"Phone Catalog","initials":"PC","phone":"000-555","passcode":"synthetic-code"}', '${operationId()}'`).ok,true);
+  assert.equal(mutate(operation('plan_drivers',null,{driverSlugs:['phone-catalog']},{'@drivers':1,'driver-a':1,'driver-b':1,'phone-catalog':0})).ok,true);
+  assert.equal(JSON.parse(sql(publishSql(2))).ok,true);
+  assert.equal(sql("select route_notes from rides_private.ride_drivers where slug='phone-catalog';"),'Phone: 000-555');
+  assert.equal(sql("select access_code_hash=md5('synthetic-code') from rides_private.ride_drivers where slug='phone-catalog';"),'t');
 });

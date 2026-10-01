@@ -963,6 +963,35 @@ begin
         and s.id::text = any(p_deleted_stop_ids);
     end if;
 
+    if p_preserve_ids then
+      -- Immediate UNIQUE(driver_id,stop_order) also applies during swaps/moves.
+      -- Park only surviving rows whose route/order changes, above every current
+      -- and intended order. The shared engine buffers their audit atomically.
+      with intended as (
+        select (item->>'id')::uuid id, driver.id driver_id,
+               greatest(1,coalesce((item->>'stopOrder')::integer,1)) stop_order
+        from jsonb_array_elements(p_stops) item
+        join rides_private.ride_drivers driver
+          on driver.plan_id=v_plan.id and driver.slug=item->>'driverSlug'
+      ), moving as (
+        select stop.id, stop.driver_id,
+               row_number() over(partition by stop.driver_id order by stop.id)::integer position
+        from rides_private.ride_stops stop join intended on intended.id=stop.id
+        join rides_private.ride_drivers driver on driver.id=stop.driver_id
+        where driver.plan_id=v_plan.id
+          and (stop.driver_id,stop.stop_order) is distinct from (intended.driver_id,intended.stop_order)
+      ), limits as (
+        select driver.id driver_id,
+               greatest(coalesce((select max(stop_order) from rides_private.ride_stops where driver_id=driver.id),0),
+                        coalesce((select max(stop_order) from intended where driver_id=driver.id),0)) maximum
+        from rides_private.ride_drivers driver where driver.plan_id=v_plan.id
+      )
+      update rides_private.ride_stops stop
+      set stop_order=limits.maximum+moving.position
+      from moving join limits on limits.driver_id=moving.driver_id
+      where stop.id=moving.id;
+    end if;
+
     if p_stops is not null and jsonb_typeof(p_stops) = 'array' then
       for v_stop in select value from jsonb_array_elements(p_stops) loop
         v_name := btrim(coalesce(v_stop->>'name', ''));
@@ -1019,7 +1048,7 @@ begin
           raise exception using errcode='RP001', message='ride_publish_validation_failed';
         end if;
 
-        if exists (
+        if not p_preserve_ids and exists (
           select 1
           from rides_private.ride_stops existing_stop
           where existing_stop.driver_id = v_driver.id
@@ -1051,7 +1080,15 @@ begin
               route_label = btrim(coalesce(v_stop->>'routeLabel', '')),
               notes = btrim(coalesce(v_stop->>'notes', '')),
               updated_at = now()
-          where s.id::text = v_stop_id;
+          where s.id::text = v_stop_id
+            and (not p_preserve_ids or
+              (s.driver_id,s.stop_order,s.rider_name,s.phone,s.address,s.area,
+               s.pickup_time,s.ready_by,s.route_label,s.notes) is distinct from
+              (v_driver.id,v_stop_order,v_name,btrim(coalesce(v_stop->>'phone','')),
+               v_address,btrim(coalesce(v_stop->>'area','')),
+               rides_private.ride_parse_time(v_stop->>'pickupTime'),
+               rides_private.ride_parse_time(v_stop->>'readyBy'),
+               btrim(coalesce(v_stop->>'routeLabel','')),btrim(coalesce(v_stop->>'notes',''))));
         else
           insert into rides_private.ride_stops (
             id,
@@ -1098,7 +1135,8 @@ begin
     set stop_order = ordered.new_order,
         updated_at = now()
     from ordered
-    where s.id = ordered.id;
+    where s.id = ordered.id
+      and (not p_preserve_ids or s.stop_order is distinct from ordered.new_order);
 
     update rides_private.ride_drivers d
     set subtitle = rides_private.rider_names_summary(d.id),

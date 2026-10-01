@@ -576,6 +576,23 @@ declare
   v_driver_id uuid := case when tg_op = 'DELETE' then old.driver_id else new.driver_id end;
   v_plan_date date;
 begin
+  -- Only the private shared publisher can create this transaction-bound marker.
+  -- Caller settings and request payloads cannot authorize audit suppression.
+  if to_regclass('rides_private.ride_shared_operations') is not null then
+    if exists (
+      select 1 from rides_private.ride_shared_operations operation
+      join rides_private.ride_plans plan on plan.plan_date = operation.plan_date
+      join rides_private.ride_drivers driver on driver.plan_id = plan.id
+      where driver.id = v_driver_id
+        and operation.request->>'kind' = 'publish'
+        and operation.result->>'auditTransaction' = pg_current_xact_id()::text
+    ) then
+      -- The publisher logs final semantic changes with log_ride_admin_event before
+      -- replacing its pending marker. Intermediate order parking is not an edit.
+      if tg_op = 'DELETE' then return old; end if;
+      return new;
+    end if;
+  end if;
   if tg_op = 'UPDATE'
      and old.driver_id is not distinct from new.driver_id
      and old.stop_order is not distinct from new.stop_order

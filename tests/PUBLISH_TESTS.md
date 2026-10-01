@@ -5,7 +5,9 @@ SQL setup file in PostgreSQL. Both definitions must remain safe because applying
 `sunday_reset.sql` replaces the definition from `admin_ride_control.sql`.
 
 The database contains only synthetic riders. The fixture supplies a minimal
-schema, synthetic authorization and snapshot functions, and a real audit trigger.
+schema, synthetic authorization and snapshot functions, and a minimal synthetic
+audit trigger. The shared harness below additionally loads the production audit
+functions to validate attribution and no-op behavior.
 The production time parser, summary helper and publish function are loaded from
 source. This verifies publishing writes and rollback semantics, not deployed
 Supabase schema, RLS, authentication or browser behavior.
@@ -131,3 +133,39 @@ Task 2 complete-suite evidence: 169 tests, 161 passed, zero failures, eight
 existing credential-gated integration skips. The disposable database cannot
 verify the deployed Supabase schema, gateway signatures, production audit
 triggers, browser wiring or rollout. No production calls or credentials are used.
+
+
+### Task 2 review correction
+
+Shared fixtures now enforce the immediate production `UNIQUE(driver_id,stop_order)`
+and `ON DELETE CASCADE` driver FK. They load the actual `ride_admin_actor`,
+`log_ride_admin_event` and `log_ride_stop_admin_change` functions and audit-log
+schema from `admin_security.sql`; the initial minimal audit replacement is gone.
+Rollback hashes include the actual audit table.
+
+Publication preserves surviving rows, their creation times and unchanged-row
+update times. Genuine deletes are limited to absent/tombstoned draft riders.
+Route swaps/moves temporarily park changed rows above current/intended orders to
+honor immediate uniqueness, then write final positions. The actual audit trigger
+buffers these intermediate writes only while an engine-owned private ledger
+result contains the current transaction's `auditTransaction` marker. The engine
+sets the validated profile audit context before any write, emits actual existing
+audit events once per semantic final difference, and replaces the marker before
+returning. The marker is not a public result, cannot be created by a client body
+or GUC, and rolls back on errors. Install the updated audit function together
+with both canonical helper definitions and the shared engine before cutover.
+
+Regression checks cover unchanged republish preserving complete stop rows and
+producing no audit events; accurate profile attribution for genuine insertion,
+update and deletion; route reorder/cross-driver swaps under immediate uniqueness;
+publication retry audit exactly once; public-input/GUC spoof attempts and direct
+private-marker write denial; legacy audit after publication; validation/database
+failure rollback of marker and actual audit effects. Entity conflicts now contain
+`conflict.current` with current rider values, authoritative ID/version/assignment,
+`deleted`, `unassigned` and `lastActorKey`, including deleted riders and stable
+retry results.
+
+Review-correction full-suite evidence: 175 tests, 167 passed, zero failures,
+eight existing credential-gated integration skips. Focused actual database and
+canonical publication suite: 46 passed, zero failures/skips. These results include
+all original fourteen publication regressions and all 31 shared database cases.

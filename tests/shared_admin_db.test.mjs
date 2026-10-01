@@ -200,6 +200,110 @@ function publishSql(revision=0,baseline=0,id=operationId(),token='alpha-token') 
   return `set role anon; select public.ride_admin_shared_publish(${quote(token)},'2099-01-04',${revision},${baseline},'${id}');`;
 }
 const published = () => sql(`select md5(jsonb_build_object('stops',(select coalesce(jsonb_agg(to_jsonb(s) order by id),'[]') from rides_private.ride_stops s),'drivers',(select coalesce(jsonb_agg(to_jsonb(d) order by id),'[]') from rides_private.ride_drivers d),'audit',(select coalesce(jsonb_agg(to_jsonb(a)),'[]') from rides_private.ride_admin_audit_log a))::text);`);
+const driverVisible = () => sql(`select md5(jsonb_build_object('stops',(select coalesce(jsonb_agg(to_jsonb(s) order by id),'[]') from rides_private.ride_stops s),'drivers',(select coalesce(jsonb_agg(to_jsonb(d) order by id),'[]') from rides_private.ride_drivers d))::text);`);
+
+test('recovery_keeps_all_candidates and trusted preparation starts from published state', {skip:!enabled}, () => {
+  sql(`delete from rides_private.ride_shared_recovery_candidates;
+    delete from rides_private.ride_shared_operations; delete from rides_private.ride_shared_events;
+    delete from rides_private.ride_shared_riders; delete from rides_private.ride_shared_groups;
+    delete from rides_private.ride_shared_workspaces; delete from rides_private.ride_shared_write_modes;
+    delete from rides_private.ride_admin_drafts;
+    insert into rides_private.ride_admin_drafts(plan_date,actor_key,draft,saved_at) values
+      ('2099-01-11','profile:alpha','{"baselinePublishedRevision":0,"stops":[{"id":"00000000-0000-0000-0000-000000000902","driverSlug":"driver-a","name":"Alpha private","stopOrder":1}]}',now()-interval '1 day'),
+      ('2099-01-11','profile:beta','{"baselinePublishedRevision":0,"stops":[{"id":"00000000-0000-0000-0000-000000000903","driverSlug":"driver-b","name":"Beta private","stopOrder":1}]}',now()),
+      ('2099-01-11','profile:gamma','{"baselinePublishedRevision":999999999999999999999999999999,"stops":[{"name":"Unknown baseline private"}]}',now());
+    insert into rides_private.ride_stops(driver_id,id,stop_order,rider_name) values
+      ((select id from rides_private.ride_drivers where slug='driver-a' and plan_id=(select id from rides_private.ride_plans where plan_date='2099-01-11')),'00000000-0000-0000-0000-000000000901',1,'Published synthetic');`);
+  const live=driverVisible();
+  assert.equal(JSON.parse(sql("select rides_private.ride_shared_prepare('2099-01-11','Synthetic operator');")).ok,true);
+  const snapshot=rpc('ride_admin_shared_snapshot','alpha-token','2099-01-11');
+  assert.equal(snapshot.writeMode,'legacy');
+  assert.equal(snapshot.riders[0].name,'Published synthetic');
+  assert.equal(snapshot.riders.some(r=>r.name.includes('private')),false);
+  const alpha=rpc('ride_admin_shared_recovery','alpha-token','2099-01-11');
+  const beta=rpc('ride_admin_shared_recovery','beta-token','2099-01-11');
+  assert.equal(alpha.candidates.length,1); assert.equal(beta.candidates.length,1);
+  assert.equal(alpha.candidates[0].candidate.stops[0].name,'Alpha private');
+  assert.equal(beta.candidates[0].candidate.stops[0].name,'Beta private');
+  assert.equal(JSON.stringify(alpha).includes('Beta private'),false);
+  const unknown=rpc('ride_admin_shared_recovery','gamma-token','2099-01-11').candidates;
+  assert.equal(unknown.length,1);
+  assert.equal(unknown[0].baselinePublishedRevision,null);
+  assert.equal(unknown[0].candidate.stops[0].name,'Unknown baseline private');
+  assert.equal(JSON.parse(sql("select rides_private.ride_shared_prepare('2099-01-11','Synthetic operator');")).code,'already_prepared');
+  assert.equal(sql("select count(*) from rides_private.ride_admin_drafts where plan_date='2099-01-11';"),'3');
+  assert.equal(driverVisible(),live);
+  assert.equal(JSON.parse(sql("set role anon; select public.ride_admin_save_draft('alpha-token','2099-01-11','{\"baselinePublishedRevision\":0,\"stops\":[{\"id\":\"00000000-0000-0000-0000-000000000904\",\"driverSlug\":\"driver-a\",\"name\":\"Later alpha private\",\"stopOrder\":1}]}');")).ok,true);
+  sql("update rides_private.ride_stops set rider_name='Later published synthetic' where id='00000000-0000-0000-0000-000000000901';");
+  const frozen=JSON.parse(sql("select rides_private.ride_shared_freeze('2099-01-11','Synthetic operator');"));
+  assert.equal(frozen.ok,true);
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token','2099-01-11').writeMode,'paused');
+  assert.equal(rpc('ride_admin_shared_snapshot','alpha-token','2099-01-11').riders[0].name,'Later published synthetic');
+  const versions=rpc('ride_admin_shared_recovery','alpha-token','2099-01-11').candidates;
+  assert.equal(versions.length,2);
+  assert.deepEqual(versions.map(c=>c.candidate.stops[0].name).sort(),['Alpha private','Later alpha private']);
+  assert.equal(JSON.parse(sql("set role anon; select public.ride_admin_save_draft('alpha-token','2099-01-11','{}');")).code,'update_required');
+});
+
+test('shared activation requires installed actual audit trigger and private operator functions', {skip:!enabled}, () => {
+  assert.throws(() => sql("begin; drop trigger ride_admin_audit_stops on rides_private.ride_stops; update rides_private.ride_shared_write_modes set write_mode='shared' where plan_date='2099-01-11'; commit;"),
+    /Install admin_security.sql audit trigger/);
+  assert.throws(() => sql("begin; drop trigger ride_admin_audit_stops on rides_private.ride_stops; create trigger ride_admin_audit_stops after insert or update or delete on rides_private.ride_stops for each row execute function rides_private.ride_shared_activation_guard(); update rides_private.ride_shared_write_modes set write_mode='shared' where plan_date='2099-01-11'; commit;"),
+    /Install admin_security.sql audit trigger/);
+  assert.equal(sql("select write_mode from rides_private.ride_shared_write_modes where plan_date='2099-01-11';"),'paused');
+  sql("set role anon; select rides_private.ride_shared_prepare('2099-01-11','forbidden');", database, true);
+  sql("set role anon; select rides_private.ride_shared_freeze('2099-01-11','forbidden');", database, true);
+});
+
+test('conflicting_import_retains_original and import_never_publishes', {skip:!enabled}, () => {
+  const legacyCandidate=rpc('ride_admin_shared_recovery','alpha-token','2099-01-11').candidates[0];
+  const before=published();
+  const device={planDate:'2099-01-11',actorKey:'profile:alpha',baselinePublishedRevision:1,
+    stops:[{id:'00000000-0000-0000-0000-000000000905',driverSlug:'driver-a',name:'Reviewed synthetic import',stopOrder:1}]};
+  const staged=JSON.parse(sql(`set role anon; select public.ride_admin_shared_save_recovery('alpha-token','2099-01-11','reviewed-import',${quote(JSON.stringify(device))}::jsonb);`));
+  assert.equal(staged.ok,true);
+  const candidate={id:staged.candidateId};
+  const id=operationId();
+  const call=(revision,op=id,token='alpha-token',candidateId=candidate.id)=>JSON.parse(sql(`set role anon; select public.ride_admin_shared_import(${quote(token)},'2099-01-11','${candidateId}',${revision},1,'${op}');`));
+  assert.equal(call(1).code,'update_required');
+  sql("update rides_private.ride_shared_write_modes set write_mode='shared' where plan_date='2099-01-11';");
+  assert.equal(call(0,operationId(),'alpha-token',legacyCandidate.id).code,'conflict');
+  const unknown=rpc('ride_admin_shared_recovery','gamma-token','2099-01-11').candidates[0];
+  assert.equal(call(0,operationId(),'gamma-token',unknown.id).code,'conflict');
+  assert.equal(call(1,operationId()).code,'conflict');
+  assert.equal(sql(`select count(*) from rides_private.ride_shared_recovery_candidates where id='${candidate.id}';`),'1');
+  const imported=call(0,operationId());
+  assert.equal(imported.ok,true);
+  assert.deepEqual(call(0,imported.operationId,'alpha-refreshed-token'),imported);
+  assert.equal(call(1,imported.operationId).code,'operation_id_reused');
+  assert.equal(call(0,operationId(),'beta-token').code,'candidate_not_found');
+  assert.equal(published(),before);
+  assert.equal(sql("select count(*) from rides_private.ride_admin_drafts where plan_date='2099-01-11';"),'3');
+});
+
+test('device recovery is actor scoped and invalid saved times are rejected cleanly', {skip:!enabled}, () => {
+  const candidate={planDate:'2099-01-11',actorKey:'profile:alpha',stops:[],savedAt:'2099-99-99T00:00:00Z'};
+  const upload=(token,key,body)=>JSON.parse(sql(`set role anon; select public.ride_admin_shared_save_recovery(${quote(token)},'2099-01-11',${quote(key)},${quote(JSON.stringify(body))}::jsonb);`));
+  assert.equal(upload('alpha-token','device-1',candidate).code,'validation_failed');
+  const valid={...candidate,savedAt:'2099-01-03T00:00:00Z',baselinePublishedRevision:0};
+  const first=upload('alpha-token','device-1',valid);
+  assert.equal(first.ok,true);
+  assert.deepEqual(upload('alpha-refreshed-token','device-1',valid),first);
+  assert.equal(upload('alpha-token','device-1',{...valid,stops:[{name:'Changed'}]}).code,'source_key_reused');
+  assert.equal(JSON.stringify(rpc('ride_admin_shared_recovery','beta-token','2099-01-11')).includes(first.candidateId),false);
+  assert.equal(upload('beta-token','device-2',valid).code,'validation_failed');
+});
+
+test('malformed imported order returns validation without changing shared draft', {skip:!enabled}, () => {
+  const candidate={planDate:'2099-01-11',actorKey:'profile:alpha',baselinePublishedRevision:1,
+    stops:[{id:'00000000-0000-0000-0000-000000000906',driverSlug:'driver-a',name:'Synthetic overflow',stopOrder:2147483648}]};
+  const staged=JSON.parse(sql(`set role anon; select public.ride_admin_shared_save_recovery('alpha-token','2099-01-11','bad-order',${quote(JSON.stringify(candidate))}::jsonb);`));
+  const before=sql("select md5(coalesce(jsonb_agg(to_jsonb(r) order by id),'[]'::jsonb)::text) from rides_private.ride_shared_riders r where plan_date='2099-01-11';");
+  const result=JSON.parse(sql(`set role anon; select public.ride_admin_shared_import('alpha-token','2099-01-11','${staged.candidateId}',1,1,'${operationId()}');`));
+  assert.equal(result.code,'validation_failed');
+  assert.equal(sql("select md5(coalesce(jsonb_agg(to_jsonb(r) order by id),'[]'::jsonb)::text) from rides_private.ride_shared_riders r where plan_date='2099-01-11';"),before);
+  assert.equal(sql(`select count(*) from rides_private.ride_shared_recovery_candidates where id='${staged.candidateId}';`),'1');
+});
 const sharedHash = () => sql(`select md5(jsonb_build_object('workspace',(select to_jsonb(w) from rides_private.ride_shared_workspaces w),'riders',(select jsonb_agg(to_jsonb(r) order by id) from rides_private.ride_shared_riders r),'groups',(select jsonb_agg(to_jsonb(g) order by group_key) from rides_private.ride_shared_groups g),'events',(select coalesce(jsonb_agg(to_jsonb(e) order by event_id),'[]') from rides_private.ride_shared_events e))::text);`);
 function counts(revision, events) {
   const snap = rpc('ride_admin_shared_snapshot','alpha-token');

@@ -6,6 +6,7 @@ import {
   newestAdminDraft,
   normalizeDraftBackup,
   normalizedDraftSnapshot,
+  recoveryCandidates,
 } from "../src/admin-draft-core.js";
 
 test("normalizes a draft backup without mutating the original stop list", () => {
@@ -35,6 +36,25 @@ test("normalizes a draft backup without mutating the original stop list", () => 
   assert.equal(normalized.stops[0].stopOrder, 2);
   assert.equal(normalized.stops[0].ignored, undefined);
   assert.equal(raw.stops[0].name, " Jasmine ");
+});
+
+test('recovery_keeps_all_candidates without choosing by saved time', () => {
+  const candidates = recoveryCandidates([
+    { source:'server', actorId:'profile:alpha', planDate:'2099-01-04', savedAt:'2099-01-04T00:00:00Z', stops:[{name:'First'}] },
+    { source:'device', actorId:'profile:alpha', planDate:'2099-01-04', savedAt:'2099-01-05T00:00:00Z', stops:[{name:'Second'}] },
+  ], { actorId:'profile:alpha', planDate:'2099-01-04' });
+  assert.equal(candidates.length,2);
+  assert.deepEqual(candidates.map(c=>c.stops[0].name),['First','Second']);
+});
+
+test('account_switch_cannot_read_other_backup or unclaimed contents', () => {
+  const candidates = recoveryCandidates([
+    { actorId:'profile:alpha', planDate:'2099-01-04', stops:[{name:'Alpha secret'}] },
+    { planDate:'2099-01-04', stops:[{name:'Unclaimed secret'}] },
+  ], { actorId:'profile:beta', planDate:'2099-01-04' });
+  assert.equal(candidates.length,1);
+  assert.equal(candidates[0].ownerReviewRequired,true);
+  assert.equal(JSON.stringify(candidates).includes('secret'),false);
 });
 
 test("rejects draft backups for the wrong plan date", () => {

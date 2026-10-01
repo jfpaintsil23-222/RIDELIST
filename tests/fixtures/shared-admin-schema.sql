@@ -60,7 +60,7 @@ create or replace function public.ride_admin_snapshot(p_admin_code text, p_plan_
     'stops', '[]'::jsonb, 'people', '[]'::jsonb, 'driverPool', '[]'::jsonb, 'security', '{}'::jsonb);
 $$;
 
-create table rides_private.ride_admin_drafts (plan_date date, actor_key text, draft jsonb, saved_at timestamptz, updated_at timestamptz, primary key(plan_date,actor_key));
+create table rides_private.ride_admin_drafts (id uuid default gen_random_uuid(), plan_date date, actor_key text, draft jsonb, saved_at timestamptz, updated_at timestamptz, primary key(plan_date,actor_key));
 create table rides_private.ride_drivers (
  id uuid primary key default gen_random_uuid(), plan_id uuid references rides_private.ride_plans,
  slug text, display_name text, full_name text, initials text, access_code_hash text,

@@ -69,3 +69,17 @@ export function newestAdminDraft(localDraft, serverDraft) {
     .sort((a, b) => draftTimestamp(a) - draftTimestamp(b))
     .at(-1) || null;
 }
+
+// Legacy plan-only keys have no proven owner. Return metadata for ownership
+// review while leaving the original backup in its existing storage slot.
+export function recoveryCandidates(backups = [], { actorId, planDate } = {}) {
+  return (Array.isArray(backups) ? backups : []).flatMap((raw) => {
+    if (!raw || raw.planDate !== planDate) return [];
+    if (raw.actorId && raw.actorId !== actorId) return [];
+    if (!raw.actorId) return [{ source: raw.source || 'device', planDate, savedAt: raw.savedAt || '', ownerReviewRequired: true }];
+    const candidate = normalizeDraftBackup(raw, { planDate });
+    return candidate ? [{ ...candidate, actorId, baselinePublishedRevision:
+      Number.isSafeInteger(raw.baselinePublishedRevision) ? raw.baselinePublishedRevision : null,
+      ownerReviewRequired: false }] : [];
+  });
+}

@@ -520,6 +520,7 @@ declare
   v_name text;
   v_address text;
   v_driver_slug text;
+  v_validation_error jsonb;
 begin
   if not rides_private.is_ride_admin_code(p_admin_code) then
     return jsonb_build_object('ok', false, 'error', 'invalid_admin_code');
@@ -537,145 +538,157 @@ begin
     return jsonb_build_object('ok', false, 'error', 'plan_not_found');
   end if;
 
-  if coalesce(array_length(p_deleted_stop_ids, 1), 0) > 0 then
-    delete from rides_private.ride_stops s
-    using rides_private.ride_drivers d
-    where s.driver_id = d.id
-      and d.plan_id = v_plan.id
-      and s.id::text = any(p_deleted_stop_ids);
+  if p_stops is null or jsonb_typeof(p_stops) <> 'array' then
+    return jsonb_build_object('ok', false, 'error', 'stops_array_required');
   end if;
 
-  if p_stops is not null and jsonb_typeof(p_stops) = 'array' then
-    for v_stop in select value from jsonb_array_elements(p_stops) loop
-      v_name := btrim(coalesce(v_stop->>'name', ''));
-      v_address := btrim(coalesce(v_stop->>'address', ''));
-      v_driver_slug := lower(btrim(coalesce(v_stop->>'driverSlug', '')));
+  -- A caught validation error must roll back every publish write, including triggers.
+  begin
+    if coalesce(array_length(p_deleted_stop_ids, 1), 0) > 0 then
+      delete from rides_private.ride_stops s
+      using rides_private.ride_drivers d
+      where s.driver_id = d.id
+        and d.plan_id = v_plan.id
+        and s.id::text = any(p_deleted_stop_ids);
+    end if;
 
-      if v_name = '' then
-        return jsonb_build_object('ok', false, 'error', 'rider_name_required');
-      end if;
+    if p_stops is not null and jsonb_typeof(p_stops) = 'array' then
+      for v_stop in select value from jsonb_array_elements(p_stops) loop
+        v_name := btrim(coalesce(v_stop->>'name', ''));
+        v_address := btrim(coalesce(v_stop->>'address', ''));
+        v_driver_slug := lower(btrim(coalesce(v_stop->>'driverSlug', '')));
 
-      if v_driver_slug = '' then
-        return jsonb_build_object(
-          'ok', false,
-          'error', 'driver_required',
-          'riderName', v_name,
-          'driverSlug', v_driver_slug
-        );
-      end if;
+        if v_name = '' then
+          v_validation_error := jsonb_build_object('ok', false, 'error', 'rider_name_required');
+          raise exception using errcode = 'RP001', message = 'ride_publish_validation_failed';
+        end if;
 
-      select d.id, d.slug
-      into v_driver
-      from rides_private.ride_drivers d
+        if v_driver_slug = '' then
+          v_validation_error := jsonb_build_object(
+            'ok', false,
+            'error', 'driver_required',
+            'riderName', v_name,
+            'driverSlug', v_driver_slug
+          );
+          raise exception using errcode = 'RP001', message = 'ride_publish_validation_failed';
+        end if;
+
+        select d.id, d.slug
+        into v_driver
+        from rides_private.ride_drivers d
+        where d.plan_id = v_plan.id
+          and d.slug = v_driver_slug
+        limit 1;
+
+        if v_driver.id is null then
+          v_validation_error := jsonb_build_object(
+            'ok', false,
+            'error', 'driver_not_found',
+            'riderName', v_name,
+            'driverSlug', v_driver_slug
+          );
+          raise exception using errcode = 'RP001', message = 'ride_publish_validation_failed';
+        end if;
+
+        begin
+          v_stop_order := greatest(1, coalesce((v_stop->>'stopOrder')::integer, 1));
+        exception when others then
+          select coalesce(max(s.stop_order), 0) + 1
+          into v_stop_order
+          from rides_private.ride_stops s
+          where s.driver_id = v_driver.id;
+        end;
+
+        v_stop_id := nullif(btrim(coalesce(v_stop->>'id', '')), '');
+
+        if exists (
+          select 1
+          from rides_private.ride_stops existing_stop
+          where existing_stop.driver_id = v_driver.id
+            and existing_stop.stop_order = v_stop_order
+            and (v_stop_id is null or existing_stop.id::text <> v_stop_id)
+        ) then
+          select coalesce(max(s.stop_order), 0) + 1
+          into v_stop_order
+          from rides_private.ride_stops s
+          where s.driver_id = v_driver.id;
+        end if;
+
+        if v_stop_id is not null and exists (
+          select 1
+          from rides_private.ride_stops s
+          join rides_private.ride_drivers d on d.id = s.driver_id
+          where s.id::text = v_stop_id
+            and d.plan_id = v_plan.id
+        ) then
+          update rides_private.ride_stops s
+          set driver_id = v_driver.id,
+              stop_order = v_stop_order,
+              rider_name = v_name,
+              phone = btrim(coalesce(v_stop->>'phone', '')),
+              address = v_address,
+              area = btrim(coalesce(v_stop->>'area', '')),
+              pickup_time = rides_private.ride_parse_time(v_stop->>'pickupTime'),
+              ready_by = rides_private.ride_parse_time(v_stop->>'readyBy'),
+              route_label = btrim(coalesce(v_stop->>'routeLabel', '')),
+              notes = btrim(coalesce(v_stop->>'notes', '')),
+              updated_at = now()
+          where s.id::text = v_stop_id;
+        else
+          insert into rides_private.ride_stops (
+            driver_id,
+            stop_order,
+            rider_name,
+            phone,
+            address,
+            area,
+            pickup_time,
+            ready_by,
+            route_label,
+            notes
+          )
+          values (
+            v_driver.id,
+            v_stop_order,
+            v_name,
+            btrim(coalesce(v_stop->>'phone', '')),
+            v_address,
+            btrim(coalesce(v_stop->>'area', '')),
+            rides_private.ride_parse_time(v_stop->>'pickupTime'),
+            rides_private.ride_parse_time(v_stop->>'readyBy'),
+            btrim(coalesce(v_stop->>'routeLabel', '')),
+            btrim(coalesce(v_stop->>'notes', ''))
+          );
+        end if;
+      end loop;
+    end if;
+
+    with ordered as (
+      select
+        s.id,
+        row_number() over (
+          partition by s.driver_id
+          order by s.stop_order, s.created_at, s.rider_name
+        )::integer as new_order
+      from rides_private.ride_stops s
+      join rides_private.ride_drivers d on d.id = s.driver_id
       where d.plan_id = v_plan.id
-        and d.slug = v_driver_slug
-      limit 1;
+    )
+    update rides_private.ride_stops s
+    set stop_order = ordered.new_order,
+        updated_at = now()
+    from ordered
+    where s.id = ordered.id;
 
-      if v_driver.id is null then
-        return jsonb_build_object(
-          'ok', false,
-          'error', 'driver_not_found',
-          'riderName', v_name,
-          'driverSlug', v_driver_slug
-        );
-      end if;
+    update rides_private.ride_drivers d
+    set subtitle = rides_private.rider_names_summary(d.id),
+        updated_at = now()
+    where d.plan_id = v_plan.id;
 
-      begin
-        v_stop_order := greatest(1, coalesce((v_stop->>'stopOrder')::integer, 1));
-      exception when others then
-        select coalesce(max(s.stop_order), 0) + 1
-        into v_stop_order
-        from rides_private.ride_stops s
-        where s.driver_id = v_driver.id;
-      end;
-
-      v_stop_id := nullif(btrim(coalesce(v_stop->>'id', '')), '');
-
-      if exists (
-        select 1
-        from rides_private.ride_stops existing_stop
-        where existing_stop.driver_id = v_driver.id
-          and existing_stop.stop_order = v_stop_order
-          and (v_stop_id is null or existing_stop.id::text <> v_stop_id)
-      ) then
-        select coalesce(max(s.stop_order), 0) + 1
-        into v_stop_order
-        from rides_private.ride_stops s
-        where s.driver_id = v_driver.id;
-      end if;
-
-      if v_stop_id is not null and exists (
-        select 1
-        from rides_private.ride_stops s
-        join rides_private.ride_drivers d on d.id = s.driver_id
-        where s.id::text = v_stop_id
-          and d.plan_id = v_plan.id
-      ) then
-        update rides_private.ride_stops s
-        set driver_id = v_driver.id,
-            stop_order = v_stop_order,
-            rider_name = v_name,
-            phone = btrim(coalesce(v_stop->>'phone', '')),
-            address = v_address,
-            area = btrim(coalesce(v_stop->>'area', '')),
-            pickup_time = rides_private.ride_parse_time(v_stop->>'pickupTime'),
-            ready_by = rides_private.ride_parse_time(v_stop->>'readyBy'),
-            route_label = btrim(coalesce(v_stop->>'routeLabel', '')),
-            notes = btrim(coalesce(v_stop->>'notes', '')),
-            updated_at = now()
-        where s.id::text = v_stop_id;
-      else
-        insert into rides_private.ride_stops (
-          driver_id,
-          stop_order,
-          rider_name,
-          phone,
-          address,
-          area,
-          pickup_time,
-          ready_by,
-          route_label,
-          notes
-        )
-        values (
-          v_driver.id,
-          v_stop_order,
-          v_name,
-          btrim(coalesce(v_stop->>'phone', '')),
-          v_address,
-          btrim(coalesce(v_stop->>'area', '')),
-          rides_private.ride_parse_time(v_stop->>'pickupTime'),
-          rides_private.ride_parse_time(v_stop->>'readyBy'),
-          btrim(coalesce(v_stop->>'routeLabel', '')),
-          btrim(coalesce(v_stop->>'notes', ''))
-        );
-      end if;
-    end loop;
-  end if;
-
-  with ordered as (
-    select
-      s.id,
-      row_number() over (
-        partition by s.driver_id
-        order by s.stop_order, s.created_at, s.rider_name
-      )::integer as new_order
-    from rides_private.ride_stops s
-    join rides_private.ride_drivers d on d.id = s.driver_id
-    where d.plan_id = v_plan.id
-  )
-  update rides_private.ride_stops s
-  set stop_order = ordered.new_order,
-      updated_at = now()
-  from ordered
-  where s.id = ordered.id;
-
-  update rides_private.ride_drivers d
-  set subtitle = rides_private.rider_names_summary(d.id),
-      updated_at = now()
-  where d.plan_id = v_plan.id;
-
-  return public.ride_admin_snapshot(p_admin_code, coalesce(p_plan_date, rides_private.current_ride_plan_date()));
+    return public.ride_admin_snapshot(p_admin_code, coalesce(p_plan_date, rides_private.current_ride_plan_date()));
+  exception when sqlstate 'RP001' then
+    return v_validation_error;
+  end;
 end;
 $$;
 

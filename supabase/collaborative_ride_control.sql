@@ -515,7 +515,10 @@ begin
     or not exists (
       select 1 from pg_trigger t
       where t.tgrelid = 'rides_private.ride_stops'::regclass
-        and t.tgname = 'ride_admin_audit_stops' and not t.tgisinternal and t.tgenabled <> 'D'
+        and t.tgname = 'ride_admin_audit_stops' and not t.tgisinternal
+        and t.tgenabled in ('O','A')
+        -- AFTER ROW on all three write events, without a conditional/column filter.
+        and t.tgtype = 29 and t.tgqual is null and t.tgattr::text = ''
         and t.tgfoid = 'rides_private.log_ride_stop_admin_change()'::regprocedure
     )
     or position('auditTransaction' in pg_get_functiondef('rides_private.log_ride_stop_admin_change()'::regprocedure)) = 0
@@ -783,14 +786,21 @@ begin
       raise exception using errcode='RS001';
     end if;
     v_stops:=c.candidate->'stops';
-    if jsonb_typeof(v_stops) is distinct from 'array'
-      or exists(select 1 from jsonb_array_elements(v_stops) x where jsonb_typeof(x)<>'object'
-        or jsonb_typeof(x->'id')<>'string' or (x->>'id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-        or jsonb_typeof(x->'name')<>'string' or btrim(x->>'name')=''
-        or jsonb_typeof(x->'stopOrder')<>'number' or (x->>'stopOrder') !~ '^[1-9][0-9]*$'
+    if jsonb_typeof(v_stops) is distinct from 'array' then
+      v_code:='validation_failed'; raise exception using errcode='RS001';
+    end if;
+    -- Validate shape before any UUID/integer cast or shared-row mutation.
+    if exists(select 1 from jsonb_array_elements(v_stops) x where jsonb_typeof(x) is distinct from 'object'
+        or jsonb_typeof(x->'id') is distinct from 'string'
+        or (x->>'id') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        or jsonb_typeof(x->'driverSlug') is distinct from 'string' or btrim(x->>'driverSlug')=''
+        or jsonb_typeof(x->'name') is distinct from 'string' or btrim(x->>'name')=''
+        or jsonb_typeof(x->'stopOrder') is distinct from 'number' or (x->>'stopOrder') !~ '^[1-9][0-9]*$'
         or length(x->>'stopOrder')>10
-        or (length(x->>'stopOrder')=10 and (x->>'stopOrder')>'2147483647'))
-      or (select count(distinct x->>'id') from jsonb_array_elements(v_stops) x)<>jsonb_array_length(v_stops)
+        or (length(x->>'stopOrder')=10 and (x->>'stopOrder')>'2147483647')) then
+      v_code:='validation_failed'; raise exception using errcode='RS001';
+    end if;
+    if (select count(distinct x->>'id') from jsonb_array_elements(v_stops) x)<>jsonb_array_length(v_stops)
       or exists(select 1 from jsonb_array_elements(v_stops) x where
         not exists(select 1 from jsonb_array_elements(w.drivers) d where d->>'slug'=lower(btrim(x->>'driverSlug'))))
       or exists(select 1 from jsonb_array_elements(v_stops) x join rides_private.ride_stops s on s.id=(x->>'id')::uuid

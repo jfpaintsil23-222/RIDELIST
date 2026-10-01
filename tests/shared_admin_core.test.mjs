@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { recoveryKey, compareRecovery, reconcileSnapshot } from '../src/shared-admin-core.js';
+import { recoveryCandidates } from '../src/admin-draft-core.js';
 
 test('recovery key scopes identity, plan and published baseline', () => {
   assert.notEqual(recoveryKey({ actorId:'profile:alpha', planDate:'2099-01-04', baselinePublishedRevision:0 }),
@@ -35,6 +36,27 @@ test('candidate needs a verified snapshot actor before import comparison', () =>
   assert.deepEqual(compareRecovery({planDate:'2099-01-04',actorKey:'profile:alpha',baselinePublishedRevision:0},
     {planDate:'2099-01-04',baselinePublishedRevision:0,draftRevision:0}),
   {status:'ownership_review',canImport:false});
+});
+
+test('local recovery candidates compose with comparison without leaking ambiguous owners', () => {
+  const snapshot={actorKey:'profile:alpha',planDate:'2099-01-04',baselinePublishedRevision:0,draftRevision:2};
+  const candidates=recoveryCandidates([
+    {actorId:'profile:alpha',planDate:snapshot.planDate,baselinePublishedRevision:0,stops:[{name:'Owned'}]},
+    {actorKey:'profile:alpha',planDate:snapshot.planDate,stops:[{name:'Unknown baseline'}]},
+    {actorId:'profile:beta',planDate:snapshot.planDate,stops:[{name:'Other secret'}]},
+    {actorId:'profile:alpha',actorKey:'profile:beta',planDate:snapshot.planDate,stops:[{name:'Conflicting secret'}]},
+    {planDate:snapshot.planDate,stops:[{name:'Unclaimed secret'}]},
+  ],{actorId:'profile:alpha',planDate:snapshot.planDate});
+  assert.equal(candidates.length,3);
+  assert.deepEqual(candidates.map(c=>compareRecovery(c,snapshot).status),
+    ['review_required','unknown_baseline','ownership_review']);
+  assert.equal(JSON.stringify(candidates).includes('Other secret'),false);
+  assert.equal(JSON.stringify(candidates).includes('Conflicting secret'),false);
+  assert.equal(JSON.stringify(candidates).includes('Unclaimed secret'),false);
+  assert.deepEqual(compareRecovery({actorId:'profile:alpha',actorKey:'profile:beta',planDate:snapshot.planDate,baselinePublishedRevision:0},snapshot),
+    {status:'ownership_review',canImport:false});
+  assert.deepEqual(compareRecovery(candidates[0],{...snapshot,actorId:'profile:beta'}),
+    {status:'ownership_review',canImport:false});
 });
 
 test('delayed_previous_plan_response_ignored', () => {

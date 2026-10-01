@@ -8,10 +8,13 @@ export function recoveryKey({ actorId, planDate, baselinePublishedRevision }) {
 }
 
 export function compareRecovery(candidate, snapshot) {
-  if (!candidate || candidate.ownerReviewRequired || !candidate.actorKey) {
+  if (!candidate || candidate.ownerReviewRequired
+    || (candidate.actorId && candidate.actorKey && candidate.actorId !== candidate.actorKey)
+    || !((candidate.actorKey || candidate.actorId))) {
     return { status: 'ownership_review', canImport: false };
   }
-  if (!snapshot || candidate.actorKey !== (snapshot.actorKey || snapshot.actorId)) {
+  if (!snapshot || (snapshot.actorKey && snapshot.actorId && snapshot.actorKey !== snapshot.actorId)
+    || (candidate.actorKey || candidate.actorId) !== (snapshot.actorKey || snapshot.actorId)) {
     return { status: 'ownership_review', canImport: false };
   }
   if (candidate.planDate && candidate.planDate !== snapshot?.planDate) return { status: 'plan_conflict', canImport: false };

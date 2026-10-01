@@ -250,6 +250,17 @@ test('shared activation requires installed actual audit trigger and private oper
     /Install admin_security.sql audit trigger/);
   assert.throws(() => sql("begin; drop trigger ride_admin_audit_stops on rides_private.ride_stops; create trigger ride_admin_audit_stops after insert or update or delete on rides_private.ride_stops for each row execute function rides_private.ride_shared_activation_guard(); update rides_private.ride_shared_write_modes set write_mode='shared' where plan_date='2099-01-11'; commit;"),
     /Install admin_security.sql audit trigger/);
+  for (const change of [
+    'alter table rides_private.ride_stops enable replica trigger ride_admin_audit_stops',
+    "drop trigger ride_admin_audit_stops on rides_private.ride_stops; create trigger ride_admin_audit_stops after insert or update or delete on rides_private.ride_stops for each row when (false) execute function rides_private.log_ride_stop_admin_change()",
+    'drop trigger ride_admin_audit_stops on rides_private.ride_stops; create trigger ride_admin_audit_stops after insert or update on rides_private.ride_stops for each row execute function rides_private.log_ride_stop_admin_change()',
+    'drop trigger ride_admin_audit_stops on rides_private.ride_stops; create trigger ride_admin_audit_stops before insert or update or delete on rides_private.ride_stops for each row execute function rides_private.log_ride_stop_admin_change()',
+    'drop trigger ride_admin_audit_stops on rides_private.ride_stops; create trigger ride_admin_audit_stops after insert or update of rider_name or delete on rides_private.ride_stops for each row execute function rides_private.log_ride_stop_admin_change()',
+    'drop trigger ride_admin_audit_stops on rides_private.ride_stops; create trigger ride_admin_audit_stops after insert or update or delete on rides_private.ride_stops for each statement execute function rides_private.log_ride_stop_admin_change()',
+  ]) {
+    assert.throws(() => sql(`begin; ${change}; update rides_private.ride_shared_write_modes set write_mode='shared' where plan_date='2099-01-11'; commit;`),
+      /Install admin_security.sql audit trigger/,change);
+  }
   assert.equal(sql("select write_mode from rides_private.ride_shared_write_modes where plan_date='2099-01-11';"),'paused');
   sql("set role anon; select rides_private.ride_shared_prepare('2099-01-11','forbidden');", database, true);
   sql("set role anon; select rides_private.ride_shared_freeze('2099-01-11','forbidden');", database, true);
@@ -303,6 +314,28 @@ test('malformed imported order returns validation without changing shared draft'
   assert.equal(result.code,'validation_failed');
   assert.equal(sql("select md5(coalesce(jsonb_agg(to_jsonb(r) order by id),'[]'::jsonb)::text) from rides_private.ride_shared_riders r where plan_date='2099-01-11';"),before);
   assert.equal(sql(`select count(*) from rides_private.ride_shared_recovery_candidates where id='${staged.candidateId}';`),'1');
+});
+
+test('missing null and wrong-type required import fields record validation without effects', {skip:!enabled}, () => {
+  const base={id:'00000000-0000-0000-0000-000000000907',driverSlug:'driver-a',name:'Synthetic valid',stopOrder:1};
+  const malformed=[];
+  for(const key of ['id','driverSlug','name','stopOrder']) {
+    const missing={...base}; delete missing[key]; malformed.push(missing);
+    malformed.push({...base,[key]:null},{...base,[key]:{invalid:true}});
+  }
+  const before=sharedHash(), live=published();
+  for(const [index,stop] of malformed.entries()) {
+    const body={planDate:'2099-01-11',actorKey:'profile:alpha',baselinePublishedRevision:1,stops:[stop]};
+    const staged=JSON.parse(sql(`set role anon; select public.ride_admin_shared_save_recovery('alpha-token','2099-01-11','malformed-${index}',${quote(JSON.stringify(body))}::jsonb);`));
+    assert.equal(staged.ok,true);
+    const op=operationId();
+    const result=JSON.parse(sql(`set role anon; select public.ride_admin_shared_import('alpha-token','2099-01-11','${staged.candidateId}',1,1,'${op}');`));
+    assert.equal(result.code,'validation_failed',`case ${index}`);
+    assert.deepEqual(rpc('ride_admin_shared_operation','alpha-token','2099-01-11',`, '${op}'`),result);
+    assert.equal(sharedHash(),before,`draft/groups/cursor changed in case ${index}`);
+    assert.equal(published(),live,`published changed in case ${index}`);
+    assert.deepEqual(JSON.parse(sql(`select candidate from rides_private.ride_shared_recovery_candidates where id='${staged.candidateId}';`)),body);
+  }
 });
 const sharedHash = () => sql(`select md5(jsonb_build_object('workspace',(select to_jsonb(w) from rides_private.ride_shared_workspaces w),'riders',(select jsonb_agg(to_jsonb(r) order by id) from rides_private.ride_shared_riders r),'groups',(select jsonb_agg(to_jsonb(g) order by group_key) from rides_private.ride_shared_groups g),'events',(select coalesce(jsonb_agg(to_jsonb(e) order by event_id),'[]') from rides_private.ride_shared_events e))::text);`);
 function counts(revision, events) {

@@ -75,10 +75,12 @@ export function newestAdminDraft(localDraft, serverDraft) {
 export function recoveryCandidates(backups = [], { actorId, planDate } = {}) {
   return (Array.isArray(backups) ? backups : []).flatMap((raw) => {
     if (!raw || raw.planDate !== planDate) return [];
-    if (raw.actorId && raw.actorId !== actorId) return [];
-    if (!raw.actorId) return [{ source: raw.source || 'device', planDate, savedAt: raw.savedAt || '', ownerReviewRequired: true }];
+    if (raw.actorId && raw.actorKey && raw.actorId !== raw.actorKey) return [];
+    const owner = raw.actorKey || raw.actorId;
+    if (owner && owner !== actorId) return [];
+    if (!owner) return [{ source: raw.source || 'device', planDate, savedAt: raw.savedAt || '', ownerReviewRequired: true }];
     const candidate = normalizeDraftBackup(raw, { planDate });
-    return candidate ? [{ ...candidate, actorId, baselinePublishedRevision:
+    return candidate ? [{ ...candidate, actorKey: owner, baselinePublishedRevision:
       Number.isSafeInteger(raw.baselinePublishedRevision) ? raw.baselinePublishedRevision : null,
       ownerReviewRequired: false }] : [];
   });

@@ -437,6 +437,9 @@ test("admin profile login requests a backend session for the selected admin", as
     const name = String(url).split("/rpc/").at(-1);
     const body = options?.body ? JSON.parse(options.body) : null;
     calls.push({ name, body });
+    if (name === "ride_admin_shared_context") {
+      return {ok:false,status:404,text:async()=>JSON.stringify({code:"PGRST202",message:"Shared extension not installed"})};
+    }
     if (name === "ride_admin_profile_login") {
       return {
         ok: true,

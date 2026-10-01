@@ -49,3 +49,31 @@ export function personDependency(person) {
   if (!Number.isSafeInteger(person.recordVersion) || person.recordVersion < 1) throw new TypeError('Known person record version required');
   return { personId: person.id, personVersion: person.recordVersion };
 }
+
+export function mergeSecondary(current={}, incoming={}) {
+  const records=new Map((current.people || []).map(person=>[person.id,person]));
+  for(const person of incoming.people || []) {
+    if(!records.has(person.id) || person.recordVersion >= records.get(person.id).recordVersion) records.set(person.id,person);
+  }
+  const branding=(incoming.brandingVersion || 0) >= (current.brandingVersion || 0) ? incoming : current;
+  return {...current,...incoming,people:[...records.values()],brandingVersion:branding.brandingVersion,branding:branding.branding};
+}
+
+export function riderOperation(snapshot, rider, action, operationId, newEntityId) {
+  if(!snapshot || !operationId) throw new TypeError('Captured workspace and operation ID required');
+  const before=snapshot.riders.find(item=>item.id===rider.id);
+  let kind=action==='remove'?'rider_remove':before?'rider_update':'rider_add';
+  const fields=['personId','personVersion','driverSlug','stopOrder','name','phone','address','area','pickupTime','readyBy','routeLabel','notes'];
+  let payload=Object.fromEntries(fields.filter(key=>rider[key]!==undefined).map(key=>[key,rider[key]]));
+  const groups=new Set([before?.driverSlug || rider.driverSlug || '']);
+  if(action==='remove') payload={};
+  else if(before && before.driverSlug!==rider.driverSlug) {
+    if(fields.filter(key=>!['driverSlug','stopOrder'].includes(key)).some(key=>(before[key]??'')!==(rider[key]??''))) {
+      throw new TypeError('Save contact edits and driver moves separately. Your input is preserved.');
+    }
+    kind='rider_move'; payload={driverSlug:rider.driverSlug,stopOrder:rider.stopOrder};groups.add(rider.driverSlug || '');
+  }
+  return {operationId,planDate:snapshot.planDate,kind,entityId:before?.id || newEntityId,
+    expectedEntityVersion:before?.entityVersion || 0,expectedBaselinePublishedRevision:snapshot.baselinePublishedRevision,
+    expectedGroupVersions:Object.fromEntries([...groups].map(key=>[key,snapshot.groupVersions[key] || 0])),payload};
+}

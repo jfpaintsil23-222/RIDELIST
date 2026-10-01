@@ -4785,6 +4785,7 @@
           "content-type": "application/json",
         },
         body: JSON.stringify(body),
+        signal: options.signal,
       });
 
       if (!response.ok) {
@@ -5034,6 +5035,7 @@
 
     async function signOutAdmin() {
       const token = state.adminSession?.access_token;
+      lockAdminShared("");
       if (token) {
         try {
           await authRequest("logout", {}, token);
@@ -5041,15 +5043,6 @@
           console.warn(error);
         }
       }
-      clearAdminSession();
-      state.adminSession = null;
-      state.admin = null;
-      state.adminCode = "";
-      state.adminProfileLogin = null;
-      state.adminMenuOpen = false;
-      state.adminMessage = "";
-      state.view = "home";
-      render();
     }
 
     async function loadAdminSecurityContext(adminCode = state.adminCode) {
@@ -5080,12 +5073,14 @@
 
     async function loginAdminProfile(profileSlug, password) {
       const profile = adminProfileBySlug(profileSlug);
+      const generation=adminSharedGeneration;
       try {
         const login = await rpc("ride_admin_profile_login", {
           p_profile_slug: profile.slug,
           p_password: password,
         }, adminRpcOptions());
 
+        if (generation!==adminSharedGeneration) throw Error('stale_response');
         if (!login?.ok || !login.adminCode) {
           const error = new Error(login?.error || "invalid_admin_code");
           error.payload = login || {};
@@ -5098,6 +5093,7 @@
         };
         return login.adminCode;
       } catch (error) {
+        if (generation!==adminSharedGeneration) throw Error('stale_response');
         if (profile.slug === "joojo" && missingAdminProfileRpc(error)) {
           state.adminProfileLogin = {
             ok: true,
@@ -5111,11 +5107,13 @@
     }
 
     async function loadAdminActivity() {
+      const generation=adminSharedGeneration, planDate=activePlanDate();
       try {
         const activity = await rpc("ride_admin_activity", {
           p_admin_code: state.adminCode,
           p_limit: 8,
         }, adminRpcOptions());
+        if (generation!==adminSharedGeneration || planDate!==activePlanDate()) return;
         if (activity?.ok) state.adminActivity = activity.events || [];
       } catch (error) {
         console.warn(error);
@@ -6459,6 +6457,7 @@
     }
 
     function saveAdminDraftBackup(reason = "draft") {
+      if (adminSharedSecondaryMode() !== "legacy") { retainAdminSharedRecovery();return null; }
       if (!state.admin || !adminChangedCount()) return null;
       const planDate = activePlanDate();
       const backup = {
@@ -6485,6 +6484,7 @@
     }
 
     async function saveAdminServerDraft(reason = "draft", backup = null) {
+      if (adminSharedSecondaryMode() !== "legacy") return null;
       if (!canUseAdminServerDrafts()) return null;
       const draft = normalizeAdminDraftBackup(
         backup || state.adminDraftBackup || readAdminDraftBackup() || saveAdminDraftBackup(reason),
@@ -6519,12 +6519,15 @@
     }
 
     async function loadAdminServerDraftNotice() {
+      if (adminSharedSecondaryMode() !== 'legacy') return null;
+      const generation=adminSharedGeneration,planDate=activePlanDate();
       if (!canUseAdminServerDrafts()) return null;
       try {
         const result = await rpc("ride_admin_get_draft", {
           p_admin_code: state.adminCode,
           p_plan_date: activePlanDate(),
         }, adminRpcOptions());
+        if (generation!==adminSharedGeneration || planDate!==activePlanDate()) return null;
         if (!result?.ok) throw new Error(result?.error || "draft_load_failed");
         const localDraft = state.adminDraftBackup || readAdminDraftBackup();
         const serverDraft = normalizeAdminDraftBackup(result.draft, "server", activePlanDate());
@@ -6576,6 +6579,7 @@
     }
 
     function restoreAdminDraftBackup() {
+      if (fenceAdminSharedBypass()) return;
       const backup = state.adminDraftBackup || readAdminDraftBackup();
       if (!backup) return;
       state.adminDraftStops = cloneStops(backup.stops);
@@ -7250,6 +7254,7 @@
     }
 
     function saveAdminDraftFromForm(form) {
+      if (adminSharedSecondaryMode() !== "legacy") return saveAdminSharedRider(form);
       const formData = new FormData(form);
       const stop = {
         id: formData.get("id") || `temp-${Date.now()}`,
@@ -7299,6 +7304,7 @@
     }
 
     function deleteAdminDraftStop(stopId) {
+      if (adminSharedSecondaryMode() !== "legacy") return saveAdminSharedRider(document.querySelector('[data-admin-form="rider"]'), "remove", {id:stopId});
       const stop = adminStops().find((item) => item.id === stopId);
       if (!stop) return;
 
@@ -7327,22 +7333,374 @@
       loadAdminRouteTiming();
     }
 
+    let adminSharedGeneration = 0;
+
+    async function sharedAdminModules() {
+      if (!window.RideShared) window.RideShared = { ...(await import('./src/shared-admin-core.js')), ...(await import('./src/shared-admin-sync.js')) };
+      return window.RideShared;
+    }
+
+    async function sharedAdminRpc(name, args) {
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timer = globalThis.setTimeout?.(() => controller?.abort(), 15000);
+      try { return await rpc(name, args, { ...adminRpcOptions(), signal: controller?.signal }); }
+      finally { globalThis.clearTimeout?.(timer); }
+    }
+
+    function matchesAdminShared(context) {
+      return state.adminShared === context && context.generation === adminSharedGeneration && context.planDate === activePlanDate();
+    }
+
+    function retainAdminSharedRecovery(context = state.adminShared) {
+      if (!context?.actorKey || !context.snapshot || !window.RideShared) return;
+      try {
+        const form = document.querySelector('[data-admin-form="rider"]');
+        const personalForm = form?.dataset?.sharedSnapshot ? Object.fromEntries(new FormData(form).entries()) : context.personalForm;
+        const pending = context.pendingOperation || context.pendingSecondary;
+        // Catalog creation contains a driver passcode: its exact body stays in memory only.
+        const args = pending && pending.kind !== 'catalog' ? { ...pending.args } : null;
+        if (args) delete args.p_admin_code;
+        const key = window.RideShared.recoveryKey({actorId:context.actorKey,planDate:context.planDate,baselinePublishedRevision:context.snapshot.baselinePublishedRevision});
+        localStorage.setItem(key, JSON.stringify({actorKey:context.actorKey,planDate:context.planDate,
+          baselinePublishedRevision:context.snapshot.baselinePublishedRevision,personalForm,personDraft:state.adminPersonDraft,
+          pending:pending ? {...pending,args} : null}));
+      } catch (error) { console.warn('Personal recovery could not be saved', error); }
+    }
+
+    function restoreAdminSharedUncertainty(context) {
+      try {
+        const key=window.RideShared.recoveryKey({actorId:context.actorKey,planDate:context.planDate,baselinePublishedRevision:context.snapshot.baselinePublishedRevision});
+        const recovery=JSON.parse(localStorage.getItem(key) || 'null');
+        if (!recovery || recovery.actorKey!==context.actorKey || recovery.planDate!==context.planDate || recovery.baselinePublishedRevision!==context.snapshot.baselinePublishedRevision) return;
+        context.deviceRecovery=recovery; // Comparison only; never auto-apply a personal form or legacy snapshot.
+        context.personalForm=recovery.personalForm;
+        if (recovery.pending?.scope?.actorKey===context.actorKey && recovery.pending.scope.planDate===context.planDate) context.pendingOperation=recovery.pending;
+      } catch(error) { console.warn('Recovery requires review',error); }
+    }
+
+    function clearAdminPrivateState() {
+      state.admin = null;
+      state.adminDraftStops = [];
+      state.adminDeletedStopIds = [];
+      state.adminPersonDraft = null;
+      state.adminPersonSeed = null;
+      state.adminSelectedStopId = null;
+      state.adminSelectedPersonId = null;
+      state.adminDraftBackup = null;
+      state.adminActivity = [];
+      state.adminNotifyDraft = null;
+      state.adminAiPreview = null;
+      state.adminAiResult = null;
+      state.adminMergeDraft = null;
+      state.adminMergePrimaryId = "";
+      state.adminMergeDuplicateId = "";
+      state.adminRiderQuery = "";
+      state.adminSearch = "";
+      state.adminPeopleSearch = "";
+      state.routeTimings = {};
+      state.adminPlaceAutocomplete = {requestId:(state.adminPlaceAutocomplete?.requestId || 0)+1,suggestions:[],query:"",field:"",status:"idle"};
+      state.adminAiPrompt = "";
+    }
+
+    function lockAdminShared(message = "Sign in again to open Ride Control.") {
+      retainAdminSharedRecovery();
+      adminSharedGeneration++;
+      state.adminShared?.sync?.stop();
+      state.adminShared = null;
+      clearAdminPrivateState();
+      state.adminCode = "";
+      state.adminSession = null;
+      state.adminProfileLogin = null;
+      state.adminLoading = false;
+      state.adminMenuOpen = false;
+      clearAdminSession();
+      state.adminError = message;
+      state.view = "home";
+      render();
+    }
+
+    function adminSharedStatus() {
+      const context = state.adminShared;
+      if (!context || context.snapshot?.writeMode === "legacy") return "";
+      if (context.saving) return "Saving";
+      if (context.pendingOperation || context.pendingSecondary) return "Unconfirmed — check status before retrying";
+      if (context.status !== "saved") return "Reconnecting — review and publish are unavailable";
+      if (context.snapshot.writeMode !== "shared") return "Shared editing paused";
+      if (context.personalDirty) return "Unsaved on this device";
+      return "Saved to shared draft";
+    }
+
+    function updateAdminSharedStatus() {
+      const text = adminSharedStatus();
+      const region=document.querySelector('[data-shared-status-region]');
+      if (region && text && !region.querySelector('[data-shared-sync-status]')) region.innerHTML=adminSharedStatusHtml();
+      for (const target of document.querySelectorAll('[data-shared-sync-status]')) target.textContent = text;
+      const pending = state.adminShared?.pendingOperation || state.adminShared?.pendingSecondary;
+      for (const target of document.querySelectorAll('[data-action="adminSharedRetry"]')) { target.hidden = !pending || state.adminShared?.saving;target.disabled = !pending?.args; }
+      for (const target of document.querySelectorAll('[data-action="adminPublish"]')) if (state.adminShared?.snapshot?.writeMode !== "legacy") target.disabled = !canPublishAdminShared();
+    }
+
+    function adminSharedStatusHtml() {
+      if (!state.adminShared || state.adminShared.snapshot?.writeMode === "legacy") return "";
+      return `<section class="admin-message" role="status"><span data-shared-sync-status>${escapeHtml(adminSharedStatus())}</span>
+        <span data-shared-secondary-status>${escapeHtml(state.adminError || state.adminMessage || "")}</span>
+        <button type="button" class="secondary-action" data-action="adminSharedReview">Review current shared draft</button>
+        <button type="button" class="secondary-action" data-action="adminSharedCheck">Check shared status</button>
+        <button type="button" class="secondary-action" data-action="adminSharedRetry" ${state.adminShared.pendingOperation || state.adminShared.pendingSecondary ? "" : "hidden"}>Retry original save</button></section>`;
+    }
+
+    function applyAdminSharedState(context, update) {
+      if (!matchesAdminShared(context)) { context.sync?.stop();return; }
+      if (update.status === "locked") { lockAdminShared(); return; }
+      context.status = update.status;
+      if (update.status !== "saved") context.review = null;
+      const incoming = update.snapshot;
+      if (incoming && incoming.writeMode !== "legacy") {
+        const old = context.snapshot?.actorId ? context.snapshot : null;
+        const next = window.RideShared.reconcileSnapshot(old, incoming, {actorId:context.actorKey,planDate:context.planDate,
+          requestGeneration:context.generation,personalForms:context.personalForms});
+        if (next) {
+          if (!old || next.draftRevision !== old.draftRevision || next.eventCursor !== old.eventCursor || next.publishedRevision !== old.publishedRevision || next.writeMode !== old.writeMode) context.review = null;
+          context.snapshot = next;
+          const published = next.publishedSnapshot || {};
+          state.plan = published.plan || state.plan;
+          state.destination = published.destination || state.destination;
+          state.admin = {...state.admin,...published,writeMode:next.writeMode,drivers:orderDriversForDisplay(next.drivers || []),people:state.admin?.people || []};
+          state.adminDraftStops = cloneStops(next.riders || []);
+          state.adminDeletedStopIds = (published.stops || []).filter(stop => !next.riders.some(rider => rider.id === stop.id)).map(stop => stop.id);
+          if (context.secondary) hydrateAdminSharedSecondary(context, context.secondary);
+          // Only list regions are replaced. Inputs, focus, selection and captured dependencies stay intact.
+          const region = document.querySelector('[data-shared-route-content]');
+          if (region && state.view === "admin" && !document.activeElement?.closest?.('input, textarea, select')) {
+            if (adminActiveTab() === "riders") region.innerHTML = adminSundayRidersView();
+            else if (adminActiveTab() === "drivers") region.innerHTML = adminRoutesView(adminDrivers());
+            else if (adminActiveTab() === "people") region.innerHTML = adminPeopleView();
+          }
+        }
+      } else if (incoming) context.snapshot = incoming;
+      if (update.operationResult && update.operationResult.code !== "not_found") {
+        const pending=context.pendingOperation || context.pendingSecondary;
+        if (update.operationResult.ok && (pending?.editVersion || 0)===(context.editVersion || 0)) context.personalDirty=false;
+        context.pendingOperation = null; context.pendingSecondary = null;
+        context.secondaryConflict = update.operationResult.ok ? null : update.operationResult;
+        context.review = null;
+        state.adminMessage = update.operationResult.ok ? "Save confirmed. Current shared state refreshed; your form is preserved." : "Save rejected. Compare your preserved input with current shared details.";
+        retainAdminSharedRecovery(context);
+      }
+      updateAdminSharedStatus();
+    }
+
+    function hydrateAdminSharedSecondary(context, incoming) {
+      if (!matchesAdminShared(context) || incoming.actorKey !== context.actorKey || incoming.planDate !== context.planDate) return;
+      const current = {...context.secondary,people:state.admin?.people || context.secondary?.people || []};
+      context.secondary = window.RideShared.mergeSecondary(current, incoming);
+      if (!state.admin) return;
+      state.admin.people = context.secondary.people;
+      const active = new Set(context.snapshot?.drivers?.map(driver => driver.slug) || []);
+      state.admin.driverPool = orderDriversForDisplay((context.secondary.driverPool || []).map(driver => ({...driver,active:active.has(driver.slug)})));
+      state.appSettings = normalizeAppSettings({...state.appSettings,...context.secondary.branding});
+    }
+
+    async function refreshAdminSharedSecondary(context) {
+      if (!matchesAdminShared(context) || context.secondaryLoading || !adminSharedOnline()) return;
+      context.secondaryLoading = true;
+      try {
+        const data = await sharedAdminRpc('ride_admin_shared_secondary',{p_admin_code:state.adminCode,p_plan_date:context.planDate});
+        if (!matchesAdminShared(context)) return;
+        if (data?.code === 'invalid_admin_code') { lockAdminShared(); return; }
+        if (!data?.ok) throw Error('secondary_read_failed');
+        hydrateAdminSharedSecondary(context,data);
+        return true;
+      } catch(error) {
+        if (matchesAdminShared(context)) {
+          if (error.status === 401 || error.status === 403) lockAdminShared();
+          else { context.status='reconnecting';context.review=null;updateAdminSharedStatus(); }
+        }
+        return false;
+      } finally { context.secondaryLoading=false; }
+    }
+
+    document.addEventListener?.('input', event => {
+      const context=state.adminShared;
+      if (!context || context.snapshot?.writeMode==='legacy' || !event.target?.closest?.('[data-admin-form]')) return;
+      context.personalDirty=true;context.editVersion=(context.editVersion || 0)+1;context.review=null;retainAdminSharedRecovery(context);updateAdminSharedStatus();
+    });
+
+    function adminSharedOnline() { return navigator.onLine !== false && document.hidden !== true; }
+
+    function startAdminSharedSync(context) {
+      const subscribe = (target, names, fn) => { names.forEach(name => target.addEventListener?.(name,fn));return () => names.forEach(name => target.removeEventListener?.(name,fn)); };
+      context.sync = window.RideShared.createAdminSync({
+        fetchContext: async scope => {
+          if (!matchesAdminShared(context)) {context.sync.stop();return;}
+          const metadata=await sharedAdminRpc('ride_admin_shared_context',{p_admin_code:state.adminCode,p_plan_date:scope.planDate,p_after_event:scope.eventCursor});
+          if (matchesAdminShared(context) && metadata?.ok && metadata.writeMode !== 'legacy'
+            && (['people','driver-list','settings'].includes(adminActiveTab()) || !context.secondary)) {
+            if (!await refreshAdminSharedSecondary(context)) throw Error('secondary_refresh_failed');
+          }
+          return metadata;
+        },
+        fetchSnapshot: scope => sharedAdminRpc('ride_admin_shared_snapshot',{p_admin_code:state.adminCode,p_plan_date:scope.planDate}),
+        getOperationResult: scope => sharedAdminRpc('ride_admin_shared_operation',{p_admin_code:state.adminCode,p_plan_date:scope.planDate,p_operation_id:scope.operationId}),
+        onState: update => applyAdminSharedState(context,update),
+        visibility:{isVisible:()=>document.hidden !== true,subscribe:fn=>subscribe(document,['visibilitychange'],fn)},
+        network:{isOnline:()=>navigator.onLine !== false,subscribe:fn=>subscribe(window,['online','offline','focus'],fn)}
+      });
+      const started=context.sync.start({actorId:context.actorKey,planDate:context.planDate});
+      if (context.pendingOperation || context.pendingSecondary) void context.sync.trackOperation(context.pendingOperation || context.pendingSecondary);
+      return started;
+    }
+
+    function adminSharedChanged({result}) {
+      const context = state.adminShared;
+      if (!context) return;
+      context.review = null;
+      if (result?.code === 'invalid_admin_code') { lockAdminShared(); return; }
+      if (result?.code === 'outcome_unknown') {
+        context.status='unconfirmed';retainAdminSharedRecovery(context);
+        void context.sync?.trackOperation(context.pendingOperation || context.pendingSecondary);
+      } else if (result?.ok) { void context.sync?.refresh('local-save'); }
+      updateAdminSharedStatus();
+    }
+
+    async function sendAdminSharedPending(context, pending) {
+      const editVersion=context.editVersion || 0;
+      pending.editVersion=editVersion;
+      context.saving=true; context.review=null; updateAdminSharedStatus();retainAdminSharedRecovery(context);
+      try {
+        const result=await sharedAdminRpc(pending.name,{...pending.args,p_admin_code:state.adminCode});
+        if (!matchesAdminShared(context)) return;
+        context.pendingOperation=null;
+        if (!result?.ok) {
+          context.secondaryConflict=result;
+          state.adminError=result?.code==='conflict' ? 'Shared details changed. Your input is preserved; compare before saving again.' : 'Shared save was rejected. Your input is preserved.';
+        } else {
+          if ((context.editVersion || 0)===editVersion) {context.personalDirty=false;context.personalForm=null;}
+          state.adminMessage=pending.kind==='publish' ? 'Routes published. Current shared state is refreshing.' : 'Saved to shared draft. Review and publish to update driver routes.';state.adminError='';
+        }
+        adminSharedChanged({result});
+        return result;
+      } catch(error) {
+        if (!matchesAdminShared(context)) return;
+        if (error.status === 401 || error.status === 403) { lockAdminShared();return; }
+        state.adminError='Unconfirmed: the request may have committed. Check status before retrying the original save.';
+        adminSharedChanged({result:{code:'outcome_unknown'}});
+      } finally { context.saving=false;if(matchesAdminShared(context)){retainAdminSharedRecovery(context);adminSharedSecondaryNotice();updateAdminSharedStatus();} }
+    }
+
+    async function saveAdminSharedRider(form, action='save', stop=null) {
+      const context=state.adminShared;
+      if (!matchesAdminShared(context) || context.snapshot?.writeMode !== 'shared' || context.pendingOperation || context.pendingSecondary || !adminSharedOnline()) {
+        state.adminError='Resolve pending work and reconnect before saving to the shared draft.';adminSharedSecondaryNotice();return;
+      }
+      try {
+        const captured=JSON.parse(form?.dataset?.sharedSnapshot || 'null');
+        if (!captured || captured.planDate !== context.planDate) throw Error('Reopen the rider to capture current shared versions.');
+        const rider=stop || Object.fromEntries(new FormData(form).entries());
+        rider.stopOrder=Number(rider.stopOrder || 1);rider.personId=rider.personId || null;rider.personVersion=rider.personVersion ? Number(rider.personVersion) : null;
+        context.personalForm={...rider};context.personalDirty=true;
+        const operation=window.RideShared.riderOperation(captured,rider,action,crypto.randomUUID(),crypto.randomUUID());
+        const pending={operationId:operation.operationId,name:'ride_admin_shared_mutate',args:{p_plan_date:context.planDate,p_operation:operation},scope:{actorKey:context.actorKey,planDate:context.planDate,generation:context.generation},kind:'rider'};
+        context.pendingOperation=pending;
+        const result=await sendAdminSharedPending(context,pending);
+        if (result?.ok && matchesAdminShared(context) && !context.personalDirty) { state.view='admin';state.adminSelectedStopId=null;render(); }
+      } catch(error) { state.adminError=error.message;adminSharedSecondaryNotice();retainAdminSharedRecovery(context); }
+    }
+
+    async function retryAdminSharedPending() {
+      const context=state.adminShared, pending=context?.pendingOperation || context?.pendingSecondary;
+      if (!pending?.args || !matchesAdminShared(context) || !adminSharedOnline() || context.saving) return;
+      // Lookup AND current snapshot reconciliation precede any same-ID/body retry.
+      await context.sync.trackOperation(pending);
+      if (!matchesAdminShared(context) || context.status !== 'saved' || !(context.pendingOperation || context.pendingSecondary)) return;
+      context.pendingSecondary=null;context.pendingOperation=pending;
+      return sendAdminSharedPending(context,pending);
+    }
+
+    function canPublishAdminShared() {
+      const c=state.adminShared;
+      return Boolean(c && matchesAdminShared(c) && c.snapshot?.writeMode==='shared' && adminSharedOnline() && c.status==='saved'
+        && !c.pendingOperation && !c.pendingSecondary && !c.personalDirty && !c.saving && c.review
+        && c.review.draftRevision===c.snapshot.draftRevision && c.review.eventCursor===c.snapshot.eventCursor
+        && c.review.baselinePublishedRevision===c.snapshot.baselinePublishedRevision);
+    }
+
+    async function reviewAdminShared() {
+      const context=state.adminShared;
+      if (!context || !adminSharedOnline()) return;
+      context.review=null;
+      await context.sync.refresh('review');
+      if (!matchesAdminShared(context) || context.status!=='saved' || context.pendingOperation || context.pendingSecondary) return;
+      context.review={draftRevision:context.snapshot.draftRevision,eventCursor:context.snapshot.eventCursor,baselinePublishedRevision:context.snapshot.baselinePublishedRevision};
+      state.view='adminReview';render();
+    }
+
+    async function publishAdminShared() {
+      const context=state.adminShared;
+      if (!canPublishAdminShared()) { state.adminError='Reconnect and review the current shared draft before publishing.';adminSharedSecondaryNotice();return; }
+      const operationId=crypto.randomUUID();
+      const pending={operationId,name:'ride_admin_shared_publish',kind:'publish',args:{p_plan_date:context.planDate,
+        p_expected_draft_revision:context.review.draftRevision,p_expected_baseline_revision:context.review.baselinePublishedRevision,p_operation_id:operationId},
+        scope:{actorKey:context.actorKey,planDate:context.planDate,generation:context.generation}};
+      context.pendingOperation=pending;
+      return sendAdminSharedPending(context,pending);
+    }
+
     async function loadAdminSnapshot(adminCode = state.adminCode) {
+      retainAdminSharedRecovery();
+      state.adminShared?.sync?.stop();
+      const generation = ++adminSharedGeneration;
+      const planDate = activePlanDate();
+      state.adminShared = null;
+      clearAdminPrivateState();
+      const currentRequest = () => generation === adminSharedGeneration && planDate === activePlanDate();
       state.adminLoading = true;
       state.adminError = "";
       render();
 
       try {
+        let metadata;
+        try {
+          metadata = await sharedAdminRpc('ride_admin_shared_context',{p_admin_code:adminCode,p_plan_date:planDate,p_after_event:0});
+          if (!currentRequest()) return;
+          if (!metadata?.ok || !metadata.actorKey) throw new Error(metadata?.code || 'invalid_admin_code');
+        } catch(error) {
+          if (!currentRequest()) return;
+          if (error.code !== 'PGRST202') throw error;
+        }
+        if (metadata && metadata.writeMode !== 'legacy') {
+          await sharedAdminModules();
+          if (!currentRequest()) return;
+          state.adminCode=adminCode;
+          const context={actorKey:metadata.actorKey,planDate,generation,snapshot:null,secondary:null,review:null,status:'reconnecting',onChange:adminSharedChanged};
+          state.adminShared=context;
+          const snapshot=await sharedAdminRpc('ride_admin_shared_snapshot',{p_admin_code:adminCode,p_plan_date:planDate});
+          if (!currentRequest()) return;
+          if (!snapshot?.ok) throw Error(snapshot?.code || 'shared_read_failed');
+          state.admin={...snapshot.publishedSnapshot,people:[]};
+          state.adminDraftBackup=null;state.adminPersonDraft=null;state.adminPersonSeed=null;
+          state.adminSelectedStopId=null;state.adminDeletedStopIds=[];
+          state.adminActiveTab='riders';state.adminMessage='';state.adminError='';
+          applyAdminSharedState(context,{status:'saved',snapshot});
+          restoreAdminSharedUncertainty(context);
+          await refreshAdminSharedSecondary(context);
+          if (!currentRequest()) return;
+          state.view='admin';closeCodeModal();
+          void startAdminSharedSync(context);
+          return;
+        }
         const snapshot = await rpc("ride_admin_snapshot", {
           p_admin_code: adminCode,
           p_plan_date: activePlanDate(),
         }, adminRpcOptions());
 
+        if (!currentRequest()) return;
         if (!snapshot?.ok) {
           throw new Error(snapshot?.error || "invalid_admin_code");
         }
 
         const security = await loadAdminSecurityContext(adminCode);
+        if (!currentRequest()) return;
         const drivers = orderDriversForDisplay(snapshot.drivers || []);
         state.adminCode = adminCode;
         state.planDate = snapshot.plan?.date || activePlanDate();
@@ -7356,6 +7714,7 @@
           security: mergedAdminSecurity(snapshot.security, security),
         };
         await loadAdminActivity();
+        if (!currentRequest()) return;
         state.adminDraftStops = cloneStops(snapshot.stops);
         state.adminDeletedStopIds = [];
         state.adminSelectedStopId = null;
@@ -7371,11 +7730,19 @@
         state.adminPublishFailed = false;
         loadAdminDraftBackupNotice();
         await loadAdminServerDraftNotice();
+        if (!currentRequest()) return;
+        if (metadata) {
+          await sharedAdminModules();
+          if (!currentRequest()) return;
+          const context={actorKey:metadata.actorKey,planDate,generation,snapshot:metadata,status:'saved',onChange:adminSharedChanged};
+          state.adminShared=context;void startAdminSharedSync(context);
+        }
         state.adminMessage = "";
         state.view = "admin";
         closeCodeModal();
         loadAdminRouteTiming();
       } catch (error) {
+        if (!currentRequest()) return;
         state.adminError = error.message === "invalid_admin_code"
           ? (state.adminSession?.access_token && !adminCode ? "This login is not approved for ride admin." : "Admin code did not match.")
           : "Admin could not open.";
@@ -7385,12 +7752,14 @@
         }
         console.error(error);
       } finally {
+        if (!currentRequest()) return;
         state.adminLoading = false;
         render();
       }
     }
 
     async function publishAdminDraft() {
+      if (adminSharedSecondaryMode() !== "legacy") return publishAdminShared();
       if (!state.adminCode && !state.adminSession?.access_token) return;
       state.adminError = "";
       state.adminPublishFailed = false;
@@ -7723,7 +8092,7 @@
         adminSharedSecondaryNotice();
         return { ok: false, code: "update_required" };
       }
-      if (context.pendingSecondary) {
+      if (context.pendingSecondary || context.pendingOperation || context.saving) {
         state.adminError = "Resolve the pending shared save before sending another change.";
         adminSharedSecondaryNotice();
         return { ok: false, code: "operation_pending" };
@@ -7761,9 +8130,11 @@
           ...(kind === "person_pickup" ? { entityId: expected.entityId, expectedEntityVersion: expected.entityVersion } : {}), payload };
       } else return { ok: false, code: "validation_failed" };
       // Keep the exact request/ID for status lookup after response uncertainty. Never replay a snapshot.
-      context.pendingSecondary = { operationId, name, args, scope, kind };
+      const editVersion=context.editVersion || 0;
+      context.pendingSecondary = { operationId, name, args, scope, kind, editVersion };
+      context.saving = true;updateAdminSharedStatus();retainAdminSharedRecovery(context);
       try {
-        const saved = await rpc(name, args, adminRpcOptions());
+        const saved = await sharedAdminRpc(name, args);
         if (!matches()) return { ok: false, code: "stale_response" };
         context.pendingSecondary = null;
         if (!saved?.ok) {
@@ -7775,16 +8146,18 @@
           return saved;
         }
         context.secondaryConflict = null;
+        if ((context.editVersion || 0)===editVersion) context.personalDirty=false;
         context.review = null;
         if (kind === "person" && saved.value?.person) {
           const person = saved.value.person;
-          state.admin.people = [...(state.admin.people || []).filter(item => item.id !== person.id), person];
+          const newer = (state.admin.people || []).find(item => item.id === person.id && item.recordVersion > person.recordVersion);
+          if (!newer) state.admin.people = [...(state.admin.people || []).filter(item => item.id !== person.id), person];
           state.adminMessage = "Contact details saved to People Bank. Use Apply saved contact to a linked pickup to change the shared route.";
         } else if (kind === "catalog" && saved.value?.driver) {
           const driver = saved.value.driver;
           state.admin.driverPool = [...(state.admin.driverPool || []).filter(item => item.slug !== driver.slug), driver];
           state.adminMessage = "Driver saved to the catalog. Select availability to add this driver to the shared draft.";
-        } else if (kind === "branding") {
+        } else if (kind === "branding" && !(context.secondary?.brandingVersion > saved.value.recordVersion)) {
           context.secondary = { ...context.secondary, brandingVersion: saved.value.recordVersion,
             branding: { ...context.secondary?.branding, ...saved.value.branding } };
           state.appSettings = normalizeAppSettings({ ...state.appSettings, ...saved.value.branding });
@@ -7797,11 +8170,12 @@
         return saved;
       } catch (error) {
         if (!matches()) return { ok: false, code: "stale_response" };
+        if (error.status === 401 || error.status === 403) { lockAdminShared();return {ok:false,code:'invalid_admin_code'}; }
         state.adminError = "Save outcome is unknown. Your input is preserved; check operation status before retrying.";
         adminSharedSecondaryNotice();
         context.onChange?.({ kind, result: { ok: false, code: "outcome_unknown" }, scope });
         return { ok: false, code: "outcome_unknown", operationId };
-      }
+      } finally { context.saving=false;if (matches()) { retainAdminSharedRecovery(context);updateAdminSharedStatus(); } }
     }
 
     function saveAdminSharedBrandingFromForm(form) {
@@ -9767,7 +10141,7 @@
           ${adminDraftStatusHtml(changed)}
           ${adminDraftRestoreHtml()}
           ${adminNotifyPromptHtml()}
-          ${activeView}
+          <div data-shared-route-content style="display: contents">${activeView}</div>
           ${activeTab === "changes" ? "" : adminReviewBar(changed)}
           ${adminMenuDrawerHtml()}
         </div>`;
@@ -10043,7 +10417,7 @@
       }
 
       return `
-        <form class="stack" data-admin-form="rider">
+        <form class="stack" data-admin-form="rider" data-shared-snapshot="${escapeHtml(JSON.stringify(state.adminShared?.snapshot || null))}">
           <section class="intro-block compact">
             <div class="admin-top-row">
               <div>
@@ -10107,7 +10481,7 @@
 
           <div class="admin-form-actions">
             <button class="secondary-action" type="button" data-action="${backAction}">Cancel</button>
-            <button class="primary-action" type="submit">Save draft</button>
+            <button class="primary-action" type="submit">${adminSharedSecondaryMode() === "legacy" ? "Save draft" : "Save to shared draft"}</button>
           </div>
         </form>`;
     }
@@ -10445,6 +10819,10 @@
       else if (state.view === "adminEdit") screen.innerHTML = adminEditView();
       else if (state.view === "adminReset") screen.innerHTML = adminResetView();
       else screen.innerHTML = homeView();
+      if (String(state.view).startsWith("admin") && state.adminShared) {
+        screen.innerHTML = `<div data-shared-status-region>${adminSharedStatusHtml()}</div>` + screen.innerHTML;
+        updateAdminSharedStatus();
+      }
       syncPickedChips();
     }
 
@@ -10528,12 +10906,15 @@
     async function submitCode(event) {
       event.preventDefault();
       if (state.codeMode === "admin") {
+        const generation=adminSharedGeneration;
         try {
           const adminCode = state.adminLoginMode === "profile"
             ? await loginAdminProfile(state.selectedAdminProfileSlug, driverCode.value)
             : driverCode.value;
+          if (generation!==adminSharedGeneration) return;
           await loadAdminSnapshot(adminCode);
         } catch (error) {
+          if (generation!==adminSharedGeneration) return;
           codeError.textContent = "Admin password could not open Ride Control.";
           codeError.hidden = false;
           console.error(error);
@@ -10702,6 +11083,10 @@
       if (action === "adminNotifyReview") openAdminNotifyReview();
       if (action === "adminNotifyCancel") cancelAdminNotify();
       if (action === "adminNotifySend") sendAdminRouteNotifications();
+      if (action === "adminSharedReview") reviewAdminShared();
+      if (action === "adminSharedCheck") state.adminShared?.sync?.refresh("manual");
+      if (action === "adminSharedRetry") retryAdminSharedPending();
+      if (action === "adminReviewChanges" && adminSharedSecondaryMode() !== "legacy") { reviewAdminShared();return; }
       if (action === "adminReviewChanges") {
         state.view = "adminReview";
         render();

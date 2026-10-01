@@ -103,3 +103,18 @@ test('explicit person dependency never infers a master from name alone', async (
   assert.deepEqual(core.personDependency({id:'00000000-0000-0000-0000-000000000001',recordVersion:4}),{personId:'00000000-0000-0000-0000-000000000001',personVersion:4});
   assert.throws(()=>core.personDependency({id:'00000000-0000-0000-0000-000000000001'}),/version/);
 });
+
+test('rider operation uses captured versions and group dependencies; rejects combined move/edit', async()=>{
+  const core=await import('../src/shared-admin-core.js'); assert.equal(typeof core.riderOperation,'function');
+  const base={planDate:'2099-01-04',baselinePublishedRevision:3,groupVersions:{a:4,b:2},riders:[{id:'r',entityVersion:7,driverSlug:'a',name:'Before',stopOrder:1}]};
+  const op=core.riderOperation(base,{...base.riders[0],name:'After'},'save','operation');
+  assert.equal(op.kind,'rider_update');assert.equal(op.expectedEntityVersion,7);assert.deepEqual(op.expectedGroupVersions,{a:4});
+  const move=core.riderOperation(base,{...base.riders[0],driverSlug:'b'},'save','move');assert.equal(move.kind,'rider_move');assert.deepEqual(move.expectedGroupVersions,{a:4,b:2});
+  assert.throws(()=>core.riderOperation(base,{...base.riders[0],driverSlug:'b',name:'After'},'save','bad'),/separately/);
+  const remove=core.riderOperation(base,base.riders[0],'remove','rm');assert.deepEqual(remove.payload,{});
+});
+test('secondary hydration never rolls back a newer person or branding version', async()=>{
+  const core=await import('../src/shared-admin-core.js');assert.equal(typeof core.mergeSecondary,'function');
+  const merged=core.mergeSecondary({people:[{id:'a',recordVersion:4,name:'new'}],brandingVersion:8,branding:{homeTitle:'new'}},{people:[{id:'a',recordVersion:3,name:'old'},{id:'b',recordVersion:1}],brandingVersion:7,branding:{homeTitle:'old'}});
+  assert.equal(merged.people[0].name,'new');assert.equal(merged.people.length,2);assert.equal(merged.branding.homeTitle,'new');
+});

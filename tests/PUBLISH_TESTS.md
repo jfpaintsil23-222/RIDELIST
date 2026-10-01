@@ -57,3 +57,37 @@ UI source is unchanged; existing frontend draft-retention/error tests pass.
 Deployment is separate: verify the target schema/version, review the function
 patch, and apply the updated function through the approved database deployment
 workflow. Nothing in these tests deploys or calls production.
+
+## Shared admin schema tests
+
+`tests/shared_admin_db.test.mjs` uses the same disposable container and creates
+its own `ridelist_shared_admin_test` database. Publish tests continue to recreate
+their schema in `postgres`, so both files can run in the complete Node suite.
+The new harness verifies PostgreSQL major version 17, network mode `none`, no
+published ports, and a tmpfs data directory before loading any fixture.
+
+```sh
+RIDELIST_TEST_CONTAINER=ridelist-publish-test-local node --test tests/shared_admin_db.test.mjs
+RIDELIST_TEST_CONTAINER=ridelist-publish-test-local node --test tests/*.test.mjs
+```
+
+The shared fixture contains synthetic profiles, sessions, JWT membership, and
+unrelated church objects. It loads the actual profile-session actor helper from
+`admin_security.sql` and the complete additive `collaborative_ride_control.sql`.
+It also loads the real legacy code authorization helpers, verifying that a valid
+legacy shared code remains accepted there and is denied by the shared RPCs.
+Its lightweight `auth.uid()`/`auth.jwt()` fixtures model gateway-provided claims;
+they do not test JWT signature verification. The published snapshot adapter is
+a synthetic envelope; existing publish transaction tests cover live rollback.
+
+Coverage includes stable profile identity across token refresh, expiry/revocation,
+disabled profiles/admin membership, active JWT session/expiry, driver/forged
+identity denial, table and helper privileges, deny-by-default RLS even after an
+accidental read grant, three-admin shared snapshots, ordered minimal events,
+legacy-mode read-only behavior, and safe schema reapplication. It never changes
+real profiles, passwords or access grants. Missing `RIDELIST_TEST_CONTAINER`
+explicitly skips database cases; do not supply production integration credentials.
+
+Schema preparation does not initialize a workspace or enable shared writers.
+Shared cutover must wait for mutation/publication and legacy compatibility fences,
+recovery review, and separately authorized rollout.

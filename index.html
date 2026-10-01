@@ -7478,10 +7478,11 @@
           }
         }
       } else if (incoming) context.snapshot = incoming;
-      if (update.operationResult && update.operationResult.code !== "not_found") {
-        const pending=context.pendingOperation || context.pendingSecondary;
-        if (update.operationResult.ok && (pending?.editVersion || 0)===(context.editVersion || 0)) context.personalDirty=false;
-        context.pendingOperation = null; context.pendingSecondary = null;
+      const completedOperationId=update.operationResultId;
+      const pending=[context.pendingOperation,context.pendingSecondary].find(item => item?.operationId === completedOperationId);
+      if (pending && update.operationResult && update.operationResult.code !== "not_found") {
+        if (update.operationResult.ok && (pending.editVersion || 0)===(context.editVersion || 0)) context.personalDirty=false;
+        settleAdminSharedPending(context,completedOperationId);
         context.secondaryConflict = update.operationResult.ok ? null : update.operationResult;
         context.review = null;
         state.adminMessage = update.operationResult.ok ? "Save confirmed. Current shared state refreshed; your form is preserved." : "Save rejected. Compare your preserved input with current shared details.";
@@ -7563,14 +7564,20 @@
       updateAdminSharedStatus();
     }
 
+    function settleAdminSharedPending(context, operationId) {
+      context.sync?.settleOperation(operationId);
+      if (context.pendingOperation?.operationId === operationId) context.pendingOperation=null;
+      if (context.pendingSecondary?.operationId === operationId) context.pendingSecondary=null;
+    }
+
     async function sendAdminSharedPending(context, pending) {
-      const editVersion=context.editVersion || 0;
-      pending.editVersion=editVersion;
+      const editVersion=pending.editVersion ?? 0;
       context.saving=true; context.review=null; updateAdminSharedStatus();retainAdminSharedRecovery(context);
       try {
         const result=await sharedAdminRpc(pending.name,{...pending.args,p_admin_code:state.adminCode});
         if (!matchesAdminShared(context)) return;
-        context.pendingOperation=null;
+        if (context.pendingOperation?.operationId !== pending.operationId) return result;
+        settleAdminSharedPending(context,pending.operationId);
         if (!result?.ok) {
           context.secondaryConflict=result;
           state.adminError=result?.code==='conflict' ? 'Shared details changed. Your input is preserved; compare before saving again.' : 'Shared save was rejected. Your input is preserved.';
@@ -7583,6 +7590,7 @@
       } catch(error) {
         if (!matchesAdminShared(context)) return;
         if (error.status === 401 || error.status === 403) { lockAdminShared();return; }
+        if (context.pendingOperation?.operationId !== pending.operationId) return;
         state.adminError='Unconfirmed: the request may have committed. Check status before retrying the original save.';
         adminSharedChanged({result:{code:'outcome_unknown'}});
       } finally { context.saving=false;if(matchesAdminShared(context)){retainAdminSharedRecovery(context);adminSharedSecondaryNotice();updateAdminSharedStatus();} }
@@ -7590,17 +7598,18 @@
 
     async function saveAdminSharedRider(form, action='save', stop=null) {
       const context=state.adminShared;
-      if (!matchesAdminShared(context) || context.snapshot?.writeMode !== 'shared' || context.pendingOperation || context.pendingSecondary || !adminSharedOnline()) {
+      if (!matchesAdminShared(context) || context.snapshot?.writeMode !== 'shared' || context.pendingOperation || context.pendingSecondary || context.saving || !adminSharedOnline()) {
         state.adminError='Resolve pending work and reconnect before saving to the shared draft.';adminSharedSecondaryNotice();return;
       }
       try {
         const captured=JSON.parse(form?.dataset?.sharedSnapshot || 'null');
         if (!captured || captured.planDate !== context.planDate) throw Error('Reopen the rider to capture current shared versions.');
         const rider=stop || Object.fromEntries(new FormData(form).entries());
+        rider.address=String(rider.addressChoice || rider.address || '').trim();
         rider.stopOrder=Number(rider.stopOrder || 1);rider.personId=rider.personId || null;rider.personVersion=rider.personVersion ? Number(rider.personVersion) : null;
         context.personalForm={...rider};context.personalDirty=true;
         const operation=window.RideShared.riderOperation(captured,rider,action,crypto.randomUUID(),crypto.randomUUID());
-        const pending={operationId:operation.operationId,name:'ride_admin_shared_mutate',args:{p_plan_date:context.planDate,p_operation:operation},scope:{actorKey:context.actorKey,planDate:context.planDate,generation:context.generation},kind:'rider'};
+        const pending={operationId:operation.operationId,name:'ride_admin_shared_mutate',args:{p_plan_date:context.planDate,p_operation:operation},scope:{actorKey:context.actorKey,planDate:context.planDate,generation:context.generation},kind:'rider',editVersion:context.editVersion || 0};
         context.pendingOperation=pending;
         const result=await sendAdminSharedPending(context,pending);
         if (result?.ok && matchesAdminShared(context) && !context.personalDirty) { state.view='admin';state.adminSelectedStopId=null;render(); }
@@ -7639,7 +7648,7 @@
       const context=state.adminShared;
       if (!canPublishAdminShared()) { state.adminError='Reconnect and review the current shared draft before publishing.';adminSharedSecondaryNotice();return; }
       const operationId=crypto.randomUUID();
-      const pending={operationId,name:'ride_admin_shared_publish',kind:'publish',args:{p_plan_date:context.planDate,
+      const pending={operationId,name:'ride_admin_shared_publish',kind:'publish',editVersion:context.editVersion || 0,args:{p_plan_date:context.planDate,
         p_expected_draft_revision:context.review.draftRevision,p_expected_baseline_revision:context.review.baselinePublishedRevision,p_operation_id:operationId},
         scope:{actorKey:context.actorKey,planDate:context.planDate,generation:context.generation}};
       context.pendingOperation=pending;
@@ -8136,7 +8145,8 @@
       try {
         const saved = await sharedAdminRpc(name, args);
         if (!matches()) return { ok: false, code: "stale_response" };
-        context.pendingSecondary = null;
+        if (context.pendingSecondary?.operationId !== operationId) return saved;
+        settleAdminSharedPending(context,operationId);
         if (!saved?.ok) {
           context.secondaryConflict = saved;
           state.adminError = saved?.code === "conflict" ? "Shared details changed. Your input is preserved; review the current record before saving again."

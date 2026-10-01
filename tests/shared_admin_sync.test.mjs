@@ -24,3 +24,16 @@ test('missed events fetch full detail; noncontiguous event IDs are normal',async
 test('uncertain lookup not_found retains original ID/body; old successful result never patches current snapshot',async()=>{let result={ok:false,code:'not_found'};const pending={operationId:'id',args:{body:'original'}};const h=harness({getOperationResult:async()=>result});await h.start();h.ctrl.trackOperation(pending);await settle();assert.equal(h.states.at(-1).pendingOperation,pending);assert.equal(h.states.at(-1).operationResult.code,'not_found');result={ok:true,draftRevision:0};await h.tick(3000);assert.equal(h.states.at(-1).snapshot.draftRevision,1);assert.equal(h.states.at(-1).pendingOperation,null);});
 test('coalesced refresh promise resolves only after its queued refresh finishes',async()=>{const first=deferred(),second=deferred();let count=0,done=false;const h=harness({fetchContext:async()=>++count===1?first.promise:second.promise});h.ctrl.start({actorId:'a',planDate:h.snapshot.planDate});const review=h.ctrl.refresh('review').then(()=>done=true);await settle();assert.equal(done,false);first.resolve({...h.snapshot,actorKey:'a'});await settle();assert.equal(done,false);second.resolve({...h.snapshot,actorKey:'a'});await review;assert.equal(done,true);});
 test('legacy to shared transition reconciles full snapshot',async()=>{let shared=false;const h=harness({fetchContext:async()=>({...h.snapshot,actorKey:'a',initialized:shared,writeMode:shared?'shared':'legacy'})});await h.start();shared=true;await h.tick(3000);assert.equal(h.states.at(-1).snapshot.writeMode,'shared');assert.deepEqual(h.states.at(-1).snapshot.riders,[]);});
+test('lookup completion carries the captured operation ID and cannot settle a newer tracked request', async () => {
+  const responseA=deferred(), operationA={operationId:'A'}, operationB={operationId:'B'};
+  const h=harness({getOperationResult:async({operationId})=>operationId==='A'?responseA.promise:{ok:false,code:'not_found'}});
+  await h.start();
+  const first=h.ctrl.trackOperation(operationA);
+  await settle();
+  const second=h.ctrl.trackOperation(operationB);
+  responseA.resolve({ok:true,operationId:'A'});
+  await first;await second;
+  assert.equal(h.states.at(-1).pendingOperation,operationB);
+  assert.equal(h.states.at(-1).operationResultId,'B');
+  assert.equal(h.states.at(-1).operationResult.code,'not_found');
+});

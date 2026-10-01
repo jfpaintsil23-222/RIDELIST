@@ -37,3 +37,113 @@ test('account switch clears old private projections before authentication and on
 test('shared form data uses the draft capture and survives typing during a pending successful save',async()=>{let resolve;const reply=new Promise(r=>resolve=r);const h=await appHarness(name=>name==='ride_admin_shared_mutate'?reply:undefined);await h.start();const c=h.app.state.adminShared;h.app.state.view='adminEdit';const form={dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'Saved version'}};const saving=h.app.saveAdminDraftFromForm(form);c.editVersion=1;c.personalDirty=true;resolve({ok:true});await saving;assert.equal(h.app.state.view,'adminEdit');assert.equal(c.personalDirty,true);await h.app.signOutAdmin();});
 test('secondary refresh is serialized with metadata polling and does not overlap focus refresh',async()=>{let hold=false,release,contexts=0;const wait=new Promise(r=>release=r);const h=await appHarness(name=>{if(name==='ride_admin_shared_context')contexts++;if(hold && name==='ride_admin_shared_secondary')return wait;});await h.start();h.app.state.adminActiveTab='people';hold=true;const first=h.app.state.adminShared.sync.refresh('poll');await settle();const count=contexts;const next=h.app.state.adminShared.sync.refresh('focus');await settle();assert.equal(contexts,count);release({ok:true,actorKey:'profile:a',planDate:date,people:[],driverPool:[],brandingVersion:1,branding:{}});await first;await next;await h.app.signOutAdmin();});
 test('delayed logout response cannot clear a newly signed-in workspace',async()=>{let release;const wait=new Promise(r=>release=r);const h=await appHarness();await h.start();h.app.state.adminSession={access_token:'old-session'};const priorFetch=h.context.fetch;h.context.fetch=(url,init)=>url.includes('/auth/v1/logout')?wait:priorFetch(url,init);const logout=h.app.signOutAdmin();await h.start();const current=h.app.state.adminShared;release({ok:true,json:async()=>({})});await logout;assert.ok(h.app.state.admin);assert.equal(h.app.state.adminShared,current);await h.app.signOutAdmin();});
+
+const pendingReply = () => {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
+
+for (const nextKind of ['rider', 'route']) {
+  test(`an old lookup cannot erase the newer ${nextKind} request when its reply is lost`, async () => {
+    const retryReply = pendingReply(), oldLookup = pendingReply(), nextReply = pendingReply();
+    let writes = 0, lookups = 0, originalId;
+    const h = await appHarness((name, args) => {
+      if (name === 'ride_admin_shared_mutate') {
+        writes++;
+        if (writes === 1) { originalId = args.p_operation.operationId; throw Error('original reply lost'); }
+        if (writes === 2) return retryReply.promise;
+        return nextReply.promise;
+      }
+      if (name === 'ride_admin_shared_save_settings') return nextReply.promise;
+      if (name === 'ride_admin_shared_operation' && args.p_operation_id === originalId) {
+        lookups++;
+        return lookups === 3 ? oldLookup.promise : {ok:false,code:'not_found'};
+      }
+    });
+    await h.start();
+    const context = h.app.state.adminShared;
+    const form = {dataset:{sharedSnapshot:JSON.stringify(context.snapshot)},values:{...context.snapshot.riders[0],name:'Original'}};
+    await h.app.saveAdminDraftFromForm(form);
+    await settle();
+    const retry = h.app.retryAdminSharedPending();
+    await settle();
+    assert.equal(writes, 2);
+    const previousRefresh = context.sync.refresh('poll');
+    await settle();
+    assert.equal(lookups, 3, 'lookup A is in flight before its direct retry succeeds');
+    retryReply.resolve({ok:true,operationId:originalId});
+    await retry;
+    form.values.name = 'Second';
+    const saveNext = nextKind === 'rider'
+      ? h.app.saveAdminDraftFromForm(form)
+      : h.app.runAdminSharedSecondary('route',{planTitle:'Second'},{recordVersion:1});
+    await settle();
+    const field = nextKind === 'rider' ? 'pendingOperation' : 'pendingSecondary';
+    const next = context[field];
+    assert.ok(next?.operationId);
+    const originalBody = JSON.stringify(next.args);
+    oldLookup.resolve({ok:true,operationId:originalId});
+    await previousRefresh;
+    await settle();
+    nextReply.reject(Error('second reply lost'));
+    await saveNext;
+    await settle();
+    assert.equal(context[field]?.operationId, next.operationId);
+    assert.equal(JSON.stringify(context[field].args), originalBody);
+    assert.ok(h.calls.some(call => call.name === 'ride_admin_shared_operation' && call.args.p_operation_id === next.operationId));
+    assert.ok([...h.storage.values()].some(value => value.includes(next.operationId)));
+    await h.app.signOutAdmin();
+  });
+}
+
+for (const kind of ['rider', 'route']) {
+  test(`${kind} retry keeps the original edit capture and cannot authorize publishing later unsent input`, async () => {
+    let writes = 0;
+    const name = kind === 'rider' ? 'ride_admin_shared_mutate' : 'ride_admin_shared_save_settings';
+    const h = await appHarness(rpcName => {
+      if (rpcName === name && ++writes === 1) throw Error('response lost');
+    });
+    await h.start();
+    const context = h.app.state.adminShared;
+    const form = {dataset:{sharedSnapshot:JSON.stringify(context.snapshot)},values:{...context.snapshot.riders[0],name:'Submitted'}};
+    if (kind === 'rider') await h.app.saveAdminDraftFromForm(form);
+    else await h.app.runAdminSharedSecondary('route',{planTitle:'Submitted'},{recordVersion:1});
+    await settle();
+    const original = context.pendingOperation || context.pendingSecondary;
+    const submittedVersion = original.editVersion;
+    context.editVersion = submittedVersion + 1;
+    context.personalDirty = true;
+    const laterInput = {name:'Typed after submission'};
+    context.personalForm = laterInput;
+    await h.app.retryAdminSharedPending();
+    await settle();
+    assert.equal(original.editVersion, submittedVersion);
+    assert.equal(context.personalDirty, true);
+    assert.equal(context.personalForm, laterInput);
+    const bodies = h.calls.filter(call => call.name === name).map(call => call.args);
+    assert.deepEqual(bodies[0], bodies[1], 'the original body and operation ID are retried');
+    await h.app.reviewAdminShared();
+    await h.app.publishAdminDraft();
+    assert.equal(h.calls.some(call => call.name === 'ride_admin_shared_publish'), false);
+    await h.app.signOutAdmin();
+  });
+}
+
+test('selected People Bank addressChoice reaches the versioned rider-add payload', async () => {
+  const h = await appHarness();
+  await h.start();
+  const context = h.app.state.adminShared;
+  const form = {dataset:{sharedSnapshot:JSON.stringify(context.snapshot)},values:{
+    id:'',name:'Synthetic selected person',driverSlug:'a',stopOrder:'1',
+    personId:'00000000-0000-4000-8000-000000000009',personVersion:'4',
+    addressChoice:' Chosen synthetic campus address '
+  }};
+  await h.app.saveAdminDraftFromForm(form);
+  const operation = h.calls.find(call => call.name === 'ride_admin_shared_mutate').args.p_operation;
+  assert.equal(operation.kind, 'rider_add');
+  assert.equal(operation.payload.address, 'Chosen synthetic campus address');
+  assert.equal(operation.payload.personVersion, 4);
+  assert.equal(operation.payload.personId, form.values.personId);
+  await h.app.signOutAdmin();
+});

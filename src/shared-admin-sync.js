@@ -6,14 +6,14 @@ export function createAdminSync({ fetchContext, fetchSnapshot, getOperationResul
   clock = globalThis, random = Math.random, visibility = { isVisible: () => true },
   network = { isOnline: () => true } }) {
   let generation=0, scope=null, timer=null, running=false, inFlight=false, immediate=false;
-  let failures=0, snapshot=null, pendingOperation=null, operationResult=null, unsubs=[], waiters=[], queuedReason=null;
+  let failures=0, snapshot=null, pendingOperation=null, operationResult=null, operationResultId=null, unsubs=[], waiters=[], queuedReason=null;
   const available = () => visibility.isVisible() && network.isOnline();
   const clearTimer = () => { if(timer!==null) clock.clearTimeout(timer); timer=null; };
-  const emit = (status, extra={}) => onState({ ...scope, generation, status, snapshot, pendingOperation, operationResult, ...extra });
+  const emit = (status, extra={}) => onState({ ...scope, generation, status, snapshot, pendingOperation, operationResult, operationResultId, ...extra });
   function stop() {
     running=false; generation++; clearTimer(); immediate=false;queuedReason=null;
     waiters.splice(0).forEach(resolve=>resolve());
-    unsubs.forEach(fn=>fn?.()); unsubs=[]; snapshot=null; pendingOperation=null; operationResult=null;
+    unsubs.forEach(fn=>fn?.()); unsubs=[]; snapshot=null; pendingOperation=null; operationResult=null; operationResultId=null;
   }
   function validate(result) {
     if (!result?.ok) throw Object.assign(new Error(result?.code || 'read_failed'), {code:result?.code});
@@ -32,12 +32,19 @@ export function createAdminSync({ fetchContext, fetchSnapshot, getOperationResul
     const current=()=>running && generation===requestGeneration;
     try {
       if(pendingOperation) {
-        const result=await getOperationResult({...requestScope,operationId:pendingOperation.operationId});
+        const queriedOperation=pendingOperation;
+        const result=await getOperationResult({...requestScope,operationId:queriedOperation.operationId});
         if(!current()) return;
         if(result?.code==='invalid_admin_code') validate(result);
-        operationResult=result;
-        // not_found can mean the original request is still committing. Retain it.
-        if(result && result.code!=='not_found') pendingOperation=null;
+        // A direct reply may have settled this operation, or a newer request may
+        // now be tracked. Bind completion to the object captured before await.
+        if(pendingOperation===queriedOperation) {
+          if(result?.operationId && result.operationId!==queriedOperation.operationId) throw Error('operation_result_mismatch');
+          operationResult=result;
+          operationResultId=queriedOperation.operationId;
+          // not_found can mean the original request is still committing. Retain it.
+          if(result && result.code!=='not_found') pendingOperation=null;
+        }
       }
       const metadata=await fetchContext({...requestScope,eventCursor:snapshot?.eventCursor || 0});
       if(!current()) return;
@@ -51,7 +58,7 @@ export function createAdminSync({ fetchContext, fetchSnapshot, getOperationResul
         snapshot=reconcileSnapshot(snapshot, incoming,{...requestScope,requestGeneration});
       }
       failures=0; emit(available() ? 'saved' : 'reconnecting',{metadata,reason});
-      operationResult=null;
+      operationResult=null; operationResultId=null;
     } catch(error) {
       if(!current()) return;
       if(error.code==='invalid_admin_code' || error.status===401 || error.status===403) {
@@ -75,6 +82,14 @@ export function createAdminSync({ fetchContext, fetchSnapshot, getOperationResul
       for(const source of [visibility,network]) if(source.subscribe) unsubs.push(source.subscribe(()=>void refresh('resume')));
       return refresh('start');
     },
-    trackOperation(operation) { pendingOperation=operation; operationResult=null; return refresh('operation'); }
+    settleOperation(operationId) {
+      if(pendingOperation?.operationId===operationId) pendingOperation=null;
+      if(operationResultId===operationId) { operationResult=null;operationResultId=null; }
+    },
+    trackOperation(operation) {
+      if(!operation?.operationId) return;
+      pendingOperation=operation; operationResult=null; operationResultId=null;
+      return refresh('operation');
+    }
   };
 }

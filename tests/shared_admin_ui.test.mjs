@@ -19,7 +19,7 @@ async function appHarness(handler=()=>undefined){
   localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   fetch:async(url,init)=>{const name=url.split('/').at(-1),args=JSON.parse(init?.body||'{}');if(!name.startsWith('ride_admin_'))return {ok:true,json:async()=>[]};calls.push({name,args});const custom=await handler(name,args);const result=custom ?? (name==='ride_admin_shared_context'?{...snapshot(),actorKey:'profile:a',initialized:true}:name==='ride_admin_shared_snapshot'?snapshot():name==='ride_admin_shared_secondary'?{ok:true,actorKey:'profile:a',planDate:date,people:[],driverPool:[],brandingVersion:1,branding:{}}:name==='ride_admin_shared_operation'?{ok:false,code:'not_found'}:{ok:true});return {ok:true,json:async()=>result};}};
  vm.createContext(context);const html=await readFile(new URL('../index.html',import.meta.url),'utf8');const script=html.match(/<script>([\s\S]*)<\/script>/)[1];
- vm.runInContext(script+`\nglobalThis.app={state,loadAdminSnapshot,signOutAdmin,saveAdminDraftFromForm,deleteAdminDraftStop,publishAdminDraft,runAdminSharedSecondary,adminEditView,render,applyAdminSharedState:typeof applyAdminSharedState==='function'?applyAdminSharedState:undefined,reviewAdminShared:typeof reviewAdminShared==='function'?reviewAdminShared:undefined,retryAdminSharedPending:typeof retryAdminSharedPending==='function'?retryAdminSharedPending:undefined};`,context);
+ vm.runInContext(script+`\nglobalThis.app={state,adminView,adminSharedStatusHtml,adminRouteWarnings,adminPublishIssues,activeRideBranding,homeArt,quickMoveAdminShared:typeof quickMoveAdminShared==='function'?quickMoveAdminShared:undefined,compareAdminSharedConflict:typeof compareAdminSharedConflict==='function'?compareAdminSharedConflict:undefined,reapplyAdminSharedConflict:typeof reapplyAdminSharedConflict==='function'?reapplyAdminSharedConflict:undefined,loadAdminSharedRecovery:typeof loadAdminSharedRecovery==='function'?loadAdminSharedRecovery:undefined,importAdminSharedRecovery:typeof importAdminSharedRecovery==='function'?importAdminSharedRecovery:undefined,loadAdminSnapshot,signOutAdmin,saveAdminDraftFromForm,deleteAdminDraftStop,publishAdminDraft,runAdminSharedSecondary,adminEditView,render,applyAdminSharedState:typeof applyAdminSharedState==='function'?applyAdminSharedState:undefined,reviewAdminShared:typeof reviewAdminShared==='function'?reviewAdminShared:undefined,retryAdminSharedPending:typeof retryAdminSharedPending==='function'?retryAdminSharedPending:undefined};`,context);
  const app=context.app;app.state.planDate=date;return {app,calls,elements,storage,context,async start(){await app.loadAdminSnapshot('synthetic-token');await settle();}};
 }
 test('shared login hydrates protected snapshot/secondary and never selects legacy recovery winner',async()=>{const h=await appHarness();await h.start();assert.equal(h.app.state.adminShared?.actorKey,'profile:a');assert.equal(h.app.state.adminDraftStops[0].name,'Synthetic rider');assert.equal(h.calls.some(c=>c.name==='ride_admin_get_draft'),false);h.app.signOutAdmin();});
@@ -146,4 +146,80 @@ test('selected People Bank addressChoice reaches the versioned rider-add payload
   assert.equal(operation.payload.personVersion, 4);
   assert.equal(operation.payload.personId, form.values.personId);
   await h.app.signOutAdmin();
+});
+
+
+test('phone_navigation_retained with compact collaboration controls and desktop_same_actions_and_state',async()=>{
+ const h=await appHarness();await h.start();const view=h.app.adminView();
+ for(const marker of ['Today','data-action="adminMenuOpen"','data-admin-tab="drivers"','data-admin-tab="riders"','data-admin-tab="changes"','admin-zone-list','admin-review-bar'])assert.ok(view.includes(marker),marker);
+ assert.match(h.app.adminSharedStatusHtml(),/shared-status-actions/);
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/@media \(min-width: 1000px\)[\s\S]*?\.phone\.admin-workspace/);
+ await h.app.signOutAdmin();
+});
+test('missing phone is advisory, unassigned rider blocks publish, and empty driver is valid',async()=>{
+ const h=await appHarness();await h.start();const rider={...h.app.state.adminDraftStops[0],phone:'',pickupTime:'09:00'};
+ const warning=h.app.adminRouteWarnings({slug:'a'},[rider]).find(w=>w.key.startsWith('missing-phone'));
+ assert.equal(warning.level,'normal');assert.match(warning.detail,/organizer/);
+ assert.equal(h.app.adminRouteWarnings({slug:'empty'},[]).length,0);assert.equal(h.app.adminPublishIssues().length,0);
+ await h.app.reviewAdminShared();h.app.state.adminDraftStops[0].driverSlug='';assert.ok(h.app.adminPublishIssues().some(i=>i.title.includes('not assigned')));
+ await h.app.publishAdminDraft();assert.equal(h.calls.some(c=>c.name==='ride_admin_shared_publish'),false);
+ await h.app.signOutAdmin();
+});
+test('quick reassignment submits only a versioned draft move with both groups',async()=>{
+ const h=await appHarness();await h.start();const c=h.app.state.adminShared;c.snapshot.drivers.push({slug:'b'});c.snapshot.groupVersions.b=7;
+ assert.equal(typeof h.app.quickMoveAdminShared,'function');await h.app.quickMoveAdminShared(c.snapshot.riders[0].id,'b',c.snapshot);
+ const op=h.calls.find(c=>c.name==='ride_admin_shared_mutate').args.p_operation;
+ assert.equal(op.kind,'rider_move');assert.deepEqual(JSON.parse(JSON.stringify(op.expectedGroupVersions)),{a:3,b:7});assert.equal(op.expectedEntityVersion,2);assert.equal(op.payload.driverSlug,'b');assert.equal(h.calls.some(c=>c.name==='ride_admin_shared_publish'),false);await h.app.signOutAdmin();
+});
+test('conflict_compares_both_values and deliberate reapply uses reviewed fresh versions',async()=>{
+ let conflict=true;const h=await appHarness(name=>name==='ride_admin_shared_mutate'&&conflict?{ok:false,code:'conflict'}:undefined);await h.start();
+ const c=h.app.state.adminShared,form={dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'My private name'}};
+ await h.app.saveAdminDraftFromForm(form);assert.equal(typeof h.app.compareAdminSharedConflict,'function');await h.app.compareAdminSharedConflict();
+ let html=h.app.adminSharedStatusHtml();assert.match(html,/Your unsaved values/);assert.match(html,/Latest saved values/);assert.match(html,/My private name/);assert.match(html,/Synthetic rider/);
+ conflict=false;await h.app.reapplyAdminSharedConflict();const calls=h.calls.filter(c=>c.name==='ride_admin_shared_mutate');assert.equal(calls.length,2);assert.notEqual(calls[0].args.p_operation.operationId,calls[1].args.p_operation.operationId);assert.equal(calls[1].args.p_operation.payload.name,'My private name');await h.app.signOutAdmin();
+});
+test('opening image resolves known default only and renders full frame',async()=>{
+ const h=await appHarness();h.app.state.appSettings={homeCoverUrl:'assets/home-car.png'};assert.equal(h.app.activeRideBranding().coverSrc,'assets/home-car-2026-10-01.png');
+ h.app.state.appSettings={homeCoverUrl:'https://example.test/custom.png'};assert.equal(h.app.activeRideBranding().coverSrc,'https://example.test/custom.png');
+ h.app.state.appSettings={};assert.equal(h.app.activeRideBranding().coverSrc,'assets/home-car-2026-10-01.png');
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/\.home-art\.event-cover img\s*\{[^}]*object-fit: contain/);
+});
+test('recovery candidates are explicitly reviewed, baseline fenced and imported draft only',async()=>{
+ const candidate={id:'00000000-0000-4000-8000-000000000099',actorKey:'profile:a',planDate:date,baselinePublishedRevision:0,source:'server',candidate:{stops:[{name:'Recovered synthetic'}]}};
+ const h=await appHarness(name=>name==='ride_admin_shared_recovery'?{ok:true,candidates:[candidate,{...candidate,id:'unknown',baselinePublishedRevision:null}]}:undefined);await h.start();assert.equal(typeof h.app.loadAdminSharedRecovery,'function');await h.app.loadAdminSharedRecovery();
+ assert.match(h.app.adminSharedStatusHtml(),/Recovered synthetic/);await h.app.importAdminSharedRecovery('unknown');assert.equal(h.calls.some(c=>c.name==='ride_admin_shared_import'),false);
+ await h.app.importAdminSharedRecovery(candidate.id);const call=h.calls.find(c=>c.name==='ride_admin_shared_import');assert.equal(call.args.p_expected_draft_revision,3);assert.equal(call.args.p_expected_baseline_revision,0);assert.equal(h.calls.some(c=>c.name==='ride_admin_shared_publish'),false);await h.app.signOutAdmin();
+});
+
+test('review does not navigate away from personal unsaved input',async()=>{
+ const h=await appHarness();await h.start();h.app.state.view='adminEdit';const c=h.app.state.adminShared;c.personalDirty=true;c.personalForm={name:'Private input'};
+ await h.app.reviewAdminShared();assert.equal(h.app.state.view,'adminEdit');assert.equal(c.review,null);await h.app.signOutAdmin();
+});
+test('custom cover retains its natural aspect rather than forcing a cropped frame',async()=>{
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/\.home-art\.event-cover\s*\{[^}]*aspect-ratio: auto/);
+});
+
+test('conflict comparison uses readable labels and excludes internal identity/version metadata',async()=>{
+ const h=await appHarness(name=>name==='ride_admin_shared_mutate'?{ok:false,code:'conflict'}:undefined);await h.start();const c=h.app.state.adminShared;
+ await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'My reviewed name'}});await h.app.compareAdminSharedConflict();
+ const html=h.app.adminSharedStatusHtml();assert.match(html,/Rider name: My reviewed name/);assert.match(html,/Assigned driver: Synthetic/);assert.doesNotMatch(html,/entityVersion|personVersion|driverSlug|00000000-0000-4000-8000-000000000002/);await h.app.signOutAdmin();
+});
+
+test('incoming shared state updates existing header counts without replacing the editor',async()=>{
+ const h=await appHarness();await h.start();const c=h.app.state.adminShared;h.app.state.view='adminEdit';
+ const counters=['drivers','riders','changes'].map(tab=>{const el={textContent:'old'};h.elements.set(`[data-admin-tab="${tab}"] strong`,el);return el;});
+ h.app.applyAdminSharedState(c,{status:'saved',snapshot:{...c.snapshot,draftRevision:4,eventCursor:20,riders:[...c.snapshot.riders,{...c.snapshot.riders[0],id:'00000000-0000-4000-8000-000000000003'}]}});
+ assert.equal(counters[0].textContent,'1');assert.equal(counters[1].textContent,'2');assert.notEqual(counters[2].textContent,'old');assert.equal(h.app.state.view,'adminEdit');await h.app.signOutAdmin();
+});
+
+test('incoming refresh keeps an open quick-move form and its captured destination',async()=>{
+ const h=await appHarness();await h.start();const c=h.app.state.adminShared;h.app.state.view='admin';const region={innerHTML:'open move form with chosen destination',querySelector:()=>({open:true})};h.elements.set('[data-shared-route-content]',region);
+ h.app.applyAdminSharedState(c,{status:'saved',snapshot:{...c.snapshot,draftRevision:4,eventCursor:20}});
+ assert.equal(region.innerHTML,'open move form with chosen destination');await h.app.signOutAdmin();
+});
+
+test('stale quick-move keeps captured group versions and exposes conflict',async()=>{
+ const h=await appHarness(name=>name==='ride_admin_shared_mutate'?{ok:false,code:'conflict'}:undefined);await h.start();const c=h.app.state.adminShared;const captured={...c.snapshot,groupVersions:{...c.snapshot.groupVersions,b:2}};c.snapshot={...c.snapshot,groupVersions:{a:4,b:3}};
+ await h.app.quickMoveAdminShared(captured.riders[0].id,'b',captured);
+ const op=h.calls.find(call=>call.name==='ride_admin_shared_mutate').args.p_operation;assert.equal(op.expectedGroupVersions.a,3);assert.equal(op.expectedGroupVersions.b,2);assert.equal(c.secondaryConflict.code,'conflict');assert.ok(c.conflictRequest);await h.app.signOutAdmin();
 });

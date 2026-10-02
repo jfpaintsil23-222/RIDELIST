@@ -1,0 +1,5 @@
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'/Users/joojo/Documents/Codex/2026-10-01/task-2/browser-qa-tooling/node_modules/playwright');
+const browser=await chromium.launch({headless:true});
+for(const [width,height] of [[390,844],[430,932],[1363,936]]){const page=await browser.newPage({viewport:{width,height}});page.on('pageerror',e=>console.log('PAGE ERROR',e.message));await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());await page.goto('http://127.0.0.1:4176/?actor=a');await page.locator('.admin-control-screen').waitFor();await page.screenshot({path:`.superpowers/sdd/collaborative-ride-control/task-6-evidence/${process.env.CAPTURE_PHASE||'baseline'}-${width}.png`,fullPage:true});console.log(width,await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,title:document.querySelector('h1')?.textContent})));await page.close();}await browser.close();

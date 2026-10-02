@@ -609,7 +609,7 @@ test("Sunday branding updates home and admin cover copy", async () => {
   const homeHtml = app.homeView();
   assert.match(homeHtml, /aria-label="Sunday ride dashboard"/);
   assert.match(homeHtml, /Sunday Ride Plan/);
-  assert.match(homeHtml, /assets\/home-car\.png/);
+  assert.match(homeHtml, /assets\/home-car-2026-10-01\.png/);
   assert.match(homeHtml, /Church ride car/);
   assert.match(homeHtml, /1 drivers assigned/);
   assert.match(homeHtml, /Sunday · UH Hilton/);

@@ -209,6 +209,8 @@
       font-size: 17px;
     }
 
+    .home-art.event-cover img { height: auto; object-fit: contain; }
+
     .route-scene {
       height: 176px;
       position: relative;
@@ -669,6 +671,37 @@
       outline-offset: 3px;
     }
 
+
+    [hidden] { display: none !important; }
+    .shared-status { border-block: 1px solid #e5e5e5; padding: 12px 0; font-size: 13px; line-height: 1.5; }
+    .shared-status summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .shared-status summary::before { content: "●"; font-size: 10px; }
+    .shared-status summary::after { content: "Details ›"; margin-left: auto; color: #555; }
+    .shared-status-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .shared-status-actions button, .shared-notice button { min-height: 44px; padding: 10px 12px; font-size: 13px; }
+    .shared-status [data-shared-secondary-status], .shared-status [data-shared-event] { display: block; overflow-wrap: anywhere; }
+    .shared-notice { margin-top: 10px; padding: 12px; background: #f6f6f6; border: 1px solid #ddd; border-radius: 12px; overflow-wrap: anywhere; }
+    .shared-compare { display: grid; gap: 12px; margin-block: 12px; }
+    .shared-compare pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 6px 0; }
+    .admin-quick-move { margin: -6px 8px 10px; padding: 10px; border: 1px solid #eee; border-radius: 12px; }
+    .admin-quick-move summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: 14px; }
+    .admin-quick-move form { display: flex; gap: 8px; flex-wrap: wrap; }
+    .admin-quick-move select { flex: 1; min-width: 0; max-width: 100%; min-height: 44px; font: inherit; }
+    .admin-quick-move button { min-height: 44px; }
+    @media (min-width: 1000px) {
+      .phone.admin-workspace { width: min(1200px, calc(100vw - 64px)); }
+      .admin-workspace .screen { padding: 36px 48px 44px; }
+      .admin-workspace .admin-control-header h1 { max-width: none; }
+      .admin-workspace .admin-control-stats { gap: 24px; }
+      .admin-workspace .admin-zone-list, .admin-workspace .admin-route-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+      .admin-workspace .admin-zone { min-width: 0; }
+      .admin-workspace .admin-zone-panel { display: grid; gap: 10px; }
+      .admin-workspace .admin-sunday-rider-copy strong { white-space: normal; overflow-wrap: anywhere; }
+      .admin-workspace .admin-review-bar { position: sticky; bottom: 20px; }
+      .admin-workspace [data-admin-form="rider"], .admin-workspace .admin-form-grid { width: min(100%, 820px); margin-inline: auto; }
+      .shared-compare { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
     @media (max-width: 380px) {
       .screen {
         padding-inline: 16px;
@@ -785,8 +818,8 @@
 
     .home-art.event-cover {
       height: auto;
-      aspect-ratio: 4 / 3;
-      background: #078da1;
+      aspect-ratio: auto;
+      background: #fff;
     }
 
     .route-scene {
@@ -5194,7 +5227,7 @@
       title: "Sunday Ride Plan",
       homeAriaLabel: "Sunday ride dashboard",
       adminSubtitle: "Build this Sunday's list",
-      coverSrc: "assets/home-car.png",
+      coverSrc: "assets/home-car-2026-10-01.png",
       coverAlt: "Church ride car",
       summaryDay: "Sunday",
       ridersLabel: "Sunday riders",
@@ -5251,7 +5284,7 @@
         homeSubtitle: settings.homeSubtitle,
         homeAriaLabel: customHomeTitle ? `${title} dashboard` : RIDE_PLAN_BRANDING.homeAriaLabel,
         adminSubtitle: `Build this ${possessiveDay(serviceDay)} list`,
-        coverSrc: settings.homeCoverUrl || RIDE_PLAN_BRANDING.coverSrc,
+        coverSrc: settings.homeCoverUrl === "assets/home-car.png" ? RIDE_PLAN_BRANDING.coverSrc : settings.homeCoverUrl || RIDE_PLAN_BRANDING.coverSrc,
         coverAlt: settings.homeCoverAlt || RIDE_PLAN_BRANDING.coverAlt,
         summaryDay: serviceDay,
         ridersLabel: /^sunday$/i.test(serviceDay) ? "Sunday riders" : "event riders",
@@ -6242,9 +6275,9 @@
         const stopKey = stop.id || `${driver?.slug || "route"}-${stop.stopOrder || index + 1}-${riderName}`;
         const action = stop.id ? { stopId: stop.id, actionLabel: "Fix rider" } : {};
         if (!String(stop.phone || "").trim()) {
-          add(`missing-phone-${stopKey}`, "Missing number", "urgent", {
+          add(`missing-phone-${stopKey}`, "Missing number", "normal", {
             title: `${riderName}: phone missing`,
-            detail: "Add a number so admin can call or text if pickup changes.",
+            detail: "Optional pickup contact: a group organizer number is fine. Missing phone does not block publication.",
             ...action,
           });
         }
@@ -7441,18 +7474,163 @@
     }
 
     function adminSharedStatusHtml() {
-      if (!state.adminShared || state.adminShared.snapshot?.writeMode === "legacy") return "";
-      return `<section class="admin-message" role="status"><span data-shared-sync-status>${escapeHtml(adminSharedStatus())}</span>
-        <span data-shared-secondary-status>${escapeHtml(state.adminError || state.adminMessage || "")}</span>
-        <button type="button" class="secondary-action" data-action="adminSharedReview">Review current shared draft</button>
-        <button type="button" class="secondary-action" data-action="adminSharedCheck">Check shared status</button>
-        <button type="button" class="secondary-action" data-action="adminSharedRetry" ${state.adminShared.pendingOperation || state.adminShared.pendingSecondary ? "" : "hidden"}>Retry original save</button></section>`;
+      const c=state.adminShared;
+      if (!c || c.snapshot?.writeMode === "legacy") return "";
+      return `<section class="shared-status" aria-label="Shared draft status">
+        <details><summary><span data-shared-sync-status role="status">${escapeHtml(adminSharedStatus())}</span></summary>
+          <span data-shared-secondary-status>${escapeHtml(state.adminError || state.adminMessage || "")}</span>
+          <div class="shared-status-actions">
+            <button type="button" class="secondary-action" data-action="adminSharedReview">Review shared draft</button>
+            <button type="button" class="secondary-action" data-action="adminSharedCheck">Check status</button>
+            <button type="button" class="secondary-action" data-action="adminSharedRecovery">Review recovery</button>
+            <button type="button" class="secondary-action" data-action="adminSharedRetry" ${c.pendingOperation || c.pendingSecondary ? "" : "hidden"}>Retry original save</button>
+          </div></details>
+        <span data-shared-event role="status">${escapeHtml(c.eventNotice || "")}</span>
+        <div data-shared-notices>${adminSharedNoticesHtml()}</div>
+      </section>`;
+    }
+
+    function sharedReadable(value) {
+      if(value == null)return "No saved record";
+      if(Array.isArray(value))return value.map(sharedReadable).join('\n\n') || "No riders";
+      const labels={name:'Rider name',displayName:'Driver name',phone:'Pickup contact',address:'Pickup address',addressChoice:'Pickup address',area:'Area',pickupTime:'Pickup time',readyBy:'Ready by',driverSlug:'Assigned driver',driverSlugs:'Active drivers',stopOrder:'Stop order',routeLabel:'Route',notes:'Notes',campusAddress:'Campus address',homeAddress:'Home address',planTitle:'Plan title',serviceDay:'Service day',destinationLabel:'Destination',destinationAddress:'Destination address',homeTitle:'Home title',homeSubtitle:'Home subtitle',homeCoverUrl:'Cover image',homeCoverAlt:'Cover description'};
+      return Object.entries(labels).filter(([key])=>value[key]!==undefined).map(([key,label])=>{
+        const raw=key==='driverSlug'?adminDriverName(value[key]):key==='driverSlugs'?value[key].map(adminDriverName).join(', '):value[key];
+        return `${label}: ${escapeHtml(raw || 'Not set')}`;
+      }).join('\n') || "No saved values";
+    }
+
+    function adminSharedNoticesHtml() {
+      const c=state.adminShared;if(!c)return "";
+      let html="";
+      if(c.conflictRequest) {
+        const comparison=c.conflictComparison;
+        html+=`<section class="shared-notice" role="alert"><strong>Shared details changed</strong><p>Your input is preserved. Compare before reapplying.</p>
+          <button type="button" class="secondary-action" data-action="adminSharedCompare">Compare with latest saved values</button>
+          ${comparison ? `<div class="shared-compare"><div><strong>Your unsaved values</strong><pre>${sharedReadable(comparison.yours)}</pre></div><div><strong>Latest saved values</strong><pre>${sharedReadable(comparison.latest)}</pre></div></div>
+          <button type="button" class="secondary-action" data-action="adminSharedReapply">Reapply reviewed values</button>` : ""}</section>`;
+      }
+      if(c.recoveryCandidates) {
+        html+=`<section class="shared-notice"><strong>Recovery candidates</strong><p>Review a candidate against the shared draft. Import replaces shared riders; it never publishes. Unknown or different baselines require manual reconciliation.</p>`;
+        for(const candidate of c.recoveryCandidates) {
+          const comparison=window.RideShared.compareRecovery(candidate,{...c.recoverySnapshot,actorKey:c.actorKey});
+          html+=`<details><summary>${escapeHtml(candidate.source || 'Saved candidate')} · ${escapeHtml(candidate.savedAt || 'time unknown')} · ${escapeHtml(comparison.status)}</summary>
+          <div class="shared-compare"><div><strong>Recovery values</strong><pre>${sharedReadable(candidate.candidate?.stops)}</pre></div><div><strong>Latest saved values</strong><pre>${sharedReadable(c.recoverySnapshot?.riders)}</pre></div></div>
+          <button type="button" class="secondary-action" data-shared-import="${escapeHtml(candidate.id)}" ${comparison.canImport?'':'disabled'}>Replace shared riders with this candidate</button></details>`;
+        }
+        if(!c.recoveryCandidates.length)html+='<p>No server recovery candidates for this account and plan.</p>';
+        if(c.deviceRecovery?.personalForm)html+=`<details><summary>Unsaved values on this device</summary><pre>${sharedReadable(c.deviceRecovery.personalForm)}</pre><button type="button" class="secondary-action" data-action="adminSharedRestoreForm">Review in rider editor</button></details>`;
+        html+='</section>';
+      }
+      return html;
+    }
+
+    function updateAdminSharedNotices() {
+      const target=document.querySelector('[data-shared-notices]');
+      if(target)target.innerHTML=adminSharedNoticesHtml();
+    }
+
+    function captureAdminSharedConflict(context,pending,result) {
+      if(result?.code!=='conflict' || !['rider','person','route','branding','availability','person_pickup'].includes(pending?.kind))return;
+      context.conflictRequest=pending;context.conflictComparison=null;
+      updateAdminSharedNotices();
+    }
+
+    async function compareAdminSharedConflict() {
+      const c=state.adminShared;if(!c?.conflictRequest || !adminSharedOnline())return;
+      await c.sync.refresh('review');
+      if(!matchesAdminShared(c)||c.status!=='saved')return;
+      const request=c.conflictRequest,op=request.args.p_operation;
+      const form=document.querySelector('[data-admin-form="rider"]');
+      const yours=request.kind==='rider' ? (form?.dataset?.sharedSnapshot ? Object.fromEntries(new FormData(form).entries()) : c.personalForm || op.payload)
+        : request.args.p_person || request.args.p_settings || op?.payload;
+      const latest=request.kind==='person' ? c.secondary?.people?.find(p=>p.id===request.args.p_person.id)
+        : request.kind==='branding' ? c.secondary?.branding
+        : request.kind==='route' ? c.snapshot.settings
+        : request.kind==='availability' ? c.snapshot.drivers
+        : c.snapshot.riders.find(r=>r.id===op?.entityId);
+      c.conflictComparison={yours:structuredCloneSafe(yours),latest,snapshot:c.snapshot,secondary:c.secondary,editVersion:c.editVersion||0};
+      updateAdminSharedNotices();
+    }
+
+    function structuredCloneSafe(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
+
+    async function reapplyAdminSharedConflict() {
+      const c=state.adminShared,comparison=c?.conflictComparison,request=c?.conflictRequest;
+      if(!comparison||!request||c.pendingOperation||c.pendingSecondary||c.saving||!adminSharedOnline()||c.status!=='saved')return;
+      if((c.editVersion||0)!==comparison.editVersion) {state.adminError='Your input changed. Compare again before reapplying.';adminSharedSecondaryNotice();return;}
+      // Keep precisely the reviewed versions. The server rejects another change after this comparison.
+      if(request.kind==='rider') {
+        const operation=request.args.p_operation;
+        const rider={...comparison.yours,id:operation.entityId};
+        rider.address=String(rider.addressChoice||rider.address||'').trim();rider.stopOrder=Number(rider.stopOrder||1);
+        rider.personId=rider.personId||null;rider.personVersion=rider.personVersion?Number(rider.personVersion):null;
+        try {
+          if(operation.kind!=='rider_add'&&!comparison.snapshot.riders.some(r=>r.id===operation.entityId))throw Error('This rider was removed. Review the latest draft; it cannot be reapplied as an edit.');
+          const next=window.RideShared.riderOperation(comparison.snapshot,rider,operation.kind==='rider_remove'?'remove':'save',crypto.randomUUID(),operation.entityId);
+          const pending={...request,operationId:next.operationId,args:{p_plan_date:c.planDate,p_operation:next},editVersion:c.editVersion||0};
+          c.pendingOperation=pending;const result=await sendAdminSharedPending(c,pending);
+          if(result?.ok){c.conflictRequest=null;c.conflictComparison=null;updateAdminSharedNotices();}
+        }catch(error){state.adminError=error.message;adminSharedSecondaryNotice();}
+      } else if(['person','route','branding','availability','person_pickup'].includes(request.kind)) {
+        const version=request.kind==='person'?comparison.latest?.recordVersion:request.kind==='branding'?comparison.secondary?.brandingVersion:comparison.snapshot.settingsVersion;
+        const result=await runAdminSharedSecondary(request.kind,comparison.yours,{snapshot:comparison.snapshot,recordVersion:version,entityId:request.args.p_operation?.entityId,entityVersion:comparison.latest?.entityVersion});
+        if(result?.ok){c.conflictRequest=null;c.conflictComparison=null;updateAdminSharedNotices();}
+      }
+    }
+
+    async function loadAdminSharedRecovery() {
+      const c=state.adminShared;if(!c||!adminSharedOnline()||c.saving)return;
+      try {
+        await c.sync.refresh('review');if(!matchesAdminShared(c)||c.status!=='saved')return;
+        const snapshot=c.snapshot;
+        const result=await sharedAdminRpc('ride_admin_shared_recovery',{p_admin_code:state.adminCode,p_plan_date:c.planDate});
+        if(!matchesAdminShared(c))return;
+        if(result?.code==='invalid_admin_code'){lockAdminShared();return;}
+        if(!result?.ok)throw Error('Recovery is unavailable. Try again when connected.');
+        c.recoveryCandidates=(result.candidates||[]).filter(item=>item.actorKey===c.actorKey&&item.planDate===c.planDate);
+        c.recoverySnapshot=snapshot;updateAdminSharedNotices();
+      }catch(error){if(matchesAdminShared(c)){if(error.status===401||error.status===403)lockAdminShared();else{state.adminError=error.message;adminSharedSecondaryNotice();}}}
+    }
+
+    async function importAdminSharedRecovery(id) {
+      const c=state.adminShared,candidate=c?.recoveryCandidates?.find(item=>item.id===id);
+      if(!candidate||!matchesAdminShared(c)||c.personalDirty||c.pendingOperation||c.pendingSecondary||c.saving||!adminSharedOnline()||c.status!=='saved')return;
+      const comparison=window.RideShared.compareRecovery(candidate,{...c.recoverySnapshot,actorKey:c.actorKey});if(!comparison.canImport)return;
+      const operationId=crypto.randomUUID();const pending={operationId,name:'ride_admin_shared_import',kind:'import',editVersion:c.editVersion||0,
+        scope:{actorKey:c.actorKey,planDate:c.planDate,generation:c.generation},args:{p_plan_date:c.planDate,p_candidate_id:id,p_expected_draft_revision:comparison.expectedDraftRevision,p_expected_baseline_revision:comparison.expectedBaselinePublishedRevision,p_operation_id:operationId}};
+      c.pendingOperation=pending;await sendAdminSharedPending(c,pending);
+    }
+
+    function restoreAdminSharedPersonalForm() {
+      const c=state.adminShared,values=c?.deviceRecovery?.personalForm;if(!values||c.personalDirty||c.pendingOperation||c.pendingSecondary)return;
+      if(values.id&&!c.snapshot.riders.some(r=>r.id===values.id)){state.adminError='The recovered rider is no longer in this draft. Compare the recovery values manually.';adminSharedSecondaryNotice();return;}
+      openAdminEditor(values.id||'new');
+      const form=document.querySelector('[data-admin-form="rider"]');
+      for(const [key,value] of Object.entries(values)){const field=form?.elements?.namedItem(key);if(field&&typeof field.value==='string')field.value=value??'';}
+      c.personalForm=values;c.personalDirty=true;c.editVersion=(c.editVersion||0)+1;c.review=null;updateAdminSharedStatus();
+    }
+
+    async function quickMoveAdminShared(id,driverSlug,captured) {
+      const c=state.adminShared;if(!c||!matchesAdminShared(c)||c.snapshot.writeMode!=='shared'||c.personalDirty||c.pendingOperation||c.pendingSecondary||c.saving||!adminSharedOnline())return;
+      const before=captured?.riders?.find(r=>r.id===id);if(!before||before.driverSlug===driverSlug)return;
+      const rider={...before,driverSlug,stopOrder:captured.riders.filter(r=>r.driverSlug===driverSlug).length+1};
+      const operation=window.RideShared.riderOperation(captured,rider,'save',crypto.randomUUID(),id);
+      const pending={operationId:operation.operationId,name:'ride_admin_shared_mutate',args:{p_plan_date:c.planDate,p_operation:operation},scope:{actorKey:c.actorKey,planDate:c.planDate,generation:c.generation},kind:'rider',editVersion:c.editVersion||0};
+      c.personalForm=rider;c.pendingOperation=pending;const result=await sendAdminSharedPending(c,pending);
+      if(result?.ok&&matchesAdminShared(c)){await c.sync.refresh('local-save');if(matchesAdminShared(c)&&state.view==='admin'&&!c.personalDirty)render();}
     }
 
     function applyAdminSharedState(context, update) {
       if (!matchesAdminShared(context)) { context.sync?.stop();return; }
       if (update.status === "locked") { lockAdminShared(); return; }
       context.status = update.status;
+      const events=update.metadata?.events || [];
+      if(events.length) {
+        const event=events[events.length-1];
+        context.eventNotice=`${event.actorKey || 'An admin'} ${String(event.type||'').includes('publish')?'published routes':'saved changes to the shared draft'}.`;
+        const notice=document.querySelector('[data-shared-event]');if(notice)notice.textContent=context.eventNotice;
+      }
       if (update.status !== "saved") context.review = null;
       const incoming = update.snapshot;
       if (incoming && incoming.writeMode !== "legacy") {
@@ -7469,9 +7647,14 @@
           state.adminDraftStops = cloneStops(next.riders || []);
           state.adminDeletedStopIds = (published.stops || []).filter(stop => !next.riders.some(rider => rider.id === stop.id)).map(stop => stop.id);
           if (context.secondary) hydrateAdminSharedSecondary(context, context.secondary);
+          const counts={drivers:adminDrivers().length,riders:adminStops().length,changes:state.adminNotifyDraft?.driverSlugs?.length || adminChangedCount()};
+          for(const [tab,count] of Object.entries(counts)) {
+            const counter=document.querySelector(`[data-admin-tab="${tab}"] strong`);
+            if(counter)counter.textContent=String(count);
+          }
           // Only list regions are replaced. Inputs, focus, selection and captured dependencies stay intact.
           const region = document.querySelector('[data-shared-route-content]');
-          if (region && state.view === "admin" && !document.activeElement?.closest?.('input, textarea, select')) {
+          if (region && state.view === "admin" && !document.activeElement?.closest?.('input, textarea, select') && !region.querySelector?.('.admin-quick-move[open]')?.open) {
             if (adminActiveTab() === "riders") region.innerHTML = adminSundayRidersView();
             else if (adminActiveTab() === "drivers") region.innerHTML = adminRoutesView(adminDrivers());
             else if (adminActiveTab() === "people") region.innerHTML = adminPeopleView();
@@ -7483,6 +7666,7 @@
       if (pending && update.operationResult && update.operationResult.code !== "not_found") {
         if (update.operationResult.ok && (pending.editVersion || 0)===(context.editVersion || 0)) context.personalDirty=false;
         settleAdminSharedPending(context,completedOperationId);
+        captureAdminSharedConflict(context,pending,update.operationResult);
         context.secondaryConflict = update.operationResult.ok ? null : update.operationResult;
         context.review = null;
         state.adminMessage = update.operationResult.ok ? "Save confirmed. Current shared state refreshed; your form is preserved." : "Save rejected. Compare your preserved input with current shared details.";
@@ -7523,7 +7707,7 @@
 
     document.addEventListener?.('input', event => {
       const context=state.adminShared;
-      if (!context || context.snapshot?.writeMode==='legacy' || !event.target?.closest?.('[data-admin-form]')) return;
+      if (!context || context.snapshot?.writeMode==='legacy' || !event.target?.closest?.('[data-admin-form]') || event.target?.closest?.('[data-admin-form="quick-move"]')) return;
       context.personalDirty=true;context.editVersion=(context.editVersion || 0)+1;context.review=null;retainAdminSharedRecovery(context);updateAdminSharedStatus();
     });
 
@@ -7579,6 +7763,7 @@
         if (context.pendingOperation?.operationId !== pending.operationId) return result;
         settleAdminSharedPending(context,pending.operationId);
         if (!result?.ok) {
+          captureAdminSharedConflict(context,pending,result);
           context.secondaryConflict=result;
           state.adminError=result?.code==='conflict' ? 'Shared details changed. Your input is preserved; compare before saving again.' : 'Shared save was rejected. Your input is preserved.';
         } else {
@@ -7628,7 +7813,7 @@
 
     function canPublishAdminShared() {
       const c=state.adminShared;
-      return Boolean(c && matchesAdminShared(c) && c.snapshot?.writeMode==='shared' && adminSharedOnline() && c.status==='saved'
+      return Boolean(c && !adminPublishIssues().length && matchesAdminShared(c) && c.snapshot?.writeMode==='shared' && adminSharedOnline() && c.status==='saved'
         && !c.pendingOperation && !c.pendingSecondary && !c.personalDirty && !c.saving && c.review
         && c.review.draftRevision===c.snapshot.draftRevision && c.review.eventCursor===c.snapshot.eventCursor
         && c.review.baselinePublishedRevision===c.snapshot.baselinePublishedRevision);
@@ -7638,6 +7823,7 @@
       const context=state.adminShared;
       if (!context || !adminSharedOnline()) return;
       context.review=null;
+      if(context.personalDirty){state.adminError="Save your personal changes before reviewing the shared draft.";adminSharedSecondaryNotice();return;}
       await context.sync.refresh('review');
       if (!matchesAdminShared(context) || context.status!=='saved' || context.pendingOperation || context.pendingSecondary) return;
       context.review={draftRevision:context.snapshot.draftRevision,eventCursor:context.snapshot.eventCursor,baselinePublishedRevision:context.snapshot.baselinePublishedRevision};
@@ -8148,6 +8334,7 @@
         if (context.pendingSecondary?.operationId !== operationId) return saved;
         settleAdminSharedPending(context,operationId);
         if (!saved?.ok) {
+          captureAdminSharedConflict(context,{...context.pendingSecondary,operationId,name,args,scope,kind,editVersion},saved);
           context.secondaryConflict = saved;
           state.adminError = saved?.code === "conflict" ? "Shared details changed. Your input is preserved; review the current record before saving again."
             : "Shared save was rejected. Your input is preserved.";
@@ -8982,7 +9169,12 @@
             <span>${escapeHtml(adminSundayRiderAssignment(stop))}</span>
           </span>
           <span class="admin-sunday-chevron" aria-hidden="true">&rsaquo;</span>
-        </button>`;
+        </button>
+        ${state.adminShared?.snapshot?.writeMode==='shared' ? `<details class="admin-quick-move"><summary aria-label="Move ${escapeHtml(stop.name)} to another driver">Move rider <span aria-hidden="true">&nbsp;›</span></summary>
+        <form data-admin-form="quick-move" data-rider-id="${escapeHtml(stop.id)}" data-shared-snapshot="${escapeHtml(JSON.stringify(state.adminShared.snapshot))}">
+          <select name="driverSlug" aria-label="New driver for ${escapeHtml(stop.name)}">${adminDriverOptionList(stop.driverSlug)}</select>
+          <button type="submit" class="secondary-action">Save move to draft</button>
+        </form></details>` : ""}`;
     }
 
     const ADMIN_RIDER_ZONES = [
@@ -9496,6 +9688,7 @@
           ${adminDraftStatusHtml(changed)}
           ${adminDraftRestoreHtml()}
           ${adminPublishIssuesHtml()}
+          ${state.adminShared ? `<section class="shared-notice"><strong>Shared draft revision ${state.adminShared.snapshot.draftRevision}</strong><p>Active drivers: ${escapeHtml(state.adminShared.snapshot.drivers.map(d=>d.displayName||d.slug).join(', '))}</p><p>Route settings: ${sharedReadable(state.adminShared.snapshot.settings || {})}</p><p>Home branding applies immediately. Route settings and availability take effect after publication.</p></section>` : ""}
 
           <section class="admin-change-list" aria-label="Unpublished changes">
             ${changes.length ? changes.map(adminChangeCard).join("") : `<section class="empty-card"><p>No unpublished changes.</p></section>`}
@@ -10461,8 +10654,9 @@
             </label>
             ${adminRiderSuggestionsHtml()}
             <label>
-              <span>Phone</span>
-              <input name="phone" value="${escapeHtml(stop.phone || "")}" inputmode="tel">
+              <span>Pickup contact phone (optional)</span>
+              <input name="phone" value="${escapeHtml(stop.phone || "")}" inputmode="tel" aria-describedby="pickup-contact-help">
+              <small id="pickup-contact-help">A group organizer’s number is fine. Missing phone does not block publication.</small>
             </label>
             ${adminAddressFieldHtml(stop)}
             <label>
@@ -10816,6 +11010,7 @@
 
     function render() {
       setActiveNav();
+      document.querySelector(".phone")?.classList.toggle("admin-workspace", String(state.view).startsWith("admin"));
       if (state.view === "profile") screen.innerHTML = profileView();
       else if (state.view === "driverHome" && state.route) screen.innerHTML = driverHomeView();
       else if (state.view === "rides" && state.route) screen.innerHTML = ridesView();
@@ -10830,7 +11025,10 @@
       else if (state.view === "adminReset") screen.innerHTML = adminResetView();
       else screen.innerHTML = homeView();
       if (String(state.view).startsWith("admin") && state.adminShared) {
-        screen.innerHTML = `<div data-shared-status-region>${adminSharedStatusHtml()}</div>` + screen.innerHTML;
+        const statusHtml = `<div data-shared-status-region>${adminSharedStatusHtml()}</div>`;
+        const stats = screen.querySelector(".admin-control-stats");
+        if (stats?.insertAdjacentHTML) stats.insertAdjacentHTML("afterend", statusHtml);
+        else screen.innerHTML = statusHtml + screen.innerHTML;
         updateAdminSharedStatus();
       }
       syncPickedChips();
@@ -11096,6 +11294,12 @@
       if (action === "adminSharedReview") reviewAdminShared();
       if (action === "adminSharedCheck") state.adminShared?.sync?.refresh("manual");
       if (action === "adminSharedRetry") retryAdminSharedPending();
+      if (action === "adminSharedCompare") compareAdminSharedConflict();
+      if (action === "adminSharedReapply") reapplyAdminSharedConflict();
+      if (action === "adminSharedRecovery") loadAdminSharedRecovery();
+      if (action === "adminSharedRestoreForm") restoreAdminSharedPersonalForm();
+      const importButton=event.target.closest('[data-shared-import]');
+      if(importButton)importAdminSharedRecovery(importButton.dataset.sharedImport);
       if (action === "adminReviewChanges" && adminSharedSecondaryMode() !== "legacy") { reviewAdminShared();return; }
       if (action === "adminReviewChanges") {
         state.view = "adminReview";
@@ -11294,6 +11498,8 @@
     });
 
     screen.addEventListener("submit", (event) => {
+      const quickMove=event.target.closest('[data-admin-form="quick-move"]');
+      if(quickMove){event.preventDefault();quickMoveAdminShared(quickMove.dataset.riderId,new FormData(quickMove).get('driverSlug'),JSON.parse(quickMove.dataset.sharedSnapshot));return;}
       const driverProfileForm = event.target.closest("[data-driver-profile-form]");
       if (driverProfileForm) {
         event.preventDefault();

@@ -72,6 +72,13 @@ export function riderOperation(snapshot, rider, action, operationId, newEntityId
       throw new TypeError('Save contact edits and driver moves separately. Your input is preserved.');
     }
     kind='rider_move'; payload={driverSlug:rider.driverSlug,stopOrder:rider.stopOrder};groups.add(rider.driverSlug || '');
+  } else if(before) {
+    // Ordinary field edits depend on this rider, not unrelated riders' route order.
+    delete payload.driverSlug;
+    if(payload.stopOrder===undefined || Number(payload.stopOrder)===Number(before.stopOrder)) {
+      delete payload.stopOrder;
+      groups.clear();
+    }
   }
   return {operationId,planDate:snapshot.planDate,kind,entityId:before?.id || newEntityId,
     expectedEntityVersion:before?.entityVersion || 0,expectedBaselinePublishedRevision:snapshot.baselinePublishedRevision,

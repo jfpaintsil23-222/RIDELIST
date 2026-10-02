@@ -347,3 +347,44 @@ test('final Cancel retains uncertain operation and a later result cannot clear n
  resolve({ok:true});await saving;await settle();assert.equal(c.personalDirty,true);
  await h.app.reviewAdminShared();assert.equal(h.app.state.view,'adminEdit');await h.app.signOutAdmin();
 });
+
+test('retry settlement preserves the next recovered operation without resending the settled identity',async()=>{
+ let mode='unknown',baseline=0,aId,bId;const writes=[];
+ const h=await appHarness((name,args)=>{
+  if(name==='ride_admin_shared_context'||name==='ride_admin_shared_snapshot')return {...snapshot(),actorKey:'profile:a',initialized:true,baselinePublishedRevision:baseline,publishedRevision:baseline};
+  if(name==='ride_admin_shared_mutate'){writes.push(args.p_operation.operationId);if(mode==='unknown')throw Error('Synthetic lost reply');return {ok:true,operationId:args.p_operation.operationId};}
+  if(name==='ride_admin_shared_operation')return mode==='settleA'&&args.p_operation_id===aId?{ok:true,operationId:aId}:{ok:false,code:'not_found',operationId:args.p_operation_id};
+ });
+ await h.start();let c=h.app.state.adminShared;
+ await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'Synthetic older recovery'}});await settle();
+ bId=c.pendingOperation.operationId;await h.app.signOutAdmin();
+ const original=JSON.parse([...h.storage.values()].find(v=>JSON.parse(v).pending?.operationId===bId));
+ aId='00000000-0000-4000-8000-000000009001';
+ const second={...original,baselinePublishedRevision:1,pending:{...original.pending,operationId:aId,recoveryBaseline:1,args:{...original.pending.args,p_operation:{...original.pending.args.p_operation,operationId:aId,expectedBaselinePublishedRevision:1}}}};
+ h.storage.set(core.recoveryKey({actorId:'profile:a',planDate:date,baselinePublishedRevision:1}),JSON.stringify(second));
+ baseline=2;await h.start();await settle();c=h.app.state.adminShared;
+ assert.equal(c.pendingOperation.operationId,aId);assert.equal(c.recoveryPending[0].operationId,bId);
+ mode='settleA';const before=writes.length;await h.app.retryAdminSharedPending();await settle();
+ assert.equal(writes.length,before,'status settlement must not resend the settled request');
+ assert.equal(c.pendingOperation?.operationId,bId,'newly promoted uncertain identity remains active');
+ assert.equal(JSON.parse(h.storage.get(core.recoveryKey({actorId:'profile:a',planDate:date,baselinePublishedRevision:0}))).pending?.operationId,bId);
+ await h.app.reviewAdminShared();assert.notEqual(h.app.state.view,'adminReview','unknown queued outcome still blocks review');
+ await h.app.signOutAdmin();
+});
+
+test('retry await cannot overwrite a newly installed pending identity',async()=>{
+ let hold=false,resolve,entered;const ready=new Promise(r=>entered=r),lookup=new Promise(r=>resolve=r);
+ const h=await appHarness(name=>{
+  if(name==='ride_admin_shared_mutate')throw Error('Synthetic lost reply');
+  if(name==='ride_admin_shared_operation'&&hold){entered();return lookup;}
+ });
+ await h.start();const c=h.app.state.adminShared;
+ await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'Original pending'}});await settle();
+ const original=c.pendingOperation,writes=h.calls.filter(call=>call.name==='ride_admin_shared_mutate').length;
+ hold=true;const retry=h.app.retryAdminSharedPending();await ready;
+ const replacement={...original,operationId:'00000000-0000-4000-8000-000000009002'};
+ c.pendingOperation=replacement;
+ resolve({ok:false,code:'not_found'});await retry;await settle();
+ assert.equal(c.pendingOperation,replacement);assert.equal(h.calls.filter(call=>call.name==='ride_admin_shared_mutate').length,writes);
+ await h.app.signOutAdmin();
+});

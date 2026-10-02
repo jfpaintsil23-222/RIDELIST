@@ -108,10 +108,15 @@ test('rider operation uses captured versions and group dependencies; rejects com
   const core=await import('../src/shared-admin-core.js'); assert.equal(typeof core.riderOperation,'function');
   const base={planDate:'2099-01-04',baselinePublishedRevision:3,groupVersions:{a:4,b:2},riders:[{id:'r',entityVersion:7,driverSlug:'a',name:'Before',stopOrder:1}]};
   const op=core.riderOperation(base,{...base.riders[0],name:'After'},'save','operation');
-  assert.equal(op.kind,'rider_update');assert.equal(op.expectedEntityVersion,7);assert.deepEqual(op.expectedGroupVersions,{a:4});
+  assert.equal(op.kind,'rider_update');assert.equal(op.expectedEntityVersion,7);assert.deepEqual(op.expectedGroupVersions,{});
+  assert.equal('stopOrder' in op.payload,false);assert.equal('driverSlug' in op.payload,false);
+  const reorder=core.riderOperation(base,{...base.riders[0],stopOrder:2},'save','order');
+  assert.equal(reorder.payload.stopOrder,2);assert.deepEqual(reorder.expectedGroupVersions,{a:4});
   const move=core.riderOperation(base,{...base.riders[0],driverSlug:'b'},'save','move');assert.equal(move.kind,'rider_move');assert.deepEqual(move.expectedGroupVersions,{a:4,b:2});
   assert.throws(()=>core.riderOperation(base,{...base.riders[0],driverSlug:'b',name:'After'},'save','bad'),/separately/);
-  const remove=core.riderOperation(base,base.riders[0],'remove','rm');assert.deepEqual(remove.payload,{});
+  const remove=core.riderOperation(base,base.riders[0],'remove','rm');assert.deepEqual(remove.payload,{});assert.deepEqual(remove.expectedGroupVersions,{a:4});
+  const add=core.riderOperation(base,{name:'New',driverSlug:'a',stopOrder:2},'save','add','new');
+  assert.equal(add.payload.stopOrder,2);assert.deepEqual(add.expectedGroupVersions,{a:4});
 });
 test('secondary hydration never rolls back a newer person or branding version', async()=>{
   const core=await import('../src/shared-admin-core.js');assert.equal(typeof core.mergeSecondary,'function');

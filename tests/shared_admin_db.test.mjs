@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { before, test } from 'node:test';
 import { buildRollout } from '../tools/build-collaborative-rollout.mjs';
+import { riderOperation } from '../src/shared-admin-core.js';
 
 const container = process.env.RIDELIST_TEST_CONTAINER;
 const enabled = Boolean(container);
@@ -380,6 +381,21 @@ test('different_riders_both_save', {skip:!enabled}, async()=>{
   initialize(); const before=published();
   const [a,b]=await race(mutateSql(operation()),mutateSql(operation('rider_update',riderB,{name:'Changed B'}),'beta-token'));
   assert.equal(a.ok,true); assert.equal(b.ok,true); assert.equal(counts(2,2).riders.filter(r=>r.name.startsWith('Changed')).length,2); assert.equal(published(),before);
+});
+test('client ordinary edits on different riders in one route both save without changing group order', {skip:!enabled}, async()=>{
+ initialize();const before=published(),snapshot=rpc('ride_admin_shared_snapshot','alpha-token');
+ const edits=[riderA,riderB].map((id,i)=>riderOperation(snapshot,{...snapshot.riders.find(r=>r.id===id),name:`Client changed ${i}`},'save',operationId()));
+ const [a,b]=await race(mutateSql(edits[0]),mutateSql(edits[1],'beta-token'));
+ assert.equal(a.ok,true);assert.equal(b.ok,true,'independent rider fields must not conflict on unchanged route order');
+ const after=counts(2,2);assert.deepEqual(after.groupVersions,snapshot.groupVersions);
+ assert.deepEqual(after.riders.map(r=>[r.id,r.stopOrder,r.driverSlug]),snapshot.riders.map(r=>[r.id,r.stopOrder,r.driverSlug]));
+ assert.equal(after.riders.filter(r=>r.name.startsWith('Client changed')).length,2);assert.equal(published(),before);
+});
+test('client actual order changes retain captured group conflict protection', {skip:!enabled}, async()=>{
+ initialize();const snapshot=rpc('ride_admin_shared_snapshot','alpha-token');
+ const edits=[riderA,riderB].map((id,i)=>riderOperation(snapshot,{...snapshot.riders.find(r=>r.id===id),stopOrder:i?1:2},'save',operationId()));
+ const [a,b]=await race(mutateSql(edits[0]),mutateSql(edits[1],'beta-token'));
+ assert.equal(a.ok,true);assert.equal(b.code,'conflict');assert.equal(b.conflict.type,'group');counts(1,1);
 });
 test('same_rider_conflicts', {skip:!enabled}, async()=>{
   initialize(); const [a,b]=await race(mutateSql(operation()),mutateSql(operation('rider_update',riderA,{name:'Second'}),'beta-token'));

@@ -7907,7 +7907,10 @@
       if (!pending?.args || !matchesAdminShared(context) || !adminSharedOnline() || context.saving) return;
       // Lookup AND current snapshot reconciliation precede any same-ID/body retry.
       await context.sync.trackOperation(pending);
-      if (!matchesAdminShared(context) || context.status !== 'saved' || !(context.pendingOperation || context.pendingSecondary)) return;
+      // Lookup can settle this request and promote another recovered identity.
+      // Only the exact still-pending capture may be retried after the await.
+      if (!matchesAdminShared(context) || context.status !== 'saved' || !adminSharedOnline() || context.saving
+        || (context.pendingOperation || context.pendingSecondary) !== pending) return;
       context.pendingSecondary=null;context.pendingOperation=pending;
       return sendAdminSharedPending(context,pending);
     }

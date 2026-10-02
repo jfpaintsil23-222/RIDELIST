@@ -359,6 +359,16 @@ requests. Latest measured remote visibility: **2493ms**. Final DB checks cover
 credential redaction, full canonical retry equality, legacy ledger upgrade and
 reapply preservation, stale-writer rejection, missing pgcrypto rollback and
 relocated pgcrypto namespace resolution.
+Independent-review corrections subsequently passed **291 tests, 0 failed, 8 existing
+credential-gated skips** (299 total, 63.1s). Real PostgreSQL tests now use the actual
+client operation builder: ordinary edits to different riders on one route both
+save without changing group order; actual order edits retain stale-group conflicts.
+Retry rechecks the exact pending object after status lookup, preserving a promoted
+or replaced uncertain operation and its publication gate. The actual Chromium
+correction script verifies both paths. No SQL source changed in this correction.
+All four existing Chromium scripts also passed again, including cross-baseline
+recovery, Cancel, conflict navigation and rollout pause/revocation. Latest measured
+remote visibility: **2530ms**; zero page errors or external requests.
 Final credential-fix generated SQL SHA256: `c0aab19333f75898692939804c4c4351f019933b3b87ee21ba247562c3b1a198`.
 This supersedes the artifact hash recorded in the original Task 7 report.
 Regenerate and compare at action time; changed source bytes require new review.

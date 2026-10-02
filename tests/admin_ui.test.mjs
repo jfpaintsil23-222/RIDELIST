@@ -2151,7 +2151,7 @@ test("admin generated route alerts summarize each affected driver", async () => 
   ]);
 });
 
-test("local Coffee and Christ rehearsal loads sheet riders without Supabase writes", async () => {
+test("local Coffee and Christ rehearsal loads synthetic riders without Supabase writes", async () => {
   const calls = [];
   const app = await loadApp(async (url, options = {}) => {
     calls.push({ url, options });
@@ -2171,8 +2171,8 @@ test("local Coffee and Christ rehearsal loads sheet riders without Supabase writ
   assert.equal(app.state.plan.title, "Coffee and Christ");
   assert.equal(app.state.destination.label, "UH Science & Engineering Classroom 102");
   assert.equal(app.state.drivers.length, 11);
-  assert.ok(app.state.drivers.some((driver) => driver.slug === "naa" && driver.displayName === "Naa"));
-  assert.ok(app.state.drivers.some((driver) => driver.slug === "joojo" && driver.displayName === "Joojo"));
+  assert.ok(app.state.drivers.some((driver) => driver.slug === "naa" && driver.displayName === "Synthetic driver 1"));
+  assert.ok(app.state.drivers.some((driver) => driver.slug === "joojo" && driver.displayName === "Synthetic driver 2"));
   assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "joojo") < app.state.drivers.findIndex((driver) => driver.slug === "blue"));
   assert.ok(app.state.drivers.findIndex((driver) => driver.slug === "naa") < app.state.drivers.findIndex((driver) => driver.slug === "blue"));
   assert.equal(app.state.adminDraftStops.length, 8);
@@ -2184,24 +2184,24 @@ test("local Coffee and Christ rehearsal loads sheet riders without Supabase writ
   assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "annie").length, 1);
   assert.equal(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "blue").length, 1);
   assert.equal(app.state.adminDraftStops.filter((stop) => !stop.driverSlug).length, 0);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Owen").driverSlug, "naa");
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Fabio").driverSlug, "naa");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Fabio").address, /North American University/);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Zarah").driverSlug, "joojo");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Zarah").phone, /936/);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Emanuel").driverSlug, "joojo");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Emanuel").address, /1805 Valentine St/);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Precious car").driverSlug, "precious");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Precious car").notes, /Sito, Chyna, Monae/);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Dawson car").driverSlug, "dawson");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Ashton group - Dawson car").notes, /Makayla/);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "William Andrews").driverSlug, "blue");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "William Andrews").address, /3221 Oakdale Street/);
-  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Kadie").driverSlug, "annie");
-  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Kadie").notes, /Need pickup address/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 1").driverSlug, "naa");
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 2").driverSlug, "naa");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 2").address, /100 Demo Campus/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 3").driverSlug, "joojo");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 3").phone, /202-555-0103/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 4").driverSlug, "joojo");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 4").address, /400 Demo Street/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 5 group").driverSlug, "precious");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 5 group").notes, /Synthetic fixture/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 6 group").driverSlug, "dawson");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 6 group").notes, /Demo group split/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 8").driverSlug, "blue");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 8").address, /800 Demo Street/);
+  assert.equal(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 7").driverSlug, "annie");
+  assert.match(app.state.adminDraftStops.find((stop) => stop.name === "Synthetic rider 7").notes, /Need pickup address/);
   assert.equal(
     JSON.stringify(app.state.adminDraftStops.filter((stop) => stop.driverSlug === "naa").map((stop) => stop.name)),
-    JSON.stringify(["Owen", "Fabio"])
+    JSON.stringify(["Synthetic rider 1", "Synthetic rider 2"])
   );
 
   const html = app.adminView();
@@ -2216,12 +2216,12 @@ test("local Coffee and Christ rehearsal loads sheet riders without Supabase writ
   app.state.adminActiveTab = "people";
   const peopleHtml = app.adminView();
   assert.match(peopleHtml, /PeopleData · 8 people stored/);
-  assert.match(peopleHtml, /Zarah/);
-  assert.match(peopleHtml, /Owen/);
-  assert.match(peopleHtml, /Fabio/);
-  assert.match(peopleHtml, /Emanuel/);
-  assert.match(peopleHtml, /William Andrews/);
-  assert.match(peopleHtml, /Kadie/);
+  assert.match(peopleHtml, /Synthetic rider 3/);
+  assert.match(peopleHtml, /Synthetic rider 1/);
+  assert.match(peopleHtml, /Synthetic rider 2/);
+  assert.match(peopleHtml, /Synthetic rider 4/);
+  assert.match(peopleHtml, /Synthetic rider 8/);
+  assert.match(peopleHtml, /Synthetic rider 7/);
 });
 
 test("local Coffee and Christ rehearsal shows route cards and simulates driver alerts", async () => {
@@ -2235,55 +2235,55 @@ test("local Coffee and Christ rehearsal shows route cards and simulates driver a
   }, { search: "?rehearsal=sheet" });
   await app.loadDrivers();
 
-  const owen = app.state.admin.people.find((person) => person.name === "Owen");
-  const fabio = app.state.admin.people.find((person) => person.name === "Fabio");
+  const owen = app.state.admin.people.find((person) => person.name === "Synthetic rider 1");
+  const fabio = app.state.admin.people.find((person) => person.name === "Synthetic rider 2");
   assert.equal(app.adminDuplicateCandidates(owen).length, 0);
   assert.equal(app.adminDuplicateCandidates(fabio).length, 0);
 
   app.state.adminActiveTab = "drivers";
   app.state.adminExpandedDriverSlug = "naa";
   const naaHtml = app.adminView();
-  assert.match(naaHtml, /Naa/);
-  assert.match(naaHtml, /Owen/);
-  assert.match(naaHtml, /Fabio/);
-  assert.match(naaHtml, /North American University/);
-  assert.match(naaHtml, /Owen: phone missing/);
+  assert.match(naaHtml, /Synthetic driver 1/);
+  assert.match(naaHtml, /Synthetic rider 1/);
+  assert.match(naaHtml, /Synthetic rider 2/);
+  assert.match(naaHtml, /100 Demo Campus/);
+  assert.match(naaHtml, /Synthetic rider 1: phone missing/);
   assert.doesNotMatch(naaHtml, /Route time unavailable/);
 
   app.state.adminExpandedDriverSlug = "joojo";
   const joojoHtml = app.adminView();
-  assert.match(joojoHtml, /Joojo/);
-  assert.match(joojoHtml, /Zarah/);
-  assert.match(joojoHtml, /Emanuel/);
-  assert.match(joojoHtml, /1221 Highland Row/);
-  assert.doesNotMatch(joojoHtml, /Zarah: phone missing/);
+  assert.match(joojoHtml, /Synthetic driver 2/);
+  assert.match(joojoHtml, /Synthetic rider 3/);
+  assert.match(joojoHtml, /Synthetic rider 4/);
+  assert.match(joojoHtml, /300 Demo Street/);
+  assert.doesNotMatch(joojoHtml, /Synthetic rider 3: phone missing/);
 
   app.state.adminExpandedDriverSlug = "dawson";
   const dawsonHtml = app.adminView();
-  assert.match(dawsonHtml, /Dawson/);
-  assert.match(dawsonHtml, /Ashton group - Dawson car/);
-  assert.match(dawsonHtml, /UH Clear Lake/);
-  assert.match(dawsonHtml, /635 Bayou Rd E/);
+  assert.match(dawsonHtml, /Synthetic driver 4/);
+  assert.match(dawsonHtml, /Synthetic rider 6 group/);
+  assert.match(dawsonHtml, /Demo group split/);
+  assert.match(dawsonHtml, /Confirm final seat split/);
 
   app.state.adminExpandedDriverSlug = "precious";
   const preciousHtml = app.adminView();
-  assert.match(preciousHtml, /Precious/);
-  assert.match(preciousHtml, /Ashton group - Precious car/);
-  assert.match(preciousHtml, /Sito, Chyna, Monae/);
+  assert.match(preciousHtml, /Synthetic driver 3/);
+  assert.match(preciousHtml, /Synthetic rider 5 group/);
+  assert.match(preciousHtml, /Synthetic fixture/);
   assert.equal(app.routeTimingForDriver("precious").status, "ready");
 
   app.state.adminExpandedDriverSlug = "blue";
   const blueHtml = app.adminView();
-  assert.match(blueHtml, /Blu/);
-  assert.match(blueHtml, /William Andrews/);
-  assert.match(blueHtml, /3221 Oakdale Street/);
+  assert.match(blueHtml, /Synthetic driver 8/);
+  assert.match(blueHtml, /Synthetic rider 8/);
+  assert.match(blueHtml, /800 Demo Street/);
   assert.equal(app.routeTimingForDriver("blue").status, "ready");
 
   app.state.adminExpandedDriverSlug = "annie";
   const annieHtml = app.adminView();
-  assert.match(annieHtml, /Annie/);
-  assert.match(annieHtml, /Kadie/);
-  assert.match(annieHtml, /Kadie: pickup address missing/);
+  assert.match(annieHtml, /Synthetic driver 7/);
+  assert.match(annieHtml, /Synthetic rider 7/);
+  assert.match(annieHtml, /Synthetic rider 7: pickup address missing/);
 
   assert.equal(typeof app.openRehearsalDriverRoute, "function");
   app.openRehearsalDriverRoute("joojo");

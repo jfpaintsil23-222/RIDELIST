@@ -5325,43 +5325,44 @@
     };
 
     const REHEARSAL_DRIVER_BASE = [
-      { slug: "naa", displayName: "Naa", display_name: "Naa", initials: "NA", sort_order: 1, routeLabel: "NAU" },
-      { slug: "joojo", displayName: "Joojo", display_name: "Joojo", initials: "JP", sort_order: 2, routeLabel: "Highland Row / Central Houston" },
-      { slug: "precious", displayName: "Precious", display_name: "Precious", initials: "PR", sort_order: 3, routeLabel: "UH Clear Lake" },
-      { slug: "dawson", displayName: "Dawson", display_name: "Dawson", initials: "DW", sort_order: 4, routeLabel: "UH Clear Lake" },
-      { slug: "john-mark", displayName: "John Mark", display_name: "John Mark", initials: "JM", sort_order: 5, routeLabel: "Huntsville / North Houston" },
-      { slug: "dq", displayName: "DQ", display_name: "DQ", initials: "DQ", sort_order: 6, routeLabel: "South Houston" },
-      { slug: "annie", displayName: "Annie", display_name: "Annie", initials: "AK", sort_order: 7, routeLabel: "Campus / West Houston" },
-      { slug: "blue", displayName: "Blu", display_name: "Blu", initials: "BLU", sort_order: 8, routeLabel: "Cypress" },
-      { slug: "dolapo", displayName: "Dolapo", display_name: "Dolapo", initials: "DO", sort_order: 9, routeLabel: "Cypress / HCU" },
-      { slug: "danny-p", displayName: "P. Danny", display_name: "P. Danny", initials: "PD", sort_order: 10, routeLabel: "Fulshear" },
-      { slug: "albert", displayName: "Albert", display_name: "Albert", initials: "AL", sort_order: 11, routeLabel: "North Houston" },
-      { slug: "megan", displayName: "Megan", display_name: "Megan", initials: "ME", sort_order: 12, routeLabel: "FLOC", newSundayOnly: true },
-      { slug: "jay", displayName: "Jay", display_name: "Jay", initials: "JY", sort_order: 13, routeLabel: "FLOC", newSundayOnly: true },
-      { slug: "p-tony", displayName: "P. Tony", display_name: "P. Tony", initials: "PT", sort_order: 14, routeLabel: "FLOC", newSundayOnly: true },
-      { slug: "p-ricky", displayName: "P. Ricky", display_name: "P. Ricky", initials: "PR", sort_order: 15, routeLabel: "FLOC", newSundayOnly: true },
+      { slug: "naa", displayName: "Synthetic driver 1", display_name: "Synthetic driver 1", initials: "D1", sort_order: 1, routeLabel: "Demo zone 1" },
+      { slug: "joojo", displayName: "Synthetic driver 2", display_name: "Synthetic driver 2", initials: "D2", sort_order: 2, routeLabel: "Demo zone 2" },
+      { slug: "precious", displayName: "Synthetic driver 3", display_name: "Synthetic driver 3", initials: "D3", sort_order: 3, routeLabel: "Demo zone 3" },
+      { slug: "dawson", displayName: "Synthetic driver 4", display_name: "Synthetic driver 4", initials: "D4", sort_order: 4, routeLabel: "Demo zone 4" },
+      { slug: "john-mark", displayName: "Synthetic driver 5", display_name: "Synthetic driver 5", initials: "D5", sort_order: 5, routeLabel: "Demo zone 5" },
+      { slug: "dq", displayName: "Synthetic driver 6", display_name: "Synthetic driver 6", initials: "D6", sort_order: 6, routeLabel: "Demo zone 6" },
+      { slug: "annie", displayName: "Synthetic driver 7", display_name: "Synthetic driver 7", initials: "D7", sort_order: 7, routeLabel: "Demo zone 7" },
+      { slug: "blue", displayName: "Synthetic driver 8", display_name: "Synthetic driver 8", initials: "D8", sort_order: 8, routeLabel: "Demo zone 8" },
+      { slug: "dolapo", displayName: "Synthetic driver 9", display_name: "Synthetic driver 9", initials: "D9", sort_order: 9, routeLabel: "Demo zone 9" },
+      { slug: "danny-p", displayName: "Synthetic driver 10", display_name: "Synthetic driver 10", initials: "D10", sort_order: 10, routeLabel: "Demo zone 10" },
+      { slug: "albert", displayName: "Synthetic driver 11", display_name: "Synthetic driver 11", initials: "D11", sort_order: 11, routeLabel: "Demo zone 11" },
+      { slug: "megan", displayName: "Synthetic driver 12", display_name: "Synthetic driver 12", initials: "D12", sort_order: 12, routeLabel: "Demo zone 12", newSundayOnly: true },
+      { slug: "jay", displayName: "Synthetic driver 13", display_name: "Synthetic driver 13", initials: "D13", sort_order: 13, routeLabel: "Demo zone 13", newSundayOnly: true },
+      { slug: "p-tony", displayName: "Synthetic driver 14", display_name: "Synthetic driver 14", initials: "D14", sort_order: 14, routeLabel: "Demo zone 14", newSundayOnly: true },
+      { slug: "p-ricky", displayName: "Synthetic driver 15", display_name: "Synthetic driver 15", initials: "D15", sort_order: 15, routeLabel: "Demo zone 15", newSundayOnly: true },
     ];
 
+    // Public demonstration fixtures must contain no real rider records.
     const REHEARSAL_STOPS = [
-      { id: "coffee-owen", driverSlug: "naa", stopOrder: 1, name: "Owen", phone: "", address: "North American University, 11801 S Gessner Rd, Houston, TX 77071", area: "NAU", pickupTime: "", readyBy: "", routeLabel: "Naa route", notes: "Assigned to Naa for Coffee and Christ." },
-      { id: "coffee-fabio", driverSlug: "naa", stopOrder: 2, name: "Fabio", phone: "", address: "North American University, 11801 S Gessner Rd, Houston, TX 77071", area: "NAU", pickupTime: "", readyBy: "", routeLabel: "Naa route", notes: "Assigned to Naa for Coffee and Christ." },
-      { id: "coffee-zarah", driverSlug: "joojo", stopOrder: 1, name: "Zarah", phone: "(936) 662-1716", address: "1221 Highland Row Ln, Houston, TX", area: "Highland Row", pickupTime: "", readyBy: "", routeLabel: "Joojo route", notes: "Early pickup from the Coffee and Christ sheet." },
-      { id: "coffee-emanuel", driverSlug: "joojo", stopOrder: 2, name: "Emanuel", phone: "", address: "1805 Valentine St, Houston, TX", area: "Central Houston", pickupTime: "", readyBy: "", routeLabel: "Joojo route", notes: "Assigned to Joojo for Coffee and Christ." },
-      { id: "coffee-ashton-precious", driverSlug: "precious", stopOrder: 1, name: "Ashton group - Precious car", phone: "(763) 951-9448", address: "UH Clear Lake Hunter Hall, 635 Bayou Rd E, Houston, TX 77058", area: "UH Clear Lake", pickupTime: "", readyBy: "", routeLabel: "Precious route", notes: "Split pickup with Dawson for Ashton and friends: Sito, Chyna, Monae. Confirm final seat split at pickup." },
-      { id: "coffee-ashton-dawson", driverSlug: "dawson", stopOrder: 1, name: "Ashton group - Dawson car", phone: "(281) 210-9268", address: "UH Clear Lake Hunter Hall, 635 Bayou Rd E, Houston, TX 77058", area: "UH Clear Lake", pickupTime: "", readyBy: "", routeLabel: "Dawson route", notes: "Split pickup with Precious for Ashton and friends: Makayla +1, Nathalia, Craig, Ma'kylah Emmanuel, Traci. Confirm final seat split at pickup." },
-      { id: "coffee-kadie", driverSlug: "annie", stopOrder: 1, name: "Kadie", phone: "", address: "", area: "Address pending", pickupTime: "", readyBy: "", routeLabel: "Annie route", notes: "Need pickup address before final route timing." },
-      { id: "coffee-william-andrews", driverSlug: "blue", stopOrder: 1, name: "William Andrews", phone: "(832) 459-5997", address: "3221 Oakdale Street, Houston, TX", area: "Central Houston", pickupTime: "", readyBy: "", routeLabel: "Blu route", notes: "Assigned to Blu for Coffee and Christ." },
+      { id: "demo-rider-1", driverSlug: "naa", stopOrder: 1, name: "Synthetic rider 1", phone: "", address: "100 Demo Campus, Example City", area: "Demo zone 1", pickupTime: "", readyBy: "", routeLabel: "Demo route 1", notes: "Synthetic fixture. Demonstration pickup; no real rider or address." },
+      { id: "demo-rider-2", driverSlug: "naa", stopOrder: 2, name: "Synthetic rider 2", phone: "", address: "100 Demo Campus, Example City", area: "Demo zone 1", pickupTime: "", readyBy: "", routeLabel: "Demo route 1", notes: "Synthetic fixture. Demonstration pickup; no real rider or address." },
+      { id: "demo-rider-3", driverSlug: "joojo", stopOrder: 1, name: "Synthetic rider 3", phone: "202-555-0103", address: "300 Demo Street, Example City", area: "Demo zone 2", pickupTime: "", readyBy: "", routeLabel: "Demo route 2", notes: "Synthetic fixture. Demonstration pickup; no real rider or address." },
+      { id: "demo-rider-4", driverSlug: "joojo", stopOrder: 2, name: "Synthetic rider 4", phone: "", address: "400 Demo Street, Example City", area: "Demo zone 2", pickupTime: "", readyBy: "", routeLabel: "Demo route 2", notes: "Synthetic fixture. Demonstration pickup; no real rider or address." },
+      { id: "demo-rider-5", driverSlug: "precious", stopOrder: 1, name: "Synthetic rider 5 group", phone: "202-555-0105", address: "500 Demo Hall, Example City", area: "Demo zone 3", pickupTime: "", readyBy: "", routeLabel: "Demo route 3", notes: "Synthetic fixture. Demo group split between two cars. Confirm final seat split at pickup." },
+      { id: "demo-rider-6", driverSlug: "dawson", stopOrder: 1, name: "Synthetic rider 6 group", phone: "202-555-0106", address: "500 Demo Hall, Example City", area: "Demo zone 4", pickupTime: "", readyBy: "", routeLabel: "Demo route 4", notes: "Synthetic fixture. Demo group split between two cars. Confirm final seat split at pickup." },
+      { id: "demo-rider-7", driverSlug: "annie", stopOrder: 1, name: "Synthetic rider 7", phone: "", address: "", area: "Address pending", pickupTime: "", readyBy: "", routeLabel: "Demo route 7", notes: "Synthetic fixture. Need pickup address before final route timing." },
+      { id: "demo-rider-8", driverSlug: "blue", stopOrder: 1, name: "Synthetic rider 8", phone: "202-555-0108", address: "800 Demo Street, Example City", area: "Demo zone 8", pickupTime: "", readyBy: "", routeLabel: "Demo route 8", notes: "Synthetic fixture. Demonstration pickup; no real rider or address." },
     ];
 
     const REHEARSAL_ROUTE_TIMINGS = {
-      "naa": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Owen", "Fabio"] },
-      "joojo": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Zarah", "Emanuel"] },
-      "precious": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Ashton group - Precious car"] },
-      "dawson": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Ashton group - Dawson car"] },
+      "naa": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Synthetic rider 1", "Synthetic rider 2"] },
+      "joojo": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Synthetic rider 3", "Synthetic rider 4"] },
+      "precious": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Synthetic rider 5 group"] },
+      "dawson": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Synthetic rider 6 group"] },
       "john-mark": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
       "dq": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
-      "annie": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Kadie"] },
-      "blue": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["William Andrews"] },
+      "annie": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Synthetic rider 7"] },
+      "blue": { status: "ready", durationText: "Timing pending", distanceText: "", etaText: "", optimizedStopOrder: ["Synthetic rider 8"] },
       "albert": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
       "dolapo": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
       "danny-p": { status: "empty", warning: "No riders assigned", warnings: [{ key: "no-riders", label: "No riders assigned", level: "normal" }] },
@@ -5996,13 +5997,13 @@
       state.routeTimingError = "";
       state.routeTimingPlanDate = REHEARSAL_PLAN.date;
       state.routeTimings = rehearsalRouteTimingMap();
-      state.adminMessage = "Local rehearsal loaded from the Google Sheet. Nothing saves live.";
+      state.adminMessage = "Local rehearsal with synthetic data. Nothing saves live.";
       state.adminError = "";
     }
 
     function openRehearsalAdmin() {
       if (!state.admin) loadRehearsalData();
-      state.adminMessage = "Local rehearsal loaded from the Google Sheet. Nothing saves live.";
+      state.adminMessage = "Local rehearsal with synthetic data. Nothing saves live.";
       state.view = "admin";
       closeCodeModal();
       syncRehearsalDrivers();

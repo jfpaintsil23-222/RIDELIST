@@ -908,3 +908,72 @@ test('synthetic backup export restores latest publication shared history recover
     assert.equal(sql(digestQuery),expected,'Restoration never changes the active database');
   } finally {sql(`drop database ${restored};`,'postgres');}
 });
+
+
+test('final catalog credential has no plaintext or fast request verifier in durable surfaces', {skip:!enabled},()=>{
+ initialize();
+ const id=operationId(), secret='synthetic-'+operationId(), payload={name:'Final Credential Probe',initials:'FC',passcode:secret};
+ const add=body=>rpc('ride_admin_shared_add_driver','alpha-token',undefined,`, ${quote(JSON.stringify(body))}::jsonb, '${id}'`);
+ const first=add(payload);assert.equal(first.ok,true);
+ assert.deepEqual(add({...payload}),first);
+ assert.equal(add({...payload,passcode:secret+'-different'}).code,'operation_id_reused');
+ const evidence=JSON.parse(sql(`select jsonb_build_object(
+  'plaintext', position(${quote(secret)} in (select to_jsonb(o)::text from rides_private.ride_shared_operations o where operation_id='${id}'))>0,
+  'fastVerifier', (select request_hash=md5(request::text) from rides_private.ride_shared_operations where operation_id='${id}'),
+  'resultSecret',position(${quote(secret)} in ${quote(JSON.stringify(first))})>0,
+  'eventSecret',exists(select from rides_private.ride_shared_events e where position(${quote(secret)} in to_jsonb(e)::text)>0),
+  'auditSecret',exists(select from rides_private.ride_admin_audit_log a where position(${quote(secret)} in to_jsonb(a)::text)>0));`));
+ assert.equal(evidence.plaintext,false,'durable operation row retains credential plaintext');
+ assert.equal(evidence.fastVerifier,false,'credential request must not have an unsalted fast verifier');
+ assert.equal(evidence.resultSecret||evidence.eventSecret||evidence.auditSecret,false);
+});
+
+
+test('final catalog canonical long bodies and legacy ledger upgrade preserve exact retry and history', {skip:!enabled},()=>{
+ initialize();const id=operationId(),secret='synthetic-'+operationId();
+ const payload={name:'Final Long Credential '+ 'x'.repeat(200),initials:'FL',passcode:secret+'x'.repeat(120)};
+ const add=body=>rpc('ride_admin_shared_add_driver','alpha-token',undefined,`, ${quote(JSON.stringify(body))}::jsonb, '${id}'`);
+ const first=add(payload);assert.equal(first.ok,true);
+ assert.deepEqual(add({passcode:payload.passcode,initials:payload.initials,name:payload.name}),first,'JSON key order remains canonical');
+ assert.equal(add({...payload,passcode:payload.passcode+'tail'}).code,'operation_id_reused','credential suffix after byte 72 must participate');
+ assert.equal(add({...payload,phone:'changed after long prefix'}).code,'operation_id_reused');
+ const original={operationId:id,planDate:'2099-01-04',kind:'catalog_add',payload,expectedGroupVersions:{}};
+ const history=()=>sql(`select md5(jsonb_build_object('outcome',(select to_jsonb(o)-'request'-'request_hash' from rides_private.ride_shared_operations o where operation_id='${id}'),'events',(select jsonb_agg(to_jsonb(e)) from rides_private.ride_shared_events e),'audit',(select jsonb_agg(to_jsonb(a)) from rides_private.ride_admin_audit_log a))::text);`);
+ const before=history();
+ sql(`alter table rides_private.ride_shared_operations drop constraint ride_shared_operations_catalog_redacted; update rides_private.ride_shared_operations set request=${quote(JSON.stringify(original))}::jsonb,request_hash=md5(${quote(JSON.stringify(original))}::jsonb::text) where operation_id='${id}';`);
+ sql(buildRollout());
+ assert.equal(history(),before,'migration preserves exact operation outcome timestamp and history');
+ assert.equal(sql(`select position(${quote(secret)} in to_jsonb(o)::text)>0 from rides_private.ride_shared_operations o where operation_id='${id}';`),'f');
+ assert.deepEqual(add(payload),first);assert.equal(add({...payload,passcode:payload.passcode+'tail'}).code,'operation_id_reused');
+ const retained=sql(`select md5(to_jsonb(o)::text) from rides_private.ride_shared_operations o where operation_id='${id}';`);
+ sql(buildRollout());assert.equal(sql(`select md5(to_jsonb(o)::text) from rides_private.ride_shared_operations o where operation_id='${id}';`),retained,'additive reapply preserves protected verifier');
+ assert.equal(sql(`select request_hash like 'bcrypt-sha256-v1:$2a$12$%' from rides_private.ride_shared_operations where operation_id='${id}';`),'t');
+ sql(`set role anon; select rides_private.ride_shared_request_hash('{}');`,database,true);
+ const dump=spawnSync('docker',['exec',container,'pg_dump','-U','postgres','-d',database,'--data-only','--table=rides_private.ride_shared_operations'],{encoding:'utf8',timeout:20000});
+ assert.equal(dump.status,0);assert.equal(dump.stdout.includes(secret),false,'fresh operation backup contains no credential plaintext');
+});
+
+
+test('final catalog stale writer fails closed and salts are independent', {skip:!enabled},()=>{
+ initialize();const op=operation('catalog_add',null,{name:'Stale synthetic writer',initials:'SS',passcode:'synthetic-stale'});
+ const json=quote(JSON.stringify(op));
+ assert.equal(sql(`select rides_private.ride_shared_request_hash(${json}::jsonb) <> rides_private.ride_shared_request_hash(${json}::jsonb);`),'t');
+ const result=spawnSync('docker',['exec','-i',container,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-U','postgres','-d',database],{input:`\\set VERBOSITY terse
+ insert into rides_private.ride_shared_operations(plan_date,actor_key,operation_id,request,request_hash,result) values ('2099-01-04','profile:alpha','${op.operationId}',${json}::jsonb,md5(${json}::jsonb::text),'{}');`,encoding:'utf8',timeout:20000});
+ assert.notEqual(result.status,0);assert.equal(result.stderr.includes('ride_shared_operations_catalog_redacted'),true);
+ assert.equal(sql(`select count(*) from rides_private.ride_shared_operations where operation_id='${op.operationId}';`),'0');
+});
+
+test('final pgcrypto prerequisite fails closed and resolves its actual namespace', {skip:!enabled},()=>{
+ const schema=sql("select n.nspname from pg_extension e join pg_namespace n on n.oid=e.extnamespace where e.extname='pgcrypto';");
+ assert.equal(schema,'extensions');
+ sql('create schema if not exists credential_crypto_probe; alter extension pgcrypto set schema credential_crypto_probe;');
+ try {
+  const request=quote(JSON.stringify({kind:'catalog_add',payload:{passcode:'synthetic-namespace-probe'}}));
+  assert.equal(sql(`select rides_private.ride_shared_request_hash(${request}::jsonb) like 'bcrypt-sha256-v1:$2a$12$%';`),'t');
+ } finally { sql('alter extension pgcrypto set schema extensions; drop schema credential_crypto_probe;'); }
+ const result=spawnSync('docker',['exec','-i',container,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-U','postgres','-d',database],{input:'begin; drop extension pgcrypto;\n'+buildRollout(),encoding:'utf8',timeout:20000});
+ assert.notEqual(result.status,0);
+ assert.match(result.stderr,/Shared credential ledger requires installed pgcrypto/);
+ assert.equal(sql("select count(*) from pg_extension where extname='pgcrypto';"),'1','failed install rolls back extension removal');
+});

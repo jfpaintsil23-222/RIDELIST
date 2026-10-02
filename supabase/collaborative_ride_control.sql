@@ -3,6 +3,13 @@
 -- Production cutover/recovery is installed later; compatibility fences accompany these RPCs.
 begin;
 
+-- Do not silently install or relocate extensions on an existing deployment.
+do $$ begin
+  if not exists(select 1 from pg_catalog.pg_extension where extname='pgcrypto') then
+    raise exception 'Shared credential ledger requires installed pgcrypto';
+  end if;
+end $$;
+
 create table if not exists rides_private.ride_shared_workspaces (
   plan_date date primary key references rides_private.ride_plans(plan_date),
   draft_revision bigint not null default 0 check (draft_revision >= 0),
@@ -303,8 +310,45 @@ grant execute on function public.ride_admin_shared_snapshot(text, date) to anon,
 -- Retain result/tombstone rows indefinitely in this release (at least 30 days).
 -- Expired IDs are never executable again; status lookup still returns their outcome.
 alter table rides_private.ride_shared_operations add column if not exists request_hash text;
+
+-- Credential requests never retain plaintext or a fast offline verifier. Hash the
+-- COMPLETE canonical JSON before salted bcrypt: its 64-byte hex input cannot be
+-- truncated by bcrypt's 72-byte limit, even for long passcodes/request bodies.
+-- pgcrypto is a prerequisite; resolve its installed schema, never search_path.
+create or replace function rides_private.ride_shared_request_hash(p_request jsonb,p_stored text default null)
+returns text language plpgsql volatile security definer set search_path to '' as $$
+declare v_schema text; v_hash text; v_prefix constant text := 'bcrypt-sha256-v1:';
+begin
+  if p_request->>'kind' is distinct from 'catalog_add' then return md5(p_request::text); end if;
+  if p_stored is not null and left(p_stored,length(v_prefix))<>v_prefix then return ''; end if;
+  select n.nspname into v_schema from pg_catalog.pg_extension e
+    join pg_catalog.pg_namespace n on n.oid=e.extnamespace where e.extname='pgcrypto';
+  if v_schema is null then raise exception 'Shared credential ledger requires pgcrypto'; end if;
+  execute format('select %I.crypt($1,coalesce($2,%I.gen_salt(''bf'',12)))',v_schema,v_schema)
+    into v_hash using encode(sha256(convert_to(p_request::text,'UTF8')),'hex'),
+      case when p_stored is null then null else substr(p_stored,length(v_prefix)+1) end;
+  return v_prefix || v_hash;
+end;
+$$;
+revoke execute on function rides_private.ride_shared_request_hash(jsonb,text) from public,anon,authenticated;
+
+-- Upgrade old rows in place before replacing the writer; preserve identity,
+-- timestamps, outcomes and event history. Reapply never rehashes a redacted row.
+update rides_private.ride_shared_operations
+set request_hash=rides_private.ride_shared_request_hash(request),request=request #- '{payload,passcode}'
+where request->>'kind'='catalog_add' and coalesce(request_hash,'') not like 'bcrypt-sha256-v1:%';
 update rides_private.ride_shared_operations set request_hash=md5(request::text) where request_hash is null;
 alter table rides_private.ride_shared_operations alter column request_hash set not null;
+-- An old in-flight function body must fail closed after upgrade, never reinsert
+-- credential plaintext or its former fast verifier after the migration commits.
+do $$ begin
+  if not exists(select 1 from pg_catalog.pg_constraint where conrelid='rides_private.ride_shared_operations'::regclass and conname='ride_shared_operations_catalog_redacted') then
+    alter table rides_private.ride_shared_operations add constraint ride_shared_operations_catalog_redacted
+      check (request->>'kind' is distinct from 'catalog_add' or
+        (request #> '{payload,passcode}' is null and request_hash like 'bcrypt-sha256-v1:$2a$12$%'));
+  end if;
+end $$;
+
 
 create or replace function public.ride_admin_shared_operation(p_admin_code text,p_plan_date date,p_operation_id uuid)
 returns jsonb language plpgsql stable security definer set search_path to '' as $$
@@ -351,7 +395,8 @@ begin
   if w.plan_date is null then return jsonb_build_object('ok',false,'code','not_initialized','operationId',v_id); end if;
   select * into previous from rides_private.ride_shared_operations where plan_date=p_plan_date and actor_key=v_actor->>'actorKey' and operation_id=v_id;
   if previous.operation_id is not null then
-    if previous.request_hash<>md5(p_request::text) or previous.request<>p_request then
+    if previous.request_hash is distinct from rides_private.ride_shared_request_hash(p_request,previous.request_hash)
+      or previous.request is distinct from (case when v_kind='catalog_add' then p_request #- '{payload,passcode}' else p_request end) then
       return jsonb_build_object('ok',false,'code','operation_id_reused','operationId',v_id,'draftRevision',w.draft_revision,'eventCursor',w.event_cursor);
     end if;
     if previous.created_at<statement_timestamp()-interval '30 days' then
@@ -361,7 +406,9 @@ begin
   end if;
   v_kind:=p_request->>'kind'; v_payload:=p_request->'payload'; v_groups:=p_request->'expectedGroupVersions';
   insert into rides_private.ride_shared_operations(plan_date,actor_key,operation_id,request,request_hash,result)
-  values(p_plan_date,v_actor->>'actorKey',v_id,p_request,md5(p_request::text),
+  values(p_plan_date,v_actor->>'actorKey',v_id,
+    case when v_kind='catalog_add' then p_request #- '{payload,passcode}' else p_request end,
+    rides_private.ride_shared_request_hash(p_request),
     case when v_kind='publish' then jsonb_build_object('auditTransaction',pg_current_xact_id()::text) else '{}'::jsonb end);
   -- Every expected failure is recorded, including conflicts, without advancing revision/events.
   begin

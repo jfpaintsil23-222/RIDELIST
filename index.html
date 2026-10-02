@@ -7384,31 +7384,70 @@
       return state.adminShared === context && context.generation === adminSharedGeneration && context.planDate === activePlanDate();
     }
 
-    function retainAdminSharedRecovery(context = state.adminShared) {
+    function writeAdminSharedRecovery(context, baseline, changes) {
+      const key=window.RideShared.recoveryKey({actorId:context.actorKey,planDate:context.planDate,baselinePublishedRevision:baseline});
+      const previous=JSON.parse(localStorage.getItem(key)||'null');
+      const owned=previous?.actorKey===context.actorKey&&previous.planDate===context.planDate&&previous.baselinePublishedRevision===baseline;
+      const recovery={...(owned?previous:{}),actorKey:context.actorKey,planDate:context.planDate,baselinePublishedRevision:baseline,...changes};
+      localStorage.setItem(key,JSON.stringify(recovery));
+      context.deviceRecoveries=(context.deviceRecoveries||[]).filter(item=>item.baselinePublishedRevision!==baseline).concat(recovery);
+      if(context.deviceRecovery?.baselinePublishedRevision===baseline || !context.deviceRecovery)context.deviceRecovery=recovery;
+    }
+
+    function retainAdminSharedRecovery(context = state.adminShared, discardForm = false) {
       if (!context?.actorKey || !context.snapshot || !window.RideShared) return;
       try {
         const form = document.querySelector('[data-admin-form="rider"]');
-        const personalForm = form?.dataset?.sharedSnapshot ? Object.fromEntries(new FormData(form).entries()) : context.personalForm;
+        const captured=form?.dataset?.sharedSnapshot ? JSON.parse(form.dataset.sharedSnapshot) : null;
+        const baseline=captured?.baselinePublishedRevision ?? context.personalFormBaseline ?? context.snapshot.baselinePublishedRevision;
+        if(discardForm || captured || context.personalForm!==undefined) {
+          const personalForm=discardForm?null:captured?Object.fromEntries(new FormData(form).entries()):context.personalForm;
+          writeAdminSharedRecovery(context,baseline,{personalForm,personDraft:discardForm?null:state.adminPersonDraft});
+        }
         const pending = context.pendingOperation || context.pendingSecondary;
-        // Catalog creation contains a driver passcode: its exact body stays in memory only.
-        const args = pending && pending.kind !== 'catalog' ? { ...pending.args } : null;
-        if (args) delete args.p_admin_code;
-        const key = window.RideShared.recoveryKey({actorId:context.actorKey,planDate:context.planDate,baselinePublishedRevision:context.snapshot.baselinePublishedRevision});
-        localStorage.setItem(key, JSON.stringify({actorKey:context.actorKey,planDate:context.planDate,
-          baselinePublishedRevision:context.snapshot.baselinePublishedRevision,personalForm,personDraft:state.adminPersonDraft,
-          pending:pending ? {...pending,args} : null}));
-      } catch (error) { console.warn('Personal recovery could not be saved', error); }
+        if(pending) {
+          pending.recoveryBaseline ??= context.snapshot.baselinePublishedRevision;
+          // Credentials and tokens never enter device recovery. Catalog status can
+          // still be looked up after reload; its body is deliberately memory-only.
+          const args=pending.kind!=='catalog'?{...pending.args}:null;
+          if(args)delete args.p_admin_code;
+          writeAdminSharedRecovery(context,pending.recoveryBaseline,{pending:{...pending,args}});
+        }
+      } catch (error) { console.warn('Personal recovery could not be saved'); }
     }
 
     function restoreAdminSharedUncertainty(context) {
       try {
-        const key=window.RideShared.recoveryKey({actorId:context.actorKey,planDate:context.planDate,baselinePublishedRevision:context.snapshot.baselinePublishedRevision});
-        const recovery=JSON.parse(localStorage.getItem(key) || 'null');
-        if (!recovery || recovery.actorKey!==context.actorKey || recovery.planDate!==context.planDate || recovery.baselinePublishedRevision!==context.snapshot.baselinePublishedRevision) return;
-        context.deviceRecovery=recovery; // Comparison only; never auto-apply a personal form or legacy snapshot.
-        context.personalForm=recovery.personalForm;
-        if (recovery.pending?.scope?.actorKey===context.actorKey && recovery.pending.scope.planDate===context.planDate) context.pendingOperation=recovery.pending;
-      } catch(error) { console.warn('Recovery requires review',error); }
+        const prefix=window.RideShared.recoveryKey({actorId:context.actorKey,planDate:context.planDate,baselinePublishedRevision:0}).slice(0,-1);
+        const recoveries=[];
+        // Inspect key names first: never fetch another authenticated actor/plan's bytes.
+        for(let i=0;i<localStorage.length;i++) {
+          const key=localStorage.key(i);if(!key?.startsWith(prefix))continue;
+          const baseline=Number(key.slice(prefix.length));
+          if(!Number.isSafeInteger(baseline)||baseline<0||String(baseline)!==key.slice(prefix.length))continue;
+          try {
+            const recovery=JSON.parse(localStorage.getItem(key)||'null');
+            if(recovery?.actorKey===context.actorKey&&recovery.planDate===context.planDate&&recovery.baselinePublishedRevision===baseline)recoveries.push(recovery);
+          }catch(error){ /* A damaged record must not hide other valid recoveries. */ }
+        }
+        recoveries.sort((a,b)=>b.baselinePublishedRevision-a.baselinePublishedRevision);
+        context.deviceRecoveries=recoveries;
+        context.deviceRecovery=recoveries.find(item=>item.personalForm)||recoveries[0];
+        const seen=new Set();
+        context.recoveryPending=recoveries.filter(item=>item.pending?.scope?.actorKey===context.actorKey&&item.pending.scope.planDate===context.planDate&&item.pending.operationId&&!seen.has(item.pending.operationId)&&seen.add(item.pending.operationId))
+          .map(item=>({...item.pending,recoveryBaseline:item.baselinePublishedRevision,editVersion:-1}));
+        // Lookup only. Old forms are explicit recovery candidates, never active edits.
+        context.pendingOperation=context.recoveryPending.shift()||null;
+      } catch(error) { console.warn('Recovery requires review'); }
+    }
+
+    function discardAdminSharedEditor() {
+      const c=state.adminShared;
+      if(!c || c.snapshot?.writeMode==='legacy' || (c.dirtyEditorKey && c.dirtyEditorKey!==adminSharedEditorKey()))return;
+      retainAdminSharedRecovery(c,true);
+      c.personalDirty=false;c.personalForm=undefined;c.personalFormBaseline=undefined;c.dirtyEditorKey=null;
+      c.editVersion=(c.editVersion||0)+1;c.review=null;
+      state.adminMessage='Personal edits discarded. Any unconfirmed save still requires a status check.';
     }
 
     function clearAdminPrivateState() {
@@ -7519,7 +7558,7 @@
           <button type="button" class="secondary-action" data-shared-import="${escapeHtml(candidate.id)}" ${comparison.canImport?'':'disabled'}>Replace shared riders with this candidate</button></details>`;
         }
         if(!c.recoveryCandidates.length)html+='<p>No server recovery candidates for this account and plan.</p>';
-        if(c.deviceRecovery?.personalForm)html+=`<details><summary>Unsaved values on this device</summary><pre>${sharedReadable(c.deviceRecovery.personalForm)}</pre><button type="button" class="secondary-action" data-action="adminSharedRestoreForm">Review in rider editor</button></details>`;
+        for(const recovery of c.deviceRecoveries || (c.deviceRecovery?[c.deviceRecovery]:[]))if(recovery.personalForm)html+=`<details><summary>Unsaved values on this device · baseline ${escapeHtml(recovery.baselinePublishedRevision)}</summary><p>Current baseline: ${escapeHtml(c.snapshot.baselinePublishedRevision)}. Review these older values against the current rider before saving; publication requires a fresh review.</p><pre>${sharedReadable(recovery.personalForm)}</pre><button type="button" class="secondary-action" data-action="adminSharedRestoreForm" data-recovery-baseline="${escapeHtml(recovery.baselinePublishedRevision)}">Review in rider editor</button></details>`;
         html+='</section>';
       }
       return html;
@@ -7656,13 +7695,13 @@
       c.pendingOperation=pending;await sendAdminSharedPending(c,pending);
     }
 
-    function restoreAdminSharedPersonalForm() {
-      const c=state.adminShared,values=c?.deviceRecovery?.personalForm;if(!values||c.personalDirty||c.pendingOperation||c.pendingSecondary)return;
+    function restoreAdminSharedPersonalForm(baseline) {
+      const c=state.adminShared,recovery=baseline==null?c?.deviceRecovery:c?.deviceRecoveries?.find(item=>item.baselinePublishedRevision===Number(baseline)),values=recovery?.personalForm;if(!values||c.personalDirty||c.pendingOperation||c.pendingSecondary)return;
       if(values.id&&!c.snapshot.riders.some(r=>r.id===values.id)){state.adminError='The recovered rider is no longer in this draft. Compare the recovery values manually.';adminSharedSecondaryNotice();return;}
       openAdminEditor(values.id||'new');
       const form=document.querySelector('[data-admin-form="rider"]');
       for(const [key,value] of Object.entries(values)){const field=form?.elements?.namedItem(key);if(field&&typeof field.value==='string')field.value=value??'';}
-      c.personalForm=values;c.personalDirty=true;c.editVersion=(c.editVersion||0)+1;c.review=null;updateAdminSharedStatus();
+      c.personalForm=values;c.personalFormBaseline=c.snapshot.baselinePublishedRevision;c.dirtyEditorKey=adminSharedEditorKey();c.personalDirty=true;c.editVersion=(c.editVersion||0)+1;c.review=null;updateAdminSharedStatus();
     }
 
     async function quickMoveAdminShared(id,driverSlug,captured) {
@@ -7762,7 +7801,7 @@
     document.addEventListener?.('input', event => {
       const context=state.adminShared;
       if (!context || context.snapshot?.writeMode==='legacy' || !event.target?.closest?.('[data-admin-form]') || event.target?.closest?.('[data-admin-form="quick-move"]')) return;
-      context.personalDirty=true;context.editVersion=(context.editVersion || 0)+1;context.review=null;retainAdminSharedRecovery(context);updateAdminSharedStatus();
+      context.personalDirty=true;context.dirtyEditorKey=adminSharedEditorKey();context.editVersion=(context.editVersion || 0)+1;context.review=null;retainAdminSharedRecovery(context);updateAdminSharedStatus();
     });
 
     function adminSharedOnline() { return navigator.onLine !== false && document.hidden !== true; }
@@ -7804,8 +7843,16 @@
 
     function settleAdminSharedPending(context, operationId) {
       context.sync?.settleOperation(operationId);
+      const pending=[context.pendingOperation,context.pendingSecondary].find(item=>item?.operationId===operationId);
+      if(pending?.recoveryBaseline!=null) {
+        try { writeAdminSharedRecovery(context,pending.recoveryBaseline,{pending:null}); } catch(error) { console.warn('Recovery status could not be saved'); }
+      }
       if (context.pendingOperation?.operationId === operationId) context.pendingOperation=null;
       if (context.pendingSecondary?.operationId === operationId) context.pendingSecondary=null;
+      if(!context.pendingOperation&&!context.pendingSecondary&&context.recoveryPending?.length) {
+        context.pendingOperation=context.recoveryPending.shift();
+        void context.sync?.trackOperation(context.pendingOperation);
+      }
     }
 
     async function sendAdminSharedPending(context, pending) {
@@ -11316,10 +11363,12 @@
         render();
       }
       if (action === "adminPersonAddBack") {
+        discardAdminSharedEditor();
         returnToAdminPersonDetailFromAdd();
         return;
       }
       if (action === "adminBack") {
+        discardAdminSharedEditor();
         state.adminError = "";
         state.adminSelectedStopId = null;
         state.adminPersonSeed = null;
@@ -11340,6 +11389,7 @@
         render();
       }
       if (action === "adminDriverAddCancel") {
+        discardAdminSharedEditor();
         state.adminDriverAddOpen = false;
         state.adminError = "";
         render();
@@ -11353,7 +11403,7 @@
       if (action === "adminSharedCompare") compareAdminSharedConflict();
       if (action === "adminSharedReapply") reapplyAdminSharedConflict();
       if (action === "adminSharedRecovery") loadAdminSharedRecovery();
-      if (action === "adminSharedRestoreForm") restoreAdminSharedPersonalForm();
+      if (action === "adminSharedRestoreForm") restoreAdminSharedPersonalForm(event.target.closest("[data-action]")?.dataset.recoveryBaseline);
       const importButton=event.target.closest('[data-shared-import]');
       if(importButton)importAdminSharedRecovery(importButton.dataset.sharedImport);
       if (action === "adminReviewChanges" && adminSharedSecondaryMode() !== "legacy") { reviewAdminShared();return; }
@@ -11362,6 +11412,7 @@
         render();
       }
       if (action === "adminPersonBack") {
+        discardAdminSharedEditor();
         state.adminError = "";
         state.view = state.adminSelectedPersonId ? "adminPersonDetail" : "admin";
         render();

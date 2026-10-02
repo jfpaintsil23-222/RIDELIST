@@ -9,18 +9,18 @@ const date='2099-01-04';
 const snapshot=()=>({ok:true,planDate:date,writeMode:'shared',draftRevision:3,eventCursor:19,publishedRevision:0,baselinePublishedRevision:0,settingsVersion:1,drivers:[{slug:'a',displayName:'Synthetic'}],riders:[{id:'00000000-0000-4000-8000-000000000002',name:'Synthetic rider',address:'Example',driverSlug:'a',entityVersion:2,stopOrder:1}],groupVersions:{a:3},publishedSnapshot:{ok:true,plan:{date},stops:[],drivers:[],people:[]}});
 async function appHarness(handler=()=>undefined){
  const elements=new Map(),storage=new Map(),calls=[],listeners={};let seq=10;
- const element=()=>({innerHTML:'',textContent:'',value:'',dataset:{},hidden:false,classList:{add(){},remove(){},contains(){return false;},toggle(){}},setAttribute(){},addEventListener(){},querySelector(){return element();},focus(){}});
+ const element=()=>({innerHTML:'',textContent:'',value:'',dataset:{},hidden:false,classList:{add(){},remove(){},contains(){return false;},toggle(){}},setAttribute(){},addEventListener(name,fn){(this.listeners ||= {})[name]=fn;},querySelector(){return element();},focus(){}});
  const get=q=>{if(!elements.has(q))elements.set(q,element());return elements.get(q);};
  const document={hidden:false,activeElement:null,querySelector:get,querySelectorAll:()=>[],addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener(){}};
  const context={console:{...console,error(){},warn(){}},URLSearchParams,encodeURIComponent,crypto:{randomUUID:()=>`00000000-0000-4000-8000-${String(++seq).padStart(12,'0')}`},setTimeout:()=>1,clearTimeout(){},AbortController,
   FormData:class{constructor(form){this.values=form?.values||{};}get(key){return this.values[key];}entries(){return Object.entries(this.values)[Symbol.iterator]();}},
   location:{href:'https://example.test/',search:''},navigator:{onLine:true},document,
   window:{isSecureContext:false,RideShared:{...core,createAdminSync:options=>createAdminSync({...options,clock:{setTimeout:()=>1,clearTimeout(){}}})},addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener(){}},
-  localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+  localStorage:{get length(){return storage.size;},key:i=>[...storage.keys()][i]??null,getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   fetch:async(url,init)=>{const name=url.split('/').at(-1),args=JSON.parse(init?.body||'{}');if(!name.startsWith('ride_admin_'))return {ok:true,json:async()=>[]};calls.push({name,args});const custom=await handler(name,args);const result=custom ?? (name==='ride_admin_shared_context'?{...snapshot(),actorKey:'profile:a',initialized:true}:name==='ride_admin_shared_snapshot'?snapshot():name==='ride_admin_shared_secondary'?{ok:true,actorKey:'profile:a',planDate:date,people:[],driverPool:[],brandingVersion:1,branding:{}}:name==='ride_admin_shared_operation'?{ok:false,code:'not_found'}:{ok:true});return {ok:true,json:async()=>result};}};
  vm.createContext(context);const html=await readFile(new URL('../index.html',import.meta.url),'utf8');const script=html.match(/<script>([\s\S]*)<\/script>/)[1];
  vm.runInContext(script+`\nglobalThis.app={state,adminView,adminSharedStatusHtml,adminRouteWarnings,adminPublishIssues,activeRideBranding,homeArt,quickMoveAdminShared:typeof quickMoveAdminShared==='function'?quickMoveAdminShared:undefined,compareAdminSharedConflict:typeof compareAdminSharedConflict==='function'?compareAdminSharedConflict:undefined,reapplyAdminSharedConflict:typeof reapplyAdminSharedConflict==='function'?reapplyAdminSharedConflict:undefined,loadAdminSharedRecovery:typeof loadAdminSharedRecovery==='function'?loadAdminSharedRecovery:undefined,importAdminSharedRecovery:typeof importAdminSharedRecovery==='function'?importAdminSharedRecovery:undefined,loadAdminSnapshot,signOutAdmin,saveAdminDraftFromForm,deleteAdminDraftStop,publishAdminDraft,runAdminSharedSecondary,adminEditView,render,applyAdminSharedState:typeof applyAdminSharedState==='function'?applyAdminSharedState:undefined,reviewAdminShared:typeof reviewAdminShared==='function'?reviewAdminShared:undefined,retryAdminSharedPending:typeof retryAdminSharedPending==='function'?retryAdminSharedPending:undefined};`,context);
- const app=context.app;app.state.planDate=date;return {app,calls,elements,storage,context,async start(){await app.loadAdminSnapshot('synthetic-token');await settle();}};
+ const app=context.app;app.state.planDate=date;return {app,calls,elements,storage,context,listeners,async start(){await app.loadAdminSnapshot('synthetic-token');await settle();}};
 }
 test('shared login hydrates protected snapshot/secondary and never selects legacy recovery winner',async()=>{const h=await appHarness();await h.start();assert.equal(h.app.state.adminShared?.actorKey,'profile:a');assert.equal(h.app.state.adminDraftStops[0].name,'Synthetic rider');assert.equal(h.calls.some(c=>c.name==='ride_admin_get_draft'),false);h.app.signOutAdmin();});
 test('form_focus_preserved and captured versions survive remote snapshot; only safe route region changes',async()=>{const h=await appHarness();await h.start();assert.equal(typeof h.app.applyAdminSharedState,'function');const c=h.app.state.adminShared;h.app.state.view='adminEdit';const input={value:'private typed text',selectionStart:5};h.context.document.activeElement=input;const form=h.elements.get('#screen');form.innerHTML='existing form';const old=c.snapshot;h.app.applyAdminSharedState(c,{status:'saved',snapshot:{...old,draftRevision:4,riders:[{...old.riders[0],name:'Remote'}]}});assert.equal(form.innerHTML,'existing form');assert.equal(input.value,'private typed text');assert.equal(input.selectionStart,5);assert.equal(h.app.state.adminDraftStops[0].name,'Remote');h.app.signOutAdmin();});
@@ -272,4 +272,78 @@ test('a superseded operation cannot reuse an older comparison',async()=>{
 test('navigation during protected conflict refresh cannot install a stale comparison',async()=>{
  let release,hold=false;const wait=new Promise(r=>release=r);const h=await appHarness(name=>name==='ride_admin_shared_mutate'?{ok:false,code:'conflict'}:name==='ride_admin_shared_snapshot'&&hold?wait:undefined);await h.start();const c=h.app.state.adminShared;h.app.state.view='adminEdit';h.app.state.adminSelectedStopId=c.snapshot.riders[0].id;h.app.render();await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'Attempt'}});
  hold=true;const comparing=h.app.compareAdminSharedConflict();await settle();h.app.state.view='admin';h.app.state.adminSelectedStopId=null;h.app.render();release(snapshot());await comparing;assert.equal(c.conflictComparison,null);assert.equal(c.conflictRequest,null);await h.app.signOutAdmin();
+});
+
+
+test('final recovery retains pending identity and explicit personal recovery across publication',async()=>{
+ let baseline=0;
+ const h=await appHarness(name=>{
+  if(name==='ride_admin_shared_context'||name==='ride_admin_shared_snapshot')return {...snapshot(),actorKey:'profile:a',initialized:true,baselinePublishedRevision:baseline,publishedRevision:baseline};
+  if(name==='ride_admin_shared_mutate')throw Error('synthetic lost reply');
+ });
+ await h.start();const c=h.app.state.adminShared;
+ await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'Synthetic private recovery'}});await settle();
+ const id=c.pendingOperation.operationId;await h.app.signOutAdmin();
+ const before=h.calls.filter(c=>c.name==='ride_admin_shared_operation').length;baseline=1;await h.start();
+ assert.equal([...h.storage.values()].some(v=>v.includes(id)),true);
+ assert.equal(h.app.state.adminShared.pendingOperation?.operationId===id,true,'old-baseline operation identity remains reachable');
+ assert.equal(h.app.state.adminShared.deviceRecovery?.personalForm?.name==='Synthetic private recovery',true);
+ assert.equal(h.app.state.adminShared.deviceRecovery.baselinePublishedRevision,0);
+ assert.equal(h.calls.filter(c=>c.name==='ride_admin_shared_operation').length>before,true);
+ assert.equal(h.calls.filter(c=>c.name==='ride_admin_shared_mutate').length,1,'status lookup is not replay');
+ await h.app.signOutAdmin();
+});
+
+test('final Cancel discards reachable rider edit and unblocks shared review',async()=>{
+ const h=await appHarness();await h.start();const c=h.app.state.adminShared;
+ h.app.state.view='adminEdit';h.app.state.adminSelectedStopId=c.snapshot.riders[0].id;h.app.render();
+ const form=h.context.document.querySelector('[data-admin-form="rider"]');form.dataset.sharedSnapshot=JSON.stringify(c.snapshot);form.values={...c.snapshot.riders[0],name:'Synthetic cancelled input'};
+ h.listeners.input({target:{closest:selector=>selector==='[data-admin-form]'?form:null}});
+ assert.equal(c.personalDirty,true);
+ h.elements.get('#screen').listeners.click({target:{closest:selector=>selector==='[data-action]'?{dataset:{action:'adminBack'}}:null}});
+ assert.equal(h.app.state.view,'admin');
+ await h.app.reviewAdminShared();
+ assert.equal(h.app.state.view,'adminReview','Cancel must not leave an unreachable dirty edit blocking review');
+ assert.equal(c.personalDirty,false);
+ await h.app.signOutAdmin();
+});
+
+
+test('final recovery never reads another actor or plan and drains all owned pending identities without replay',async()=>{
+ let baseline=0,settled=false;const h=await appHarness(name=>{
+  if(name==='ride_admin_shared_context'||name==='ride_admin_shared_snapshot')return {...snapshot(),actorKey:'profile:a',initialized:true,baselinePublishedRevision:baseline,publishedRevision:baseline};
+  if(name==='ride_admin_shared_mutate')throw Error('synthetic reply lost');
+  if(name==='ride_admin_shared_operation'&&settled)return {ok:true};
+ });
+ await h.start();const c=h.app.state.adminShared;
+ await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'Older form'}});await settle();await h.app.signOutAdmin();
+ const original=JSON.parse([...h.storage.values()].find(v=>v.includes('Older form')));
+ const second={...original,baselinePublishedRevision:1,personalForm:{...original.personalForm,name:'Second old form'},pending:{...original.pending,operationId:'00000000-0000-4000-8000-000000008888'}};
+ h.storage.set(core.recoveryKey({actorId:'profile:a',planDate:date,baselinePublishedRevision:1}),JSON.stringify(second));
+ const foreignKeys=[core.recoveryKey({actorId:'profile:b',planDate:date,baselinePublishedRevision:0}),core.recoveryKey({actorId:'profile:a',planDate:'2099-01-11',baselinePublishedRevision:0})];
+ for(const key of foreignKeys)h.storage.set(key,'private other scope');
+ const read=h.context.localStorage.getItem;h.context.localStorage.getItem=key=>{assert.equal(foreignKeys.includes(key),false,'foreign recovery bytes must never be read');return read(key);};
+ baseline=2;settled=true;await h.start();await settle();await h.app.state.adminShared.sync.refresh('manual');await settle();
+ assert.equal(h.app.state.adminShared.pendingOperation,null);
+ const ids=h.calls.filter(call=>call.name==='ride_admin_shared_operation').map(call=>call.args.p_operation_id);
+ assert.equal(ids.includes(second.pending.operationId),true);assert.equal(ids.includes(original.pending.operationId),true);
+ for(const item of [original,second])assert.equal(JSON.parse(h.storage.get(core.recoveryKey({actorId:'profile:a',planDate:date,baselinePublishedRevision:item.baselinePublishedRevision}))).pending,null);
+ assert.equal(h.calls.filter(call=>call.name==='ride_admin_shared_mutate').length,1);
+ assert.equal(h.app.state.adminShared.deviceRecoveries.filter(item=>item.personalForm).length,2);
+ assert.equal(h.app.state.adminShared.personalDirty,undefined);
+ await h.app.signOutAdmin();
+});
+
+test('final Cancel retains uncertain operation and a later result cannot clear newer input',async()=>{
+ let resolve;const result=new Promise(r=>resolve=r);const h=await appHarness(name=>name==='ride_admin_shared_mutate'?result:undefined);await h.start();const c=h.app.state.adminShared;
+ h.app.state.view='adminEdit';h.app.state.adminSelectedStopId=c.snapshot.riders[0].id;h.app.render();
+ const form=h.context.document.querySelector('[data-admin-form="rider"]');form.dataset.sharedSnapshot=JSON.stringify(c.snapshot);form.values={...c.snapshot.riders[0],name:'Submitted before cancel'};
+ const input=()=>h.listeners.input({target:{closest:selector=>selector==='[data-admin-form]'?form:null}});input();
+ const saving=h.app.saveAdminDraftFromForm(form);await settle();const id=c.pendingOperation.operationId,body=JSON.stringify(c.pendingOperation.args);
+ h.elements.get('#screen').listeners.click({target:{closest:selector=>selector==='[data-action]'?{dataset:{action:'adminBack'}}:null}});
+ assert.equal(c.personalDirty,false);assert.equal(c.pendingOperation.operationId,id);assert.equal(JSON.stringify(c.pendingOperation.args),body);
+ assert.equal([...h.storage.values()].some(v=>JSON.parse(v).pending?.operationId===id),true);
+ h.app.state.view='adminEdit';h.app.render();form.values.name='Newer unsent input';input();
+ resolve({ok:true});await saving;await settle();assert.equal(c.personalDirty,true);
+ await h.app.reviewAdminShared();assert.equal(h.app.state.view,'adminEdit');await h.app.signOutAdmin();
 });

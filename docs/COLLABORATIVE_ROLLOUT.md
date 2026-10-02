@@ -69,6 +69,11 @@ chat, CI or public artifacts. Capture all query results in one JSON object if th
 connector returns only its last statement.
 
 ```sql
+select e.extname,e.extversion,n.nspname as extension_schema,
+       to_regprocedure(format('%I.crypt(text,text)',n.nspname)) is not null as crypt_present,
+       to_regprocedure(format('%I.gen_salt(text,integer)',n.nspname)) is not null as gen_salt_present
+from pg_extension e join pg_namespace n on n.oid=e.extnamespace
+where e.extname='pgcrypto';
 select n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) as signature,
        md5(pg_get_functiondef(p.oid)) as definition_md5, p.prosecdef,
        p.proconfig, p.proacl
@@ -88,7 +93,16 @@ where conrelid in ('rides_private.ride_stops'::regclass,'rides_private.ride_driv
 
 Confirm immediate UNIQUE(driver_id,stop_order), FK driver deletion behavior,
 existing individual-session helper and current auth.sessions shape. Capture
-unrelated-app schema/function/ACL hashes before and after. Run security advisors,
+the installed pgcrypto version/schema and both required function signatures.
+The final credential fix requires pgcrypto and fails the installation transaction
+if it is absent; it never installs or relocates the extension. The helper resolves
+the actual installed namespace with an empty search path. On 2026-10-02, the
+controller verified project `cpkimtrribpvqxbywfry` through the official read-only
+`supabase_list_extensions` connector: pgcrypto installed version **1.3**, schema
+**extensions**, default version **1.3**. Earlier raw metadata attempts timed out;
+the dedicated connector supplied the successful extension evidence. Recheck the
+extension and function signatures at action time. Capture unrelated-app
+schema/function/ACL hashes before and after. Run security advisors,
 triage candidate-introduced findings separately from existing unrelated-app
 findings; do not “fix” the other application as part of this rollout. Task 7's
 read-only advisor baseline returned 14 INFO deny-by-default RLS/no-policy notices
@@ -108,6 +122,16 @@ retain a new consistent checkpoint of published plans/drivers/stops, audit log,
 legacy drafts, all shared tables and driver catalog. Include shared operation
 results, tombstones, settings/person versions, recovery candidates and credentials
 in the secured backup; exclude their values from rollout logs.
+
+Credential-bearing catalog requests retain a redacted request and a salted bcrypt
+cost-12 verifier over the SHA-256 hex digest of the complete canonical JSON. This
+preserves exact retry equality, including long passcodes/body suffixes, without
+retaining plaintext or a standalone fast credential verifier. Existing operation
+rows are upgraded in place while retaining outcome, timestamps and event/audit
+history. A CHECK constraint rejects stale writers that try to retain plaintext.
+Fresh operation-ledger exports must contain no passcodes. Historical backups made
+before this fix may still contain them: keep those backups restricted under the
+established retention policy; this migration cannot erase previous exports.
 
 The disposable test rehearses preserving full shared/history/recovery state and
 the latest publication under pause/resume. It also performs an actual pg_dump/
@@ -141,7 +165,8 @@ Install in one transaction while existing plans remain legacy:
 
 1. Existing prerequisites must already exist: profile/session membership and audit
    tables, People Bank, plans/drivers/stops, legacy drafts, app settings and the
-   established auth/hash helpers. Stop if absent; no guessed seed or account setup.
+   established auth/hash helpers, and pgcrypto with crypt(text,text) and
+   gen_salt(text,integer). Stop if absent; no guessed seed or account setup.
 2. Replace only the canonical `rides_private.ride_admin_actor`,
    `rides_private.log_ride_admin_event`, and
    `rides_private.log_ride_stop_admin_change` functions from `admin_security.sql`.
@@ -327,7 +352,15 @@ Run the commands and read the detailed coverage in `tests/PUBLISH_TESTS.md`.
 Task 7 final suite: **279 passed, 0 failed, 8 existing credential-gated skips**
 (287 total, 57.1s). Fresh three-context Chromium recovery/import/publication,
 pause/resume and revocation rehearsal: **PASS**, no page errors/external requests.
-Generated SQL SHA256: `43d7c49500a1c3142971c8b3da9cd98e7bc4767946deb1287b977665302b8acf`.
+Final correction suite: **287 passed, 0 failed, 8 existing credential-gated skips**
+(295 total, 63.7s). Final recovery/Cancel Chromium checks and all three existing
+main, conflict and rollout browser scripts: **PASS**, no page errors or external
+requests. Latest measured remote visibility: **2493ms**. Final DB checks cover
+credential redaction, full canonical retry equality, legacy ledger upgrade and
+reapply preservation, stale-writer rejection, missing pgcrypto rollback and
+relocated pgcrypto namespace resolution.
+Final credential-fix generated SQL SHA256: `c0aab19333f75898692939804c4c4351f019933b3b87ee21ba247562c3b1a198`.
+This supersedes the artifact hash recorded in the original Task 7 report.
 Regenerate and compare at action time; changed source bytes require new review.
 Task 7 adds `three_admin_end_to_end`, `old_client_cutover_denied`,
 `migration_retains_candidates`, `rollback_preserves_latest_baseline`, and

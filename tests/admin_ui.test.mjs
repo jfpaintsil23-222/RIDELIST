@@ -3405,7 +3405,7 @@ test("people who share a home address are not automatically duplicates", async (
         name: "Zarah",
         campusAddress: "",
         homeAddress: "1221 Highland Row Ln, Houston, TX",
-        phone: "(936) 662-1716",
+        phone: "2025550108",
         preferredAddressType: "home",
         preferredAddress: "1221 Highland Row Ln, Houston, TX",
         sourceLabel: "PeopleData",

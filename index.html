@@ -7507,8 +7507,8 @@
         const comparison=c.conflictComparison;
         html+=`<section class="shared-notice" role="alert"><strong>Shared details changed</strong><p>Your input is preserved. Compare before reapplying.</p>
           <button type="button" class="secondary-action" data-action="adminSharedCompare">Compare with latest saved values</button>
-          ${comparison ? `<div class="shared-compare"><div><strong>Your unsaved values</strong><pre>${sharedReadable(comparison.yours)}</pre></div><div><strong>Latest saved values</strong><pre>${sharedReadable(comparison.latest)}</pre></div></div>
-          <button type="button" class="secondary-action" data-action="adminSharedReapply">Reapply reviewed values</button>` : ""}</section>`;
+          ${comparison ? `<div class="shared-compare"><div><strong>${comparison.frozen?"Previously attempted values":"Your unsaved values"}</strong>${comparison.frozen?"<p>This reapplies the earlier save. Newer personal edits remain unsaved.</p>":""}<pre>${sharedReadable(comparison.yours)}</pre></div><div><strong>Latest saved values</strong><pre>${sharedReadable(comparison.latest)}</pre></div></div>
+          ${comparison.disabledReason?`<p role="status">${escapeHtml(comparison.disabledReason)}</p>`:""}<button type="button" class="secondary-action" data-action="adminSharedReapply" ${comparison.disabledReason?"disabled":""}>Reapply reviewed values</button>` : ""}</section>`;
       }
       if(c.recoveryCandidates) {
         html+=`<section class="shared-notice"><strong>Recovery candidates</strong><p>Review a candidate against the shared draft. Import replaces shared riders; it never publishes. Unknown or different baselines require manual reconciliation.</p>`;
@@ -7530,26 +7530,77 @@
       if(target)target.innerHTML=adminSharedNoticesHtml();
     }
 
+    function adminSharedEditorKey() {
+      return JSON.stringify([state.view,adminActiveTab(),state.adminSelectedStopId || '',state.adminSelectedPersonId || '',state.adminEditMode || '',state.adminPersonReviewMode || '']);
+    }
+
+    function resetAdminSharedConflictOnNavigation() {
+      const c=state.adminShared;if(!c)return;
+      const key=adminSharedEditorKey();
+      if(c.editorKey!==undefined && c.editorKey!==key) {
+        c.editorGeneration=(c.editorGeneration || 0)+1;
+        c.conflictRequest=null;c.conflictComparison=null;
+      }
+      c.editorKey=key;
+    }
+
+    function matchesAdminSharedConflict(c,request) {
+      if(!c || !request || !matchesAdminShared(c) || request.scope?.actorKey!==c.actorKey || request.scope?.planDate!==c.planDate
+        || request.scope?.generation!==c.generation || request.editorKey!==adminSharedEditorKey()
+        || request.editorGeneration!==(c.editorGeneration || 0))return false;
+      if(request.kind==='rider') {
+        const operation=request.args.p_operation;
+        const selected=state.adminSelectedStopId;
+        if(state.view==='adminEdit' && selected && selected!==(operation.kind==='rider_add'?'new':operation.entityId))return false;
+        const form=document.querySelector('[data-admin-form="rider"]');
+        if(form?.dataset?.sharedSnapshot && String(new FormData(form).get('id') || '')!==(operation.kind==='rider_add'?'':operation.entityId))return false;
+      }
+      return true;
+    }
+
     function captureAdminSharedConflict(context,pending,result) {
-      if(result?.code!=='conflict' || !['rider','person','route','branding','availability','person_pickup'].includes(pending?.kind))return;
+      if(result?.code!=='conflict' || !['rider','person','route','branding','availability','person_pickup'].includes(pending?.kind)
+        || !matchesAdminSharedConflict(context,pending))return;
       context.conflictRequest=pending;context.conflictComparison=null;
       updateAdminSharedNotices();
     }
 
     async function compareAdminSharedConflict() {
-      const c=state.adminShared;if(!c?.conflictRequest || !adminSharedOnline())return;
+      const c=state.adminShared,request=c?.conflictRequest;
+      if(!matchesAdminSharedConflict(c,request) || !adminSharedOnline())return;
+      c.conflictComparison=null;updateAdminSharedNotices();
       await c.sync.refresh('review');
-      if(!matchesAdminShared(c)||c.status!=='saved')return;
-      const request=c.conflictRequest,op=request.args.p_operation;
+      if(!matchesAdminSharedConflict(c,request)||c.conflictRequest!==request||c.status!=='saved')return;
+      const op=request.args.p_operation;
+      let protectedSource;
+      if(request.kind==='person_pickup') {
+        protectedSource=await refreshAdminSharedSecondary(c);
+        if(!protectedSource || !matchesAdminSharedConflict(c,request)||c.conflictRequest!==request||c.status!=='saved')return;
+      }
       const form=document.querySelector('[data-admin-form="rider"]');
-      const yours=request.kind==='rider' ? (form?.dataset?.sharedSnapshot ? Object.fromEntries(new FormData(form).entries()) : c.personalForm || op.payload)
+      let yours=request.kind==='rider' ? (form?.dataset?.sharedSnapshot ? Object.fromEntries(new FormData(form).entries()) : request.personalValues || {...op.payload,id:op.entityId})
         : request.args.p_person || request.args.p_settings || op?.payload;
       const latest=request.kind==='person' ? c.secondary?.people?.find(p=>p.id===request.args.p_person.id)
         : request.kind==='branding' ? c.secondary?.branding
         : request.kind==='route' ? c.snapshot.settings
         : request.kind==='availability' ? c.snapshot.drivers
         : c.snapshot.riders.find(r=>r.id===op?.entityId);
-      c.conflictComparison={yours:structuredCloneSafe(yours),latest,snapshot:c.snapshot,secondary:c.secondary,editVersion:c.editVersion||0};
+      let payload=yours,disabledReason='';
+      if(request.kind==='person_pickup') {
+        const person=protectedSource.people?.find(p=>p.id===op.payload.personId);
+        if(!person || !Number.isSafeInteger(person.recordVersion) || !latest || latest.personId!==person.id) {
+          disabledReason='The source contact is unavailable or this pickup is no longer linked to it. Reopen the contact and pickup before applying changes.';
+          yours=null;payload=null;
+        } else {
+          const campus=person.preferredAddressType==='campus';
+          yours={name:person.name,phone:person.phone,address:(campus?person.campusAddress:person.homeAddress)||person.homeAddress||person.campusAddress,area:campus?'Campus':'Home'};
+          payload={personId:person.id,personVersion:person.recordVersion};
+        }
+      }
+      const frozen=!['rider','person_pickup'].includes(request.kind);
+      c.conflictComparison={operationId:request.operationId,editorKey:request.editorKey,editorGeneration:request.editorGeneration,
+        yours:structuredCloneSafe(yours),payload:structuredCloneSafe(payload),latest:structuredCloneSafe(latest),snapshot:c.snapshot,secondary:c.secondary,
+        editVersion:c.editVersion||0,submittedEditVersion:frozen?(request.editVersion||0):(c.editVersion||0),frozen,disabledReason};
       updateAdminSharedNotices();
     }
 
@@ -7557,7 +7608,9 @@
 
     async function reapplyAdminSharedConflict() {
       const c=state.adminShared,comparison=c?.conflictComparison,request=c?.conflictRequest;
-      if(!comparison||!request||c.pendingOperation||c.pendingSecondary||c.saving||!adminSharedOnline()||c.status!=='saved')return;
+      if(!comparison||!matchesAdminSharedConflict(c,request)||comparison.operationId!==request.operationId
+        || comparison.editorKey!==request.editorKey||comparison.editorGeneration!==request.editorGeneration||comparison.disabledReason
+        ||c.pendingOperation||c.pendingSecondary||c.saving||!adminSharedOnline()||c.status!=='saved')return;
       if((c.editVersion||0)!==comparison.editVersion) {state.adminError='Your input changed. Compare again before reapplying.';adminSharedSecondaryNotice();return;}
       // Keep precisely the reviewed versions. The server rejects another change after this comparison.
       if(request.kind==='rider') {
@@ -7568,14 +7621,15 @@
         try {
           if(operation.kind!=='rider_add'&&!comparison.snapshot.riders.some(r=>r.id===operation.entityId))throw Error('This rider was removed. Review the latest draft; it cannot be reapplied as an edit.');
           const next=window.RideShared.riderOperation(comparison.snapshot,rider,operation.kind==='rider_remove'?'remove':'save',crypto.randomUUID(),operation.entityId);
-          const pending={...request,operationId:next.operationId,args:{p_plan_date:c.planDate,p_operation:next},editVersion:c.editVersion||0};
+          const pending={...request,operationId:next.operationId,args:{p_plan_date:c.planDate,p_operation:next},personalValues:structuredCloneSafe(rider),editVersion:comparison.submittedEditVersion};
           c.pendingOperation=pending;const result=await sendAdminSharedPending(c,pending);
-          if(result?.ok){c.conflictRequest=null;c.conflictComparison=null;updateAdminSharedNotices();}
+          if(result?.ok && matchesAdminSharedConflict(c,request) && c.conflictRequest===request){c.conflictRequest=null;c.conflictComparison=null;updateAdminSharedNotices();}
         }catch(error){state.adminError=error.message;adminSharedSecondaryNotice();}
       } else if(['person','route','branding','availability','person_pickup'].includes(request.kind)) {
         const version=request.kind==='person'?comparison.latest?.recordVersion:request.kind==='branding'?comparison.secondary?.brandingVersion:comparison.snapshot.settingsVersion;
-        const result=await runAdminSharedSecondary(request.kind,comparison.yours,{snapshot:comparison.snapshot,recordVersion:version,entityId:request.args.p_operation?.entityId,entityVersion:comparison.latest?.entityVersion});
-        if(result?.ok){c.conflictRequest=null;c.conflictComparison=null;updateAdminSharedNotices();}
+        const result=await runAdminSharedSecondary(request.kind,comparison.payload,{snapshot:comparison.snapshot,recordVersion:version,entityId:request.args.p_operation?.entityId,
+          entityVersion:comparison.latest?.entityVersion,editVersion:comparison.submittedEditVersion});
+        if(result?.ok && matchesAdminSharedConflict(c,request) && c.conflictRequest===request){c.conflictRequest=null;c.conflictComparison=null;updateAdminSharedNotices();}
       }
     }
 
@@ -7616,7 +7670,7 @@
       const before=captured?.riders?.find(r=>r.id===id);if(!before||before.driverSlug===driverSlug)return;
       const rider={...before,driverSlug,stopOrder:captured.riders.filter(r=>r.driverSlug===driverSlug).length+1};
       const operation=window.RideShared.riderOperation(captured,rider,'save',crypto.randomUUID(),id);
-      const pending={operationId:operation.operationId,name:'ride_admin_shared_mutate',args:{p_plan_date:c.planDate,p_operation:operation},scope:{actorKey:c.actorKey,planDate:c.planDate,generation:c.generation},kind:'rider',editVersion:c.editVersion||0};
+      const pending={operationId:operation.operationId,name:'ride_admin_shared_mutate',args:{p_plan_date:c.planDate,p_operation:operation},scope:{actorKey:c.actorKey,planDate:c.planDate,generation:c.generation},kind:'rider',personalValues:structuredCloneSafe(rider),editorKey:adminSharedEditorKey(),editorGeneration:c.editorGeneration||0,editVersion:c.editVersion||0};
       c.personalForm=rider;c.pendingOperation=pending;const result=await sendAdminSharedPending(c,pending);
       if(result?.ok&&matchesAdminShared(c)){await c.sync.refresh('local-save');if(matchesAdminShared(c)&&state.view==='admin'&&!c.personalDirty)render();}
     }
@@ -7695,7 +7749,7 @@
         if (data?.code === 'invalid_admin_code') { lockAdminShared(); return; }
         if (!data?.ok) throw Error('secondary_read_failed');
         hydrateAdminSharedSecondary(context,data);
-        return true;
+        return data;
       } catch(error) {
         if (matchesAdminShared(context)) {
           if (error.status === 401 || error.status === 403) lockAdminShared();
@@ -7794,7 +7848,7 @@
         rider.stopOrder=Number(rider.stopOrder || 1);rider.personId=rider.personId || null;rider.personVersion=rider.personVersion ? Number(rider.personVersion) : null;
         context.personalForm={...rider};context.personalDirty=true;
         const operation=window.RideShared.riderOperation(captured,rider,action,crypto.randomUUID(),crypto.randomUUID());
-        const pending={operationId:operation.operationId,name:'ride_admin_shared_mutate',args:{p_plan_date:context.planDate,p_operation:operation},scope:{actorKey:context.actorKey,planDate:context.planDate,generation:context.generation},kind:'rider',editVersion:context.editVersion || 0};
+        const pending={operationId:operation.operationId,name:'ride_admin_shared_mutate',args:{p_plan_date:context.planDate,p_operation:operation},scope:{actorKey:context.actorKey,planDate:context.planDate,generation:context.generation},kind:'rider',personalValues:structuredCloneSafe(rider),editorKey:adminSharedEditorKey(),editorGeneration:context.editorGeneration||0,editVersion:context.editVersion || 0};
         context.pendingOperation=pending;
         const result=await sendAdminSharedPending(context,pending);
         if (result?.ok && matchesAdminShared(context) && !context.personalDirty) { state.view='admin';state.adminSelectedStopId=null;render(); }
@@ -8325,8 +8379,9 @@
           ...(kind === "person_pickup" ? { entityId: expected.entityId, expectedEntityVersion: expected.entityVersion } : {}), payload };
       } else return { ok: false, code: "validation_failed" };
       // Keep the exact request/ID for status lookup after response uncertainty. Never replay a snapshot.
-      const editVersion=context.editVersion || 0;
-      context.pendingSecondary = { operationId, name, args, scope, kind, editVersion };
+      const editVersion=expected.editVersion ?? (context.editVersion || 0);
+      const pending={operationId,name,args,scope,kind,editVersion,editorKey:adminSharedEditorKey(),editorGeneration:context.editorGeneration||0};
+      context.pendingSecondary = pending;
       context.saving = true;updateAdminSharedStatus();retainAdminSharedRecovery(context);
       try {
         const saved = await sharedAdminRpc(name, args);
@@ -8334,7 +8389,7 @@
         if (context.pendingSecondary?.operationId !== operationId) return saved;
         settleAdminSharedPending(context,operationId);
         if (!saved?.ok) {
-          captureAdminSharedConflict(context,{...context.pendingSecondary,operationId,name,args,scope,kind,editVersion},saved);
+          captureAdminSharedConflict(context,pending,saved);
           context.secondaryConflict = saved;
           state.adminError = saved?.code === "conflict" ? "Shared details changed. Your input is preserved; review the current record before saving again."
             : "Shared save was rejected. Your input is preserved.";
@@ -11009,6 +11064,7 @@
     }
 
     function render() {
+      resetAdminSharedConflictOnNavigation();
       setActiveNav();
       document.querySelector(".phone")?.classList.toggle("admin-workspace", String(state.view).startsWith("admin"));
       if (state.view === "profile") screen.innerHTML = profileView();

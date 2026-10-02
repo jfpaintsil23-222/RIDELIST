@@ -223,3 +223,53 @@ test('stale quick-move keeps captured group versions and exposes conflict',async
  await h.app.quickMoveAdminShared(captured.riders[0].id,'b',captured);
  const op=h.calls.find(call=>call.name==='ride_admin_shared_mutate').args.p_operation;assert.equal(op.expectedGroupVersions.a,3);assert.equal(op.expectedGroupVersions.b,2);assert.equal(c.secondaryConflict.code,'conflict');assert.ok(c.conflictRequest);await h.app.signOutAdmin();
 });
+
+for(const when of ['before compare','after compare'])test(`conflict for rider X cannot consume rider Y form ${when}`,async()=>{
+ let writes=0;const h=await appHarness(name=>name==='ride_admin_shared_mutate'?(++writes===1?{ok:false,code:'conflict'}:{ok:true}):undefined);await h.start();const c=h.app.state.adminShared,x=c.snapshot.riders[0];
+ h.app.state.view='adminEdit';h.app.state.adminSelectedStopId=x.id;
+ const form={dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...x,name:'X private'}};h.elements.set('[data-admin-form="rider"]',form);await h.app.saveAdminDraftFromForm(form);
+ if(when==='after compare')await h.app.compareAdminSharedConflict();
+ h.app.state.adminSelectedStopId='00000000-0000-4000-8000-000000000003';h.elements.set('[data-admin-form="rider"]',{...form,values:{...x,id:h.app.state.adminSelectedStopId,name:'Y private',address:'Y address'}});
+ if(when==='before compare')await h.app.compareAdminSharedConflict();await h.app.reapplyAdminSharedConflict();assert.equal(writes,1,'navigation cannot authorize any reapply of X');await h.app.signOutAdmin();
+});
+test('Cancel after comparison invalidates it even if the original rider is reopened',async()=>{
+ let writes=0;const h=await appHarness(name=>name==='ride_admin_shared_mutate'?(++writes===1?{ok:false,code:'conflict'}:{ok:true}):undefined);await h.start();const c=h.app.state.adminShared,x=c.snapshot.riders[0];h.app.state.view='adminEdit';h.app.state.adminSelectedStopId=x.id;h.app.render();
+ await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...x,name:'Earlier'}});await h.app.compareAdminSharedConflict();
+ h.app.state.view='admin';h.app.state.adminSelectedStopId=null;h.app.render();h.app.state.view='adminEdit';h.app.state.adminSelectedStopId=x.id;h.app.render();await h.app.reapplyAdminSharedConflict();assert.equal(writes,1);await h.app.signOutAdmin();
+});
+
+for(const conflictType of ['rider','person'])test(`person_pickup ${conflictType} conflict compares exact protected contact and captures both reviewed versions`,async()=>{
+ const person={id:'00000000-0000-4000-8000-000000000099',name:'Reviewed contact',phone:'555-0100',preferredAddressType:'campus',campusAddress:'',homeAddress:'Fallback home address',recordVersion:4};
+ let writes=0;const current=snapshot();current.riders[0]={...current.riders[0],personId:person.id,personVersion:1,entityVersion:7};
+ const h=await appHarness(name=>name==='ride_admin_shared_mutate'?(++writes===1?{ok:false,code:'conflict',conflict:{type:conflictType}}:{ok:true}):name==='ride_admin_shared_snapshot'?structuredClone(current):name==='ride_admin_shared_secondary'?{ok:true,actorKey:'profile:a',planDate:date,people:[person],driverPool:[],brandingVersion:1,branding:{}}:undefined);await h.start();const c=h.app.state.adminShared;
+ await h.app.runAdminSharedSecondary('person_pickup',{personId:person.id,personVersion:1},{entityId:current.riders[0].id,entityVersion:2});
+ const reads=h.calls.filter(call=>call.name==='ride_admin_shared_secondary').length;await h.app.compareAdminSharedConflict();assert.ok(h.calls.filter(call=>call.name==='ride_admin_shared_secondary').length>reads,'comparison fetches protected source');
+ const html=h.app.adminSharedStatusHtml();assert.match(html,/Reviewed contact/);assert.match(html,/555-0100/);assert.match(html,/Fallback home address/);assert.match(html,/Area: Campus/);
+ await h.app.reapplyAdminSharedConflict();const op=h.calls.filter(call=>call.name==='ride_admin_shared_mutate').at(-1).args.p_operation;assert.equal(op.payload.personVersion,4);assert.equal(op.expectedEntityVersion,7);await h.app.signOutAdmin();
+});
+test('person_pickup with unresolved source disables reapply and explains the missing source',async()=>{
+ let writes=0;const h=await appHarness(name=>name==='ride_admin_shared_mutate'?(writes++,{ok:false,code:'conflict'}):undefined);await h.start();const c=h.app.state.adminShared;
+ await h.app.runAdminSharedSecondary('person_pickup',{personId:'missing',personVersion:1},{entityId:c.snapshot.riders[0].id,entityVersion:1});await h.app.compareAdminSharedConflict();assert.match(h.app.adminSharedStatusHtml(),/source contact.*unavailable/i);await h.app.reapplyAdminSharedConflict();assert.equal(writes,1);await h.app.signOutAdmin();
+});
+for(const kind of ['route','branding','person','availability'])test(`${kind} frozen recompare never marks later unsent edits clean`,async()=>{
+ let writes=0;const rpc=kind==='person'?'ride_admin_shared_save_person':kind==='availability'?'ride_admin_shared_mutate':'ride_admin_shared_save_settings';const h=await appHarness(name=>name===rpc?(++writes===1?{ok:false,code:'conflict'}:{ok:true,value:{person:{id:'p',name:'Original',recordVersion:2},branding:{homeTitle:'Original'},recordVersion:2}}):undefined);await h.start();const c=h.app.state.adminShared;
+ const payload=kind==='person'?{id:'p',name:'Original'}:kind==='availability'?{driverSlugs:['a']}:kind==='branding'?{homeTitle:'Original'}:{planTitle:'Original'};
+ c.personalDirty=true;await h.app.runAdminSharedSecondary(kind,payload,{recordVersion:1,snapshot:c.snapshot});await h.app.compareAdminSharedConflict();
+ c.editVersion=(c.editVersion||0)+1;c.personalDirty=true;c.personalForm={name:'New unsent input'};await h.app.reapplyAdminSharedConflict();assert.equal(writes,1,'input after comparison requires another review');
+ await h.app.compareAdminSharedConflict();assert.match(h.app.adminSharedStatusHtml(),/Previously attempted values/);await h.app.reapplyAdminSharedConflict();assert.equal(writes,2);assert.equal(c.personalDirty,true,'later input was never submitted');assert.equal(c.personalForm.name,'New unsent input');await h.app.signOutAdmin();
+});
+
+for(const change of ['person','rider'])test(`person_pickup reapply keeps reviewed versions when ${change} changes after comparison`,async()=>{
+ const person={id:'00000000-0000-4000-8000-000000000099',name:'Reviewed master',phone:'555-0100',preferredAddressType:'home',homeAddress:'Reviewed address',recordVersion:4};const current=snapshot();current.riders[0]={...current.riders[0],personId:person.id,entityVersion:7};
+ const h=await appHarness((name,args)=>name==='ride_admin_shared_snapshot'?structuredClone(current):name==='ride_admin_shared_secondary'?{ok:true,actorKey:'profile:a',planDate:date,people:[structuredClone(person)],driverPool:[],brandingVersion:1,branding:{}}:name==='ride_admin_shared_mutate'?{ok:false,code:'conflict',conflict:{type:change}}:undefined);await h.start();const c=h.app.state.adminShared;
+ await h.app.runAdminSharedSecondary('person_pickup',{personId:person.id,personVersion:1},{entityId:current.riders[0].id,entityVersion:2});await h.app.compareAdminSharedConflict();
+ if(change==='person')person.recordVersion=5;else current.riders[0].entityVersion=8;
+ await c.sync.refresh('review');await h.app.reapplyAdminSharedConflict();const op=h.calls.filter(call=>call.name==='ride_admin_shared_mutate').at(-1).args.p_operation;assert.equal(op.payload.personVersion,4);assert.equal(op.expectedEntityVersion,7);assert.equal(c.secondaryConflict.code,'conflict');assert.equal(c.conflictComparison,null);await h.app.signOutAdmin();
+});
+test('a superseded operation cannot reuse an older comparison',async()=>{
+ let writes=0;const h=await appHarness(name=>name==='ride_admin_shared_mutate'?(writes++,{ok:false,code:'conflict'}):undefined);await h.start();const c=h.app.state.adminShared;await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'Attempt'}});await h.app.compareAdminSharedConflict();c.conflictRequest={...c.conflictRequest,operationId:'superseding-operation'};await h.app.reapplyAdminSharedConflict();assert.equal(writes,1);await h.app.signOutAdmin();
+});
+test('navigation during protected conflict refresh cannot install a stale comparison',async()=>{
+ let release,hold=false;const wait=new Promise(r=>release=r);const h=await appHarness(name=>name==='ride_admin_shared_mutate'?{ok:false,code:'conflict'}:name==='ride_admin_shared_snapshot'&&hold?wait:undefined);await h.start();const c=h.app.state.adminShared;h.app.state.view='adminEdit';h.app.state.adminSelectedStopId=c.snapshot.riders[0].id;h.app.render();await h.app.saveAdminDraftFromForm({dataset:{sharedSnapshot:JSON.stringify(c.snapshot)},values:{...c.snapshot.riders[0],name:'Attempt'}});
+ hold=true;const comparing=h.app.compareAdminSharedConflict();await settle();h.app.state.view='admin';h.app.state.adminSelectedStopId=null;h.app.render();release(snapshot());await comparing;assert.equal(c.conflictComparison,null);assert.equal(c.conflictRequest,null);await h.app.signOutAdmin();
+});

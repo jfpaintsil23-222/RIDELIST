@@ -169,3 +169,67 @@ Review-correction full-suite evidence: 175 tests, 167 passed, zero failures,
 eight existing credential-gated integration skips. Focused actual database and
 canonical publication suite: 46 passed, zero failures/skips. These results include
 all original fourteen publication regressions and all 31 shared database cases.
+
+## Integrated rollout rehearsal (Task 7)
+
+The shared harness now installs the actual output of
+`node tools/build-collaborative-rollout.mjs`. This offline generator emits only the
+allowlisted canonical audit functions/trigger, publication helper, fenced legacy
+writers and additive shared schema in one transaction. It excludes setup seeds,
+identity/auth redefinition and activation. Deployed NULL/current-plan defaults are
+preserved using the Sunday wrappers. Guard tests reject missing/duplicate function
+boundaries, unexpected signatures/delimiters, trigger drift and divergent canonical
+helpers. Read and follow `docs/COLLABORATIVE_ROLLOUT.md` before any installation.
+
+New real PostgreSQL scenarios:
+
+- `three_admin_end_to_end`: three separate synthetic sessions, independent concurrent
+  saves, same-rider stale conflict, deliberate fresh save, lost-result lookup scoped
+  to the original actor, competing publishers, identical final snapshots and events.
+- `old_client_cutover_denied`: preparation cannot activate directly; legacy writes
+  are blocked after freeze, activation and operator rollback/pause without effects.
+- `migration_retains_candidates`: all three server drafts plus changed server and
+  known/unknown-baseline device candidates survive reapply and explicit draft import.
+- `rollback_preserves_latest_baseline`: two publications followed by pause/resume
+  retain baseline 2, latest published rows, shared draft/events/operations/recovery;
+  an old reviewed publication conflicts. Tests execute the runbook's actual SQL.
+- `revocation_clears_private_access`: revoked third profile loses context, snapshot,
+  secondary, recovery, operation status, import, mutation and publish access; the
+  other actors remain authorized, retained candidates are not deleted.
+- The bundle reapply check compares full-row hashes of existing profiles, sessions,
+  app settings, driver catalog, shared state, published data and unrelated function.
+- Actual `pg_dump -Fc` / `pg_restore --exit-on-error` into a separate disposable
+  database retains latest publication, shared history/recovery, private ACLs and
+  forced RLS. The active test database is unchanged; the restored copy is removed.
+
+Two sync-controller regressions cover pause/resume with unchanged revisions and
+an uncertain operation, plus revocation during result lookup stopping private reads.
+
+Fresh local browser coverage:
+
+```sh
+node tests/browser/shared-admin-preview.mjs
+PLAYWRIGHT_BROWSERS_PATH=/Users/joojo/Documents/Codex/2026-10-01/task-2/browser-qa-tooling/browsers node tests/browser/shared-admin-rollout-qa.mjs
+```
+
+Restart the preview before each script: fixture state is deliberately shared and
+mutable. The new script uses three isolated contexts (390, 430, 1363px), normal UI
+recovery review/import/publish/editor controls, and test-only local operator pause/
+revocation controls. It verifies actor-scoped recovery, unknown-baseline denial,
+import remaining unpublished, explicit publication, pause preserving latest live
+state and personal input, resume retaining baseline, and revocation clearing private
+DOM/state while keeping actor-scoped device recovery. No external fetch is proxied;
+CSP and browser routing block external requests. This transport fixture does not
+replace PostgreSQL authorization evidence. Existing Task 6 browser evidence covers
+same-rider comparison, moves, offline/focus recovery, lost responses and measured
+2455ms normal visibility; those approved results are retained, not represented as
+new Task 7 executions.
+
+Final Task 7 command:
+`RIDELIST_TEST_CONTAINER=ridelist-publish-test-shared-task1 node --test tests/*.test.mjs`
+— **279 PASS, 0 FAIL, 8 existing credential-gated SKIP, 287 total**, 57.1 seconds.
+All new database cases ran. Actual Chromium rollout script — **PASS**, zero page
+errors and external requests. Synthetic backup restore — **PASS**. Physical-phone,
+installed PWA/background behavior, production backup restore, live latency,
+production migration/activation/push/deployment and real third-account grant —
+**NOT RUN**. No production rider/contact values were fetched or edited.

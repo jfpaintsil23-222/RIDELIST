@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { before, test } from 'node:test';
+import { buildRollout } from '../tools/build-collaborative-rollout.mjs';
 
 const container = process.env.RIDELIST_TEST_CONTAINER;
 const enabled = Boolean(container);
@@ -62,7 +63,7 @@ before(() => {
   const peopleStart=control.indexOf('create table if not exists rides_private.ride_people (');
   const peopleTable=control.slice(peopleStart,control.indexOf('\n);',peopleStart)+4);
   sql(fixture + '\n' + peopleTable + '\n' + auditTable + '\n' + auditFunctions + '\n' + auditTrigger + '\n' + authHelpers + '\n' + legacy + '\n' + otherWriters + '\n' + internal + '\n' +
-    (existsSync(path) ? readFileSync(path, 'utf8') : ''));
+    buildRollout());
 });
 
 test('shared_context_requires_valid_actor', { skip: !enabled }, () => {
@@ -749,4 +750,161 @@ test('catalog phone note and existing credential hash survive activation and pub
   assert.equal(JSON.parse(sql(publishSql(2))).ok,true);
   assert.equal(sql("select route_notes from rides_private.ride_drivers where slug='phone-catalog';"),'Phone: 000-555');
   assert.equal(sql("select access_code_hash=md5('synthetic-code') from rides_private.ride_drivers where slug='phone-catalog';"),'t');
+});
+
+// Task 7 executes the runbook's operator SQL, not a second handwritten rollback.
+function rolloutStep(name) {
+  const doc=readFileSync(new URL('../docs/COLLABORATIVE_ROLLOUT.md',import.meta.url),'utf8');
+  const start=doc.indexOf(`<!-- rehearsal:${name} -->`);
+  assert.ok(start>=0,`Missing executable rollout step ${name}`);
+  const block=doc.slice(start).match(/```sql\n([\s\S]*?)```/)[1];
+  return sql(`set ridelist.rollout_plan='2099-01-04'; set ridelist.rollout_operator='Synthetic operator';\n${block}`);
+}
+function rolloutSeed() {
+  initialize();
+  sql(`delete from rides_private.ride_shared_riders; delete from rides_private.ride_shared_groups;
+    delete from rides_private.ride_shared_workspaces; delete from rides_private.ride_shared_write_modes;
+    delete from rides_private.ride_shared_recovery_candidates where plan_date='2099-01-04';
+    delete from rides_private.ride_admin_drafts where plan_date='2099-01-04';
+    insert into rides_private.ride_drivers(plan_id,slug,display_name,full_name,initials,access_code_hash,sort_order)
+      select p.id,c.slug,c.display_name,c.full_name,c.initials,c.access_code_hash,row_number() over(order by c.slug)
+      from rides_private.ride_plans p cross join rides_private.ride_driver_catalog c
+      where p.plan_date='2099-01-04' and c.slug in ('driver-a','driver-b');
+    insert into rides_private.ride_stops(id,driver_id,stop_order,rider_name)
+      select '${riderA}',id,1,'Published synthetic A' from rides_private.ride_drivers where slug='driver-a' and plan_id=(select id from rides_private.ride_plans where plan_date='2099-01-04');
+    insert into rides_private.ride_stops(id,driver_id,stop_order,rider_name)
+      select '${riderB}',id,2,'Published synthetic B' from rides_private.ride_drivers where slug='driver-a' and plan_id=(select id from rides_private.ride_plans where plan_date='2099-01-04');`);
+}
+function prepareRollout() {
+  assert.equal(JSON.parse(sql("select rides_private.ride_shared_prepare('2099-01-04','Synthetic operator');")).ok,true);
+}
+function freezeRollout() {
+  assert.equal(JSON.parse(sql("select rides_private.ride_shared_freeze('2099-01-04','Synthetic operator');")).ok,true);
+}
+function saveCandidate(token,source,baseline=0) {
+  const candidate={actorKey:`profile:${token.split('-')[0]}`,planDate:'2099-01-04',baselinePublishedRevision:baseline,
+    stops:[{id:riderA,driverSlug:'driver-a',name:`Retained ${source}`,stopOrder:1}]};
+  return JSON.parse(sql(`select public.ride_admin_shared_save_recovery('${token}','2099-01-04','${source}',${quote(JSON.stringify(candidate))});`));
+}
+test('three_admin_end_to_end', {skip:!enabled}, async()=>{
+  rolloutSeed(); prepareRollout(); freezeRollout(); rolloutStep('activate');
+  const live=driverVisible();
+  const [a,b]=await race(mutateSql(operation()),mutateSql(operation('rider_update',riderB,{name:'Beta saved'}),'beta-token'));
+  assert.equal(a.ok,true); assert.equal(b.ok,true);
+  const stale=mutate(operation('rider_update',riderA,{name:'Gamma stale'}),'gamma-token');
+  assert.equal(stale.code,'conflict'); assert.equal(stale.conflict.current.name,'Changed A');
+  const gamma=operation('rider_update',riderA,{name:'Gamma reviewed'});gamma.expectedEntityVersion=2;
+  const committed=mutate(gamma,'gamma-token');assert.equal(committed.ok,true);
+  assert.deepEqual(rpc('ride_admin_shared_operation','gamma-token',undefined,`, '${gamma.operationId}'`),committed,'Lost reply resolves with the original ID');
+  assert.equal(rpc('ride_admin_shared_operation','alpha-token',undefined,`, '${gamma.operationId}'`).code,'not_found');
+  assert.equal(driverVisible(),live,'Private saves never reach drivers');
+  const [first,second]=await race(publishSql(3,0,operationId(),'beta-token'),publishSql(3,0,operationId(),'gamma-token'));
+  assert.equal(first.ok,true);assert.equal(second.code,'conflict');
+  const snapshots=['alpha-token','beta-token','gamma-token'].map(t=>rpc('ride_admin_shared_snapshot',t));
+  assert.deepEqual(snapshots[0],snapshots[1]);assert.deepEqual(snapshots[1],snapshots[2]);
+  assert.equal(snapshots[0].publishedRevision,1);
+  assert.equal(sql(`select rider_name from rides_private.ride_stops where id='${riderA}';`),'Gamma reviewed');
+  const actors=rpc('ride_admin_shared_context','alpha-token',undefined,', 0').events.map(e=>e.actorKey);
+  for(const actor of ['alpha','beta','gamma'])assert.ok(actors.includes(`profile:${actor}`));
+});
+test('old_client_cutover_denied', {skip:!enabled},()=>{
+  rolloutSeed(); prepareRollout();
+  assert.throws(()=>rolloutStep('activate'),/paused/,'Preparation alone must not authorize activation');
+  freezeRollout();
+  for(const step of ['paused','activate','pause']) {
+    if(step!=='paused')rolloutStep(step);
+    const live=published(),shared=sharedHash();
+    for(const query of ["ride_admin_save_draft('alpha-token','2099-01-04','{}')","ride_admin_clear_draft('beta-token','2099-01-04')","ride_admin_publish_plan('gamma-token','2099-01-04','[]','{}')","ride_admin_update_plan_drivers('alpha-token','2099-01-04','{}')","ride_admin_upsert_people('beta-token','[]','Synthetic')","ride_admin_update_event_setup('gamma-token','2099-01-04','{}')"])
+      assert.equal(JSON.parse(sql(`set role anon; select public.${query};`)).code,'update_required');
+    assert.equal(published(),live);assert.equal(sharedHash(),shared);
+  }
+});
+test('migration_retains_candidates', {skip:!enabled},()=>{
+  rolloutSeed();
+  for(const actor of ['alpha','beta','gamma'])assert.equal(JSON.parse(sql(`select public.ride_admin_save_draft('${actor}-token','2099-01-04','{"stops":[],"note":"${actor} private"}');`)).ok,true);
+  prepareRollout();
+  assert.equal(saveCandidate('alpha-token','local-known').ok,true);
+  assert.equal(saveCandidate('alpha-token','local-unknown',null).ok,true);
+  sql("select public.ride_admin_save_draft('alpha-token','2099-01-04','{\"stops\":[],\"note\":\"later private\"}');");
+  freezeRollout();
+  const candidates=()=>sql("select md5(jsonb_agg(to_jsonb(c) order by id)::text) from rides_private.ride_shared_recovery_candidates c where plan_date='2099-01-04';");
+  const before=candidates(),live=driverVisible();
+  sql(readFileSync(new URL('../supabase/collaborative_ride_control.sql',import.meta.url),'utf8'));
+  assert.equal(candidates(),before);rolloutStep('activate');
+  const a=rpc('ride_admin_shared_recovery','alpha-token').candidates;
+  assert.equal(a.length,4);assert.equal(rpc('ride_admin_shared_recovery','beta-token').candidates.length,1);
+  const known=a.find(c=>c.sourceKey==='local-known'||c.candidate.stops?.[0]?.name==='Retained local-known');
+  const unknown=a.find(c=>c.candidate.stops?.[0]?.name==='Retained local-unknown');
+  assert.equal(rpc('ride_admin_shared_import','alpha-token',undefined,`, '${unknown.id}', 0, 0, '${operationId()}'`).code,'conflict');
+  assert.equal(rpc('ride_admin_shared_import','alpha-token',undefined,`, '${known.id}', 0, 0, '${operationId()}'`).ok,true);
+  assert.equal(candidates(),before);assert.equal(driverVisible(),live);
+  assert.equal(sql("select count(*) from rides_private.ride_admin_drafts where plan_date='2099-01-04';"),'3');
+});
+test('rollback_preserves_latest_baseline', {skip:!enabled},()=>{
+  rolloutSeed();prepareRollout();freezeRollout();rolloutStep('activate');
+  saveCandidate('alpha-token','before-publish');
+  assert.equal(mutate(operation()).ok,true);assert.equal(JSON.parse(sql(publishSql(1))).ok,true);
+  const beforeNew=driverVisible();
+  const op=withBaseline(operation('rider_update',riderB,{name:'Latest published B'}));
+  assert.equal(mutate(op,'beta-token').ok,true);assert.equal(JSON.parse(sql(publishSql(2,1,operationId(),'gamma-token'))).ok,true);
+  assert.notEqual(driverVisible(),beforeNew);
+  const latest=driverVisible(), history=sharedHash();
+  const retained=()=>sql("select md5(jsonb_build_object('operations',(select jsonb_agg(to_jsonb(o) order by operation_id) from rides_private.ride_shared_operations o),'candidates',(select jsonb_agg(to_jsonb(c) order by id) from rides_private.ride_shared_recovery_candidates c))::text);");
+  const backup=retained();rolloutStep('pause');
+  assert.equal(driverVisible(),latest);assert.equal(sharedHash(),history);assert.equal(retained(),backup);
+  const paused=rpc('ride_admin_shared_snapshot','alpha-token');assert.equal(paused.baselinePublishedRevision,2);assert.equal(paused.writeMode,'paused');
+  assert.equal(mutate({...operation(),expectedBaselinePublishedRevision:2}).code,'update_required');
+  assert.equal(JSON.parse(sql(publishSql(2,2))).code,'update_required');
+  assert.equal(JSON.parse(sql("select rides_private.ride_shared_prepare('2099-01-04','Synthetic operator');")).code,'update_required');
+  assert.equal(JSON.parse(sql("select rides_private.ride_shared_freeze('2099-01-04','Synthetic operator');")).code,'update_required');
+  // A frontend rollback leaves this fence in place. Resume the existing workspace,
+  // never recreate it from an old backup or reset its publication baseline.
+  rolloutStep('activate');assert.equal(JSON.parse(sql(publishSql(1,1))).code,'conflict');
+  assert.equal(driverVisible(),latest);assert.equal(sharedHash(),history);
+});
+test('revocation_clears_private_access', {skip:!enabled},()=>{
+  rolloutSeed();prepareRollout();freezeRollout();rolloutStep('activate');
+  const candidate=saveCandidate('gamma-token','gamma-local');const op=operation();assert.equal(mutate(op,'gamma-token').ok,true);
+  const before=sharedHash(),live=published();
+  sql("update rides_private.ride_admin_profiles set active=false where slug='gamma';");
+  try {
+    for(const [name,extra] of [['context',', 0'],['snapshot',''],['secondary',''],['recovery',''],['operation',`, '${op.operationId}'`],['import',`, '${candidate.candidateId}', 1, 0, '${operationId()}'`]])
+      assert.equal(rpc(`ride_admin_shared_${name}`,'gamma-token',undefined,extra).code,'invalid_admin_code',name);
+    assert.equal(mutate(operation(),'gamma-token').code,'invalid_admin_code');
+    assert.equal(JSON.parse(sql(publishSql(1,0,operationId(),'gamma-token'))).code,'invalid_admin_code');
+    assert.equal(rpc('ride_admin_shared_snapshot','beta-token').ok,true);
+    assert.equal(sharedHash(),before);assert.equal(published(),live);
+  } finally {sql("update rides_private.ride_admin_profiles set active=true where slug='gamma';");}
+  assert.equal(rpc('ride_admin_shared_recovery','gamma-token').candidates.length,1,'Revocation does not delete retained recovery');
+});
+
+test('additive rollout bundle installs canonical functions and preserves existing published identities settings and catalog', {skip:!enabled},()=>{
+  initialize();
+  const generated=spawnSync(process.execPath,['tools/build-collaborative-rollout.mjs'],{encoding:'utf8'});
+  assert.equal(generated.status,0,generated.stderr);
+  const retained=()=>sql(`select md5(jsonb_build_object('profiles',(select jsonb_agg(to_jsonb(t) order by slug) from rides_private.ride_admin_profiles t),'sessions',(select jsonb_agg(to_jsonb(t) order by id) from rides_private.ride_admin_profile_sessions t),'settings',(select jsonb_agg(to_jsonb(t) order by id) from rides_private.ride_app_settings t),'catalog',(select jsonb_agg(to_jsonb(t) order by slug) from rides_private.ride_driver_catalog t),'church',(select pg_get_functiondef('public.synthetic_church_read()'::regprocedure)))::text);`);
+  const before=retained(),live=published(),shared=sharedHash();
+  sql(generated.stdout);assert.equal(retained(),before);assert.equal(published(),live);assert.equal(sharedHash(),shared);
+  assert.equal(sql("select count(*) from pg_trigger where tgrelid='rides_private.ride_stops'::regclass and tgname='ride_admin_audit_stops' and tgenabled='O';"),'1');
+  assert.equal(sql("select has_function_privilege('anon','rides_private.ride_publish_plan_internal(text,date,jsonb,text[],boolean)','EXECUTE');"),'f');
+  assert.equal(JSON.parse(sql("select public.ride_admin_save_draft('alpha-token','2099-01-04','{}');")).code,'update_required');
+});
+
+test('synthetic backup export restores latest publication shared history recovery and ACLs into a separate database', {skip:!enabled},()=>{
+  rolloutSeed();prepareRollout();freezeRollout();rolloutStep('activate');
+  assert.equal(saveCandidate('alpha-token','export-checkpoint').ok,true);
+  assert.equal(mutate(operation()).ok,true);assert.equal(JSON.parse(sql(publishSql(1))).ok,true);rolloutStep('pause');
+  const digestQuery=`select md5(jsonb_build_object('workspace',(select jsonb_agg(to_jsonb(t) order by plan_date) from rides_private.ride_shared_workspaces t),'operations',(select jsonb_agg(to_jsonb(t) order by operation_id) from rides_private.ride_shared_operations t),'recovery',(select jsonb_agg(to_jsonb(t) order by id) from rides_private.ride_shared_recovery_candidates t),'stops',(select jsonb_agg(to_jsonb(t) order by id) from rides_private.ride_stops t),'profiles',(select jsonb_agg(to_jsonb(t) order by slug) from rides_private.ride_admin_profiles t),'mode',(select jsonb_agg(to_jsonb(t) order by plan_date) from rides_private.ride_shared_write_modes t))::text);`;
+  const expected=sql(digestQuery),restored='ridelist_shared_admin_restore_test';
+  const dump=spawnSync('docker',['exec',container,'pg_dump','-U','postgres','-Fc',database],{maxBuffer:16*1024*1024});
+  assert.equal(dump.status,0,dump.stderr.toString());assert.ok(dump.stdout.length>1000);
+  if(sql(`select count(*) from pg_database where datname='${restored}';`,'postgres')==='1')sql(`drop database ${restored};`,'postgres');
+  sql(`create database ${restored};`,'postgres');
+  try {
+    const restore=spawnSync('docker',['exec','-i',container,'pg_restore','--exit-on-error','-U','postgres','-d',restored],{input:dump.stdout,encoding:'utf8',timeout:20000});
+    assert.equal(restore.status,0,restore.stderr);assert.equal(sql(digestQuery,restored),expected);
+    assert.equal(sql("select has_function_privilege('anon','rides_private.ride_publish_plan_internal(text,date,jsonb,text[],boolean)','EXECUTE');",restored),'f');
+    assert.equal(sql("select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='rides_private' and c.relname like 'ride_shared_%' and c.relkind='r' and c.relrowsecurity and c.relforcerowsecurity;",restored),'9');
+    assert.equal(sql(digestQuery),expected,'Restoration never changes the active database');
+  } finally {sql(`drop database ${restored};`,'postgres');}
 });

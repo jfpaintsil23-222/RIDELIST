@@ -37,3 +37,21 @@ test('lookup completion carries the captured operation ID and cannot settle a ne
   assert.equal(h.states.at(-1).operationResultId,'B');
   assert.equal(h.states.at(-1).operationResult.code,'not_found');
 });
+
+test('pause and resume refresh write mode without revision changes or replaying a pending operation',async()=>{
+  let mode='shared',lookups=0;
+  const h=harness({fetchContext:async()=>({...h.snapshot,actorKey:'a',writeMode:mode}),fetchSnapshot:async()=>({...h.snapshot,writeMode:mode}),getOperationResult:async()=>{lookups++;return {ok:false,code:'not_found'};}});
+  await h.start();const pending={operationId:'uncertain',args:{name:'Private synthetic input'}};
+  await h.ctrl.trackOperation(pending);mode='paused';await h.tick(3000);
+  assert.equal(h.states.at(-1).snapshot.writeMode,'paused');assert.equal(h.states.at(-1).pendingOperation,pending);
+  mode='shared';await h.ctrl.refresh('focus');assert.equal(h.states.at(-1).snapshot.writeMode,'shared');
+  assert.equal(h.states.at(-1).pendingOperation,pending);assert.equal(lookups,3);
+});
+test('revocation during uncertain operation lookup clears private snapshot and stops all subsequent reads',async()=>{
+  let valid=true,contexts=0;
+  const h=harness({fetchContext:async()=>{contexts++;return {...h.snapshot,actorKey:'a'};},getOperationResult:async()=>valid?{ok:false,code:'not_found'}:{ok:false,code:'invalid_admin_code'}});
+  await h.start();await h.ctrl.trackOperation({operationId:'private-op'});valid=false;
+  await h.tick(3000);const locked=h.states.at(-1);assert.equal(locked.status,'locked');assert.equal(locked.snapshot,null);assert.equal(locked.pendingOperation,null);
+  const count=contexts;await h.tick(60000);await h.ctrl.refresh('focus');h.network.set(false);h.network.set(true);await settle();
+  assert.equal(contexts,count);assert.equal(h.timers.size,0);
+});

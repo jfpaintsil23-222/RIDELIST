@@ -5,14 +5,25 @@ import {resolve,extname} from 'node:path';
 const root=resolve(new URL('../..',import.meta.url).pathname), date='2099-01-04';
 const drivers=['a','b','c'].map((slug,i)=>({slug,displayName:`Example Driver ${i+1}`,initials:`E${i+1}`,phone:'',active:true}));
 let snapshot={ok:true,planDate:date,writeMode:'shared',draftRevision:1,eventCursor:1,publishedRevision:0,baselinePublishedRevision:0,settingsVersion:1,drivers,groupVersions:{a:1,b:1,c:1,'':1,'@drivers':1},riders:[{id:'00000000-0000-4000-8000-000000000001',name:'Example Rider with a deliberately long synthetic name',address:'100 Example Street',area:'FLOC',driverSlug:'a',stopOrder:1,entityVersion:1,phone:'',pickupTime:'09:00',readyBy:'08:55'},{id:'00000000-0000-4000-8000-000000000002',name:'Sample Rider Two',address:'200 Fictional Avenue',area:'FLOC',driverSlug:'b',stopOrder:1,entityVersion:1,phone:'',pickupTime:'09:10'}],publishedSnapshot:{ok:true,plan:{date,title:'Sunday Ride Plan'},drivers,stops:[],people:[],destination:{name:'Example destination',address:'300 Sample Street'}}};
-const results=new Map(),events=[];
+const results=new Map(),events=[],revoked=new Set();
+const candidates=['a','b','c'].flatMap(actor=>[0,null].map((baseline,i)=>({id:`${actor}-candidate-${i}`,actorKey:`profile:${actor}`,planDate:date,source:i?'device':'server',baselinePublishedRevision:baseline,candidate:{stops:[{...snapshot.riders[0],name:`Recovery from ${actor}`,address:'500 Recovery Example Street'}]}})));
 function rpc(name,args){const actorKey=`profile:${args.p_admin_code||'a'}`;
+ if(name.startsWith('ride_admin_')&&(!['a','b','c'].includes(args.p_admin_code)||revoked.has(args.p_admin_code)))return {ok:false,code:'invalid_admin_code'};
+ if(name==='ride_admin_shared_import'){
+ const candidate=candidates.find(c=>c.id===args.p_candidate_id&&c.actorKey===actorKey);
+ if(snapshot.writeMode!=='shared')return {ok:false,code:'update_required'};
+ if(!candidate)return {ok:false,code:'candidate_not_found'};
+ if(candidate.baselinePublishedRevision!==snapshot.baselinePublishedRevision||args.p_expected_draft_revision!==snapshot.draftRevision||args.p_expected_baseline_revision!==snapshot.baselinePublishedRevision)return {ok:false,code:'conflict'};
+ snapshot.riders=structuredClone(candidate.candidate.stops);snapshot.riders.forEach(r=>r.entityVersion++);snapshot.draftRevision++;snapshot.eventCursor++;
+ events.push({eventCursor:snapshot.eventCursor,actorKey,type:'import',draftRevision:snapshot.draftRevision});return {ok:true,operationId:args.p_operation_id,draftRevision:snapshot.draftRevision,eventCursor:snapshot.eventCursor};
+ }
  if(name==='ride_admin_shared_context')return {...snapshot,actorKey,initialized:true,events:events.filter(e=>e.eventCursor>(args.p_after_event||0))};
  if(name==='ride_admin_shared_snapshot')return snapshot;
  if(name==='ride_admin_shared_secondary')return {ok:true,actorKey,planDate:date,people:[],driverPool:drivers,brandingVersion:1,branding:{}};
- if(name==='ride_admin_shared_recovery')return {ok:true,candidates:[]};
+ if(name==='ride_admin_shared_recovery')return {ok:true,candidates:candidates.filter(c=>c.actorKey===actorKey)};
  if(name==='ride_admin_shared_operation')return results.get(args.p_operation_id)?.result||{ok:false,code:'not_found'};
  if(name==='ride_admin_shared_mutate'||name==='ride_admin_shared_publish'){
+ if(snapshot.writeMode!=='shared')return {ok:false,code:'update_required'};
  const op=args.p_operation,id=op?.operationId||args.p_operation_id,body=JSON.stringify({...args,p_admin_code:undefined});
  if(results.has(id))return results.get(id).body===body?results.get(id).result:{ok:false,code:'operation_id_reused'};
  const rider=snapshot.riders.find(r=>r.id===op?.entityId);let result;
@@ -23,7 +34,8 @@ function rpc(name,args){const actorKey=`profile:${args.p_admin_code||'a'}`;
  if(name==='ride_context')return {ok:true,plan:snapshot.publishedSnapshot.plan,drivers:[],appSettings:{}};
  return [];
 }
-const server=http.createServer(async(req,res)=>{res.setHeader('Content-Security-Policy',"default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; worker-src 'none'");try{const url=new URL(req.url,'http://localhost');if(url.pathname==='/rpc'){let body='';for await(const chunk of req)body+=chunk;const {name,args}=JSON.parse(body);res.setHeader('Content-Type','application/json');res.end(JSON.stringify(rpc(name,args)));return;}
+const server=http.createServer(async(req,res)=>{res.setHeader('Content-Security-Policy',"default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; worker-src 'none'");try{const url=new URL(req.url,'http://localhost');if(url.pathname==='/fixture-control'&&req.method==='POST'){let body='';for await(const chunk of req)body+=chunk;const control=JSON.parse(body);if(['shared','paused'].includes(control.mode))snapshot.writeMode=control.mode;if(['a','b','c'].includes(control.revoke))revoked.add(control.revoke);res.end('{}');return;}
+ if(url.pathname==='/rpc'){let body='';for await(const chunk of req)body+=chunk;const {name,args}=JSON.parse(body);res.setHeader('Content-Type','application/json');res.end(JSON.stringify(rpc(name,args)));return;}
  const path=resolve(root,'.'+(url.pathname==='/'?'/index.html':url.pathname));if(!path.startsWith(root+'/')){res.writeHead(403).end();return;}let data=await readFile(path);if(path.endsWith('index.html')){let html=data.toString();html=html.replace('<script>',`<script>const fixtureFetch=window.fetch.bind(window);window.fetch=(url,init={})=>{const target=new URL(url,location.href);if(target.origin===location.origin)return fixtureFetch(url,init);const name=target.pathname.split('/').pop();return fixtureFetch('/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,args:JSON.parse(init.body||'{}')})});};</script><script>`);html=html.replace('    loadDrivers();',`    window.fixtureApp={state,render,loadAdminSnapshot,reviewAdminShared,applyAdminSharedState};
     state.planDate='${date}';
     if(new URLSearchParams(location.search).has('home')) { state.loading=false;render(); } else { loadAdminSnapshot(new URLSearchParams(location.search).get('actor')||'a').then(()=>{state.view='admin';state.adminExpandedZone='floc';render();}); }`);data=html;}

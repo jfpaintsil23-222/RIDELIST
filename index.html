@@ -2189,6 +2189,7 @@
     }
 
     .admin-control-stats {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px;
     }
 
@@ -2217,13 +2218,12 @@
 
     .admin-control-stats .admin-stat {
       min-height: 118px;
-      padding: 22px 18px 18px;
+      padding: 22px clamp(10px, 3vw, 18px) 18px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 42px;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-areas:
-        "count icon"
-        "label label";
-      column-gap: 10px;
+        "count"
+        "label";
       align-content: start;
       border-radius: 20px;
       box-shadow: 0 16px 34px rgba(0, 0, 0, 0.06);
@@ -2239,8 +2239,9 @@
 
     .admin-control-stats .admin-stat strong {
       grid-area: count;
-      font-size: 40px;
+      font-size: clamp(28px, 7vw, 40px);
       font-weight: 800;
+      overflow-wrap: anywhere;
     }
 
     .admin-control-stats .admin-stat.is-alert strong {
@@ -2262,24 +2263,7 @@
       font-size: 17px;
       line-height: 1.12;
       font-weight: 500;
-    }
-
-    .admin-stat-glyph {
-      grid-area: icon !important;
-      position: static;
-      display: grid;
-      place-items: center;
-      width: 42px;
-      height: 42px;
-      margin-top: -2px !important;
-      border-radius: 12px;
-      color: #050505;
-      background: #f3f3f4;
-    }
-
-    .admin-stat-glyph .people-detail-svg {
-      width: 25px;
-      height: 25px;
+      overflow-wrap: anywhere;
     }
 
     .admin-section-head {
@@ -9443,9 +9427,9 @@
       return ["chat", "ai", "drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
     }
 
-    function adminStatButton(tab, count, label, icon, extraClass = "") {
+    function adminStatButton(tab, count, label, extraClass = "") {
       const className = `admin-stat${extraClass ? ` ${extraClass}` : ""}`;
-      return `<button class="${className}" type="button" data-admin-tab="${escapeHtml(tab)}"><strong>${escapeHtml(count)}</strong><span>${escapeHtml(label)}</span><span class="admin-stat-glyph" aria-hidden="true">${peopleDetailIcon(icon)}</span></button>`;
+      return `<button class="${className}" type="button" data-admin-tab="${escapeHtml(tab)}"><strong>${escapeHtml(count)}</strong><span>${escapeHtml(label)}</span></button>`;
     }
 
     function adminRiderInitial(name) {
@@ -10748,9 +10732,9 @@
           </section>
 
           <section class="admin-stats admin-control-stats" aria-label="Ride control stats">
-            ${adminStatButton("drivers", drivers.length, "drivers available", "users")}
-            ${adminStatButton("riders", adminStops().length, ridePlanRidersLabel(), "user")}
-            ${adminStatButton("changes", visibleChangeCount, "changes today", "changes", pendingAlertCount ? "is-alert" : "")}
+            ${adminStatButton("drivers", drivers.length, "drivers available")}
+            ${adminStatButton("riders", adminStops().length, ridePlanRidersLabel())}
+            ${adminStatButton("changes", visibleChangeCount, "changes today", pendingAlertCount ? "is-alert" : "")}
           </section>
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}

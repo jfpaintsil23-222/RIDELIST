@@ -59,8 +59,7 @@ async function callRpc(name: string, body: Record<string, unknown>, authorizatio
 
 async function verifyAdmin(body: Record<string, unknown>, authorization = "") {
   const adminCode = String(body.adminCode || "");
-  if (!adminCode) return false;
-
+  // The snapshot RPC also validates signed-in admin sessions in Authorization.
   const snapshot = await callRpc("ride_admin_snapshot", {
     p_admin_code: adminCode,
     p_plan_date: String(body.planDate || "") || null,

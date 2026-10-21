@@ -80,6 +80,7 @@ async function callOpenAi(prompt: string) {
     },
     body: JSON.stringify({
       model,
+      store: false,
       input: [
         {
           role: "system",
@@ -103,7 +104,7 @@ async function callOpenAi(prompt: string) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    console.warn("OpenAI organizer failed", response.status, payload?.error?.message || payload);
+    console.warn("OpenAI organizer failed", response.status, payload?.error?.code || "unknown_error");
     return { ok: false, error: "ai_request_failed", status: response.status >= 500 ? 502 : 400 };
   }
 

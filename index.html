@@ -2774,6 +2774,20 @@
       font-weight: 850;
     }
 
+    .people-bank-section {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .people-bank-section > summary {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      padding: 12px;
+      min-height: 60px;
+      border-radius: 12px;
+    }
+
+    .people-bank-section[open] > summary { background: var(--surface); }
+    .people-bank-section[open] .people-bank-chevron { transform: rotate(90deg); }
+
     .admin-zone-mark img {
       width: 100%;
       height: 100%;
@@ -4614,6 +4628,11 @@
       adminMenuOpen: false,
       adminSearch: "",
       adminPeopleSearch: "",
+      adminPeopleAreas: {},
+      adminPeopleAreasStatus: "idle",
+      adminPeopleAreaSaving: false,
+      adminPeopleAreasRequest: 0,
+      adminPeopleSections: { review: true },
       adminExpandedDriverSlug: "",
       adminResetDate: "",
       adminResetDriverSlugs: [],
@@ -6190,8 +6209,103 @@
 
     function adminPeopleStatus(person) {
       if (adminDuplicateCandidates(person).length) return "Possible duplicate";
-      if (!String(person?.phone || "").trim() || !preferredPersonAddress(person)) return "Needs review";
+      if (!String(person?.phone || "").trim() || !adminPersonArea(person) || adminPersonAddressIssues(person).length) return "Needs review";
       return "";
+    }
+
+    const PEOPLE_BANK_AREAS = [
+      { id: "tsu", label: "TSU" }, { id: "hcu", label: "HCU" },
+      { id: "uh", label: "UH" }, { id: "off-campus", label: "Off Campus" },
+      { id: "shsu", label: "Sam Houston State" },
+    ];
+
+    function adminPersonArea(person) {
+      const saved = state.adminPeopleAreas[person.id];
+      if (PEOPLE_BANK_AREAS.some(area => area.id === saved)) return saved;
+      // Suggestions use explicit campus names only, never street-name guesses.
+      const address = preferredPersonAddress(person);
+      if (/\b(?:texas southern university|tsu)\b/i.test(address)) return "tsu";
+      if (/\b(?:houston christian university|houston baptist university|hcu|hbu)\b/i.test(address)) return "hcu";
+      if (/\b(?:sam houston state(?: university)?|shsu)\b/i.test(address)) return "shsu";
+      if (/\b(?:university of houston|uh)\b/i.test(address) && !/\b(?:downtown|clear lake|victoria)\b/i.test(address)) return "uh";
+      return "";
+    }
+
+    function adminComparableAddress(address) {
+      return String(address || "").toLowerCase().replace(/\bstreet\b/g, "st")
+        .replace(/\broad\b/g, "rd").replace(/\bavenue\b/g, "ave")
+        .replace(/\bdrive\b/g, "dr").replace(/[^a-z0-9]/g, "");
+    }
+
+    function adminPersonAddressIssues(person) {
+      const address = preferredPersonAddress(person);
+      const issues = [];
+      if (!address.trim()) issues.push("No pickup address saved.");
+      else if (!/\b\d+[a-z]?\s+\S+/i.test(address)) issues.push("Confirm the street address or exact pickup entrance.");
+      const phone = adminPersonPhoneKey(person).replace(/^1(?=\d{10}$)/, "");
+      const addresses = [person.homeAddress, person.campusAddress, address].filter(Boolean).map(adminComparableAddress);
+      const conflicting = phone && adminStops().some(stop =>
+        adminPersonNameKey(stop) === adminPersonNameKey(person) &&
+        adminPersonPhoneKey(stop).replace(/^1(?=\d{10}$)/, "") === phone &&
+        String(stop.address || "").trim() && !addresses.includes(adminComparableAddress(stop.address)));
+      if (conflicting) issues.push("Current route pickup differs from saved addresses. Confirm whether this is a one-time pickup before changing anything.");
+      return issues;
+    }
+
+    async function loadAdminPeopleAreas() {
+      if (state.adminPeopleAreaSaving) return;
+      const request = ++state.adminPeopleAreasRequest;
+      const generation = adminSharedGeneration;
+      const code = state.adminCode;
+      state.adminPeopleAreasStatus = "loading";
+      try {
+        const data = await rpc("ride_admin_people_areas", { p_admin_code: code }, adminRpcOptions());
+        if (request !== state.adminPeopleAreasRequest || generation !== adminSharedGeneration || code !== state.adminCode || !state.admin) return;
+        if (!data?.ok || !data.areas || typeof data.areas !== "object" || Array.isArray(data.areas)) throw new Error("Areas unavailable");
+        state.adminPeopleAreas = data.areas;
+        state.adminPeopleAreasStatus = "ready";
+      } catch (error) {
+        if (request !== state.adminPeopleAreasRequest || generation !== adminSharedGeneration || code !== state.adminCode || !state.admin) return;
+        state.adminPeopleAreasStatus = "unavailable";
+      }
+      if (state.view === "adminPersonDetail" || (state.view === "admin" && state.adminActiveTab === "people")) render();
+    }
+
+    async function saveAdminPersonArea(area) {
+      const personId = state.adminSelectedPersonId;
+      if (!adminPersonById(personId) || state.adminPeopleAreasStatus !== "ready" || state.adminPeopleAreaSaving) return;
+      if (area !== "" && !PEOPLE_BANK_AREAS.some(item => item.id === area)) return;
+      const generation = adminSharedGeneration;
+      const code = state.adminCode;
+      state.adminPeopleAreaSaving = true;
+      state.adminError = "";
+      state.adminMessage = "";
+      // Invalidate a pending read so it cannot replace a newly saved label.
+      ++state.adminPeopleAreasRequest;
+      render();
+      const currentSession = () => generation === adminSharedGeneration && code === state.adminCode && Boolean(state.admin);
+      try {
+        const data = await rpc("ride_admin_set_people_area", {
+          p_admin_code: code, p_person_id: personId, p_area: area,
+          p_expected_area: state.adminPeopleAreas[personId] || "",
+        }, adminRpcOptions());
+        if (!currentSession()) return;
+        if (!data?.ok) {
+          if (data?.error === "area_conflict") throw new Error("Another admin changed this area. Reload areas and review before saving again.");
+          throw new Error("Area could not be saved. Reload areas and try again.");
+        }
+        state.adminPeopleAreas[personId] = data.pickupArea;
+        if (state.adminSelectedPersonId === personId) state.adminMessage = "Area saved. Pickup addresses are unchanged.";
+      } catch (error) {
+        if (!currentSession()) return;
+        state.adminPeopleAreasStatus = "unavailable";
+        if (state.adminSelectedPersonId === personId) state.adminError = error.message || "Save unconfirmed. Reload areas before retrying.";
+      } finally {
+        if (currentSession()) {
+          state.adminPeopleAreaSaving = false;
+          if (state.view === "adminPersonDetail" || (state.view === "admin" && state.adminActiveTab === "people")) render();
+        }
+      }
     }
 
     function personAddressByType(person, type) {
@@ -6951,6 +7065,7 @@
         person.homeAddress,
         person.preferredAddress,
         person.notes,
+        PEOPLE_BANK_AREAS.find(area => area.id === adminPersonArea(person))?.label,
       ].filter(Boolean).join(" ").toLowerCase();
     }
 
@@ -7046,6 +7161,7 @@
       state.adminMessage = "";
       state.view = "adminPersonDetail";
       render();
+      if (state.adminPeopleAreasStatus === "idle") loadAdminPeopleAreas();
     }
 
     function adminPersonEditable(person) {
@@ -7470,6 +7586,11 @@
       state.adminRiderQuery = "";
       state.adminSearch = "";
       state.adminPeopleSearch = "";
+      state.adminPeopleAreas = {};
+      state.adminPeopleAreasStatus = "idle";
+      state.adminPeopleAreaSaving = false;
+      ++state.adminPeopleAreasRequest;
+      state.adminPeopleSections = { review: true };
       state.routeTimings = {};
       state.adminPlaceAutocomplete = {requestId:(state.adminPlaceAutocomplete?.requestId || 0)+1,suggestions:[],query:"",field:"",status:"idle"};
       state.adminAiPrompt = "";
@@ -9176,7 +9297,13 @@
         return `<section class="empty-card"><p>No people match that search.</p></section>`;
       }
 
-      return people.map((person) => adminPeopleResultCard(person, options)).join("");
+      if (!options.showData) return people.map((person) => adminPeopleResultCard(person, options)).join("");
+      const groups = PEOPLE_BANK_AREAS.map(area => ({ ...area, people: people.filter(person => adminPersonArea(person) === area.id) }));
+      groups.push({ id: "review", label: "Needs review", people: people.filter(person => adminPeopleStatus(person)) });
+      return groups.filter(group => !state.adminPeopleSearch || group.people.length).map(group => `<details class="people-bank-section" data-people-bank-section="${group.id}" ${state.adminPeopleSearch || state.adminPeopleSections[group.id] ? "open" : ""}>
+        <summary class="admin-zone-toggle"><strong>${escapeHtml(group.label)}</strong><span class="pill gray">${group.people.length}</span><span class="people-bank-chevron" aria-hidden="true">&rsaquo;</span></summary>
+        <div class="admin-rider-list">${group.people.length ? group.people.map(person => adminPeopleResultCard(person, options)).join("") : `<section class="empty-card"><p>No people in this section.</p></section>`}</div>
+      </details>`).join("");
     }
 
     function adminPeopleSearchInput(placeholder = "Search PeopleData by name, phone, or address") {
@@ -9235,6 +9362,7 @@
       state.adminMenuOpen = false;
       state.adminError = "";
       render();
+      if (nextTab === "people") loadAdminPeopleAreas();
     }
 
     function adminActiveTab() {
@@ -9324,8 +9452,9 @@
     function adminPeopleView() {
       return `
         <section class="admin-message">
-          PeopleData · ${adminPeople().length} people stored
+          People Bank · ${adminPeople().length} people stored. Unassigned areas and uncertain details appear in Needs review. Campus names suggest a section until you save an area.
         </section>
+        ${state.adminPeopleAreasStatus === "unavailable" ? `<section class="admin-message">Saved areas are unavailable. <button type="button" class="secondary-action" data-action="adminPeopleAreasReload">Reload areas</button></section>` : ""}
         <button class="primary-action admin-add-rider-action" type="button" data-action="adminNew">
           <span class="admin-control-action-icon" data-detail-icon="user-plus">${peopleDetailIcon("user-plus")}</span>
           <span>Add rider</span>
@@ -9845,6 +9974,18 @@
             ${peopleDetailRow("primary", "Primary", person.preferredAddressType === "campus" ? "Campus address" : "Home address")}
             ${peopleDetailRow("notes", "Notes", person.notes || "No notes saved")}
           </section>
+
+          <section class="admin-form-card" aria-label="Pickup area">
+            <label><span>Pickup area</span><select data-admin-person-area ${state.adminPeopleAreasStatus !== "ready" || state.adminPeopleAreaSaving ? "disabled" : ""}>
+              <option value="">Use address suggestion</option>
+              ${PEOPLE_BANK_AREAS.map(area => `<option value="${area.id}" ${state.adminPeopleAreas[person.id] === area.id ? "selected" : ""}>${area.label}</option>`).join("")}
+            </select></label>
+            <p>${state.adminPeopleAreas[person.id] ? "Saved area" : "Choose an area to confirm this person's section."}</p>
+            <button type="button" class="secondary-action" data-action="adminPersonAreaSave" ${state.adminPeopleAreasStatus !== "ready" || state.adminPeopleAreaSaving ? "disabled" : ""}>${state.adminPeopleAreaSaving ? "Saving…" : "Save area"}</button>
+            ${state.adminPeopleAreasStatus === "unavailable" ? `<p>Area service unavailable.</p><button type="button" class="secondary-action" data-action="adminPeopleAreasReload">Reload areas</button>` : ""}
+            ${state.adminMessage ? `<p role="status">${escapeHtml(state.adminMessage)}</p>` : ""}
+          </section>
+          ${adminPersonAddressIssues(person).length ? `<section class="admin-message"><strong>Address review</strong><ul>${adminPersonAddressIssues(person).map(issue => `<li>${escapeHtml(issue)}</li>`).join("")}</ul><p>Review the saved home and campus addresses above before editing.</p></section>` : ""}
 
           ${adminSharedSecondaryMode() !== "legacy" ? `<p data-shared-secondary-status role="status">Contact saves update People Bank only. Apply saved contact explicitly to linked pickups, then publish.</p>${(state.adminShared?.snapshot?.riders || []).filter(rider => rider.personId === person.id).map(rider => `<button type="button" class="secondary-action" data-shared-person-pickup="${escapeHtml(rider.id)}">Apply saved contact to ${escapeHtml(rider.name)} pickup</button>`).join("")}` : ""}
           <div class="people-detail-primary-actions">
@@ -11277,6 +11418,13 @@
       }
     }
 
+    screen.addEventListener("toggle", (event) => {
+      const section = event.target;
+      if (section.matches?.("[data-people-bank-section]") && section.isConnected && !state.adminPeopleSearch) {
+        state.adminPeopleSections[section.dataset.peopleBankSection] = section.open;
+      }
+    }, true);
+
     screen.addEventListener("click", (event) => {
       const driverRunButton = event.target.closest("[data-driver-run]");
       if (driverRunButton) {
@@ -11340,6 +11488,8 @@
       if (action === "enableRouteAlerts") enableDriverRouteAlerts();
       if (action === "admin") openAdminCodeModal();
       if (action === "adminSignOut") signOutAdmin();
+      if (action === "adminPersonAreaSave") saveAdminPersonArea(document.querySelector("[data-admin-person-area]")?.value || "");
+      if (action === "adminPeopleAreasReload") loadAdminPeopleAreas();
       if (action === "adminMenuOpen") {
         state.adminMenuOpen = true;
         render();

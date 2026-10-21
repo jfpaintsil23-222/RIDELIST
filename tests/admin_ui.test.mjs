@@ -90,6 +90,12 @@ async function loadApp(fetchImpl, options = {}) {
       saveAdminPersonMerge: typeof saveAdminPersonMerge === "function" ? saveAdminPersonMerge : undefined,
       saveAdminPersonArchive: typeof saveAdminPersonArchive === "function" ? saveAdminPersonArchive : undefined,
       adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
+      adminPeopleResultsHtml,
+      adminPersonArea: typeof adminPersonArea === "function" ? adminPersonArea : undefined,
+      adminPersonAddressIssues: typeof adminPersonAddressIssues === "function" ? adminPersonAddressIssues : undefined,
+      saveAdminPersonArea: typeof saveAdminPersonArea === "function" ? saveAdminPersonArea : undefined,
+      loadAdminPeopleAreas: typeof loadAdminPeopleAreas === "function" ? loadAdminPeopleAreas : undefined,
+      clearAdminPrivateState,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
       returnToAdminPersonDetailFromAdd: typeof returnToAdminPersonDetailFromAdd === "function" ? returnToAdminPersonDetailFromAdd : undefined,
@@ -2215,7 +2221,7 @@ test("local Coffee and Christ rehearsal loads synthetic riders without Supabase 
 
   app.state.adminActiveTab = "people";
   const peopleHtml = app.adminView();
-  assert.match(peopleHtml, /PeopleData · 8 people stored/);
+  assert.match(peopleHtml, /People Bank · 8 people stored/);
   assert.match(peopleHtml, /Synthetic rider 3/);
   assert.match(peopleHtml, /Synthetic rider 1/);
   assert.match(peopleHtml, /Synthetic rider 2/);
@@ -4063,4 +4069,97 @@ test('shared linked rider edit retains explicit identity and version without mat
   const app=await loadApp(); sharedSecondaryState(app);
   app.state.adminSelectedStopId='personal-rider'; app.state.adminDraftStops=[{id:'personal-rider',name:'Arbitrary name',personId:'explicit-person',personVersion:7}];
   const view=app.adminEditView(); assert.match(view,/name="personId" value="explicit-person"/); assert.match(view,/name="personVersion" value="7"/);
+});
+
+test("People Bank groups confirmed areas without guessing from a home address or a highway name", async () => {
+  const app = await loadApp();
+  app.state.admin = { people: [
+    { id: "tsu", name: "Alpha", campusAddress: "Texas Southern University Library", preferredAddressType: "campus" },
+    { id: "hcu", name: "Beta", campusAddress: "Houston Christian University HODO", preferredAddressType: "campus" },
+    { id: "uh", name: "Gamma", campusAddress: "University of Houston", preferredAddressType: "campus" },
+    { id: "shsu", name: "Delta", campusAddress: "Sam Houston State University", preferredAddressType: "campus" },
+    { id: "off", name: "Epsilon", homeAddress: "100 Example Street", preferredAddressType: "home" },
+    { id: "unknown", name: "Zeta", homeAddress: "200 Sam Houston Tollway", preferredAddressType: "home" },
+  ] };
+  app.state.adminPeopleAreas = { off: "off-campus" };
+  app.state.adminPeopleAreasStatus = "ready";
+  const html = app.adminPeopleResultsHtml({ showData: true });
+  for (const label of ["TSU", "HCU", "UH", "Off Campus", "Sam Houston State", "Needs review"]) assert.ok(html.includes(label), label);
+  assert.equal(app.adminPersonArea(app.state.admin.people[4]), "off-campus");
+  assert.equal(app.adminPersonArea(app.state.admin.people[5]), "");
+  app.state.adminPeopleSearch = "Gamma";
+  const search = app.adminPeopleResultsHtml({ showData: true });
+  assert.match(search, /Gamma/);
+  assert.doesNotMatch(search, /Alpha|Epsilon/);
+});
+
+test("People Bank flags incomplete addresses and conflicting pickups without replacing saved addresses", async () => {
+  const app = await loadApp();
+  const person = { id: "p1", name: "Example Person", phone: "2025550100", campusAddress: "Campus Vue", homeAddress: "10 Example Road", preferredAddressType: "campus" };
+  app.state.admin = { people: [person] };
+  app.state.adminDraftStops = [{ id: "s1", name: "Example Person", phone: "2025550100", address: "20 Fictional Avenue" }];
+  const before = JSON.stringify(person);
+  const issues = app.adminPersonAddressIssues(person);
+  assert.ok(issues.some(x => /street address/i.test(x)));
+  assert.ok(issues.some(x => /differs/i.test(x)));
+  assert.equal(JSON.stringify(person), before);
+  app.state.adminDraftStops[0].phone = "2025550199";
+  assert.ok(!app.adminPersonAddressIssues(person).some(x => /differs/i.test(x)), "Name alone cannot establish an address conflict for the same person");
+});
+
+test("saving a People Bank area calls the metadata endpoint and leaves live route fields untouched", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options) => {
+    if (url.endsWith("/ride_admin_set_people_area")) {
+      calls.push(JSON.parse(options.body));
+      return { ok: true, json: async () => ({ ok: true, personId: "p1", pickupArea: "shsu" }) };
+    }
+    return { ok: true, json: async () => [] };
+  });
+  app.state.admin = { people: [{ id: "p1", name: "Example Person" }] };
+  app.state.adminCode = "synthetic-admin";
+  app.state.adminSelectedPersonId = "p1";
+  app.state.adminPeopleAreas = { p1: "" };
+  app.state.adminPeopleAreasStatus = "ready";
+  app.state.adminDraftStops = [{ id: "s1", name: "Example Person", address: "10 Example Road", area: "Home" }];
+  const before = JSON.stringify(app.state.adminDraftStops);
+  await app.saveAdminPersonArea("shsu");
+  assert.deepEqual(calls, [{ p_admin_code: "synthetic-admin", p_person_id: "p1", p_area: "shsu", p_expected_area: "" }]);
+  assert.equal(app.state.adminPeopleAreas.p1, "shsu");
+  assert.equal(JSON.stringify(app.state.adminDraftStops), before);
+});
+
+test("People Bank skips stale reloads during saves and discards responses after sign-out", async () => {
+  let resolveSave;
+  let reads = 0;
+  const app = await loadApp(async url => {
+    if (url.endsWith('/ride_admin_set_people_area')) return new Promise(resolve => { resolveSave = resolve; });
+    if (url.endsWith('/ride_admin_people_areas')) { reads++; return {ok:true,json:async()=>({ok:true,areas:{p1:''}})}; }
+    return {ok:true,json:async()=>[]};
+  });
+  app.state.admin = {people:[{id:'p1',name:'Example'}]};
+  app.state.adminCode = 'synthetic-admin';
+  app.state.adminSelectedPersonId = 'p1';
+  app.state.adminPeopleAreas = {p1:''};
+  app.state.adminPeopleAreasStatus = 'ready';
+  const save = app.saveAdminPersonArea('tsu');
+  await app.loadAdminPeopleAreas();
+  assert.equal(reads,0);
+  app.clearAdminPrivateState();
+  app.state.adminCode = '';
+  resolveSave({ok:true,json:async()=>({ok:true,personId:'p1',pickupArea:'tsu'})});
+  await save;
+  assert.deepEqual(Object.keys(app.state.adminPeopleAreas),[]);
+  assert.equal(app.state.adminPeopleAreasStatus,'idle');
+});
+
+test("People Bank retains expanded sections across rendering and review marks simple differences only", async () => {
+  const app = await loadApp();
+  const person = {id:'p1',name:'Example Rider',phone:'2025550100',homeAddress:'100 Example Street',preferredAddressType:'home'};
+  app.state.admin = {people:[person]};
+  app.state.adminPeopleAreas = {p1:'off-campus'};
+  app.state.adminPeopleSections['off-campus'] = true;
+  app.state.adminDraftStops = [{name:'Example Rider',phone:'+1 202 555 0100',address:'100 Example St.'}];
+  assert.match(app.adminPeopleResultsHtml({showData:true}), /data-people-bank-section="off-campus" open/);
+  assert.equal(app.adminPersonAddressIssues(person).length,0);
 });

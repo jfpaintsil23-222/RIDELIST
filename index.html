@@ -4486,6 +4486,23 @@
         min-height: 100dvh;
       }
     }
+    .admin-chat { padding: 24px 20px; display: grid; gap: 18px; }
+    .admin-chat h1 { margin: 4px 0 8px; font-size: 28px; letter-spacing: -1px; }
+    .admin-chat .admin-top-row { align-items: flex-start; }
+    .admin-chat .admin-top-row p { margin: 0; font-size: 13px; color: #667085; }
+    .admin-chat-intro { margin: 0; line-height: 1.5; color: #475467; }
+    .admin-chat-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+    .admin-chat-toolbar button { flex: 1; padding: 10px; font-size: 12px; }
+    .admin-chat-starters, .admin-chat-messages { display: grid; gap: 12px; }
+    .admin-chat-starter { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border: 1px solid #e3e8e3; border-radius: 14px; background: #fff; text-align: left; font: inherit; font-size: 14px; color: #24392c; cursor: pointer; }
+    .admin-chat-message { border-radius: 16px; background: #fff; border: 1px solid #e3e8e3; padding: 16px; min-width: 0; }
+    .admin-chat-message.is-user { margin-left: 24px; background: #edf5ef; border-color: #d8e9dd; }
+    .admin-chat-message strong { font-size: 12px; color: #437452; }
+    .admin-chat-message p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
+    .admin-chat-composer { display: grid; gap: 10px; }
+    .admin-chat-composer label { font-weight: 700; font-size: 13px; }
+    .admin-chat-composer textarea { width: 100%; box-sizing: border-box; border: 1px solid #cdd8ce; border-radius: 14px; padding: 14px; font: inherit; font-size: 16px; resize: vertical; background: #fff; color: #24392c; }
+    .admin-chat-footnote { margin: 0; color: #667085; font-size: 12px; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -4637,6 +4654,12 @@
       adminResetDate: "",
       adminResetDriverSlugs: [],
       adminDriverAddOpen: false,
+      adminChatMessages: [],
+      adminChatPrompt: "",
+      adminChatPending: "",
+      adminChatStatus: "idle",
+      adminChatError: "",
+      adminChatRequest: 0,
       adminAiPrompt: "",
       adminAiStatus: "idle",
       adminAiError: "",
@@ -7568,6 +7591,7 @@
     }
 
     function clearAdminPrivateState() {
+      clearAdminChat();
       state.admin = null;
       state.adminDraftStops = [];
       state.adminDeletedStopIds = [];
@@ -8425,6 +8449,7 @@
           throw new Error(created?.error || "reset_failed");
         }
 
+        clearAdminChat();
         state.planDate = created.plan?.date || planDate;
         state.plan = created.plan || null;
         state.destination = created.destination || state.destination;
@@ -9339,6 +9364,7 @@
               </button>
             </header>
             <section class="admin-menu-list" aria-label="Admin tools">
+              ${adminMenuRow("chat", "Admin chat", "Ask about rides and address gaps", "notes")}
               ${adminMenuRow("ai", "AI Organizer", "Draft route ideas", "map")}
               ${adminMenuRow("people", "People Bank", "Saved riders and details", "user")}
               ${adminMenuRow("driver-list", "Driver list", "Availability and add driver", "users")}
@@ -9357,7 +9383,7 @@
     }
 
     function openAdminMenuPage(page) {
-      const nextTab = ["ai", "people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
+      const nextTab = ["chat", "ai", "people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
       state.adminActiveTab = nextTab;
       state.adminMenuOpen = false;
       state.adminError = "";
@@ -9369,7 +9395,7 @@
       const tab = state.adminActiveTab || "riders";
       if (tab === "routes") return "drivers";
       if (tab === "people") return "people";
-      return ["ai", "drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
+      return ["chat", "ai", "drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
     }
 
     function adminStatButton(tab, count, label, icon, extraClass = "") {
@@ -10451,6 +10477,95 @@
         </article>`;
     }
 
+    function clearAdminChat() {
+      state.adminChatRequest++;
+      state.adminChatMessages = [];
+      state.adminChatPrompt = "";
+      state.adminChatPending = "";
+      state.adminChatStatus = "idle";
+      state.adminChatError = "";
+    }
+
+    function adminChatContextKey() {
+      return JSON.stringify([activePlanDate(), adminStops(), adminDrivers(), state.admin?.people, destinationSummary()]);
+    }
+
+    function renderAdminChatIfVisible() {
+      if (state.view === "admin" && adminActiveTab() === "chat") render();
+    }
+
+    async function requestAdminChat() {
+      const prompt = String(state.adminChatPrompt || "").trim();
+      if (!state.admin || state.adminChatStatus === "loading" || !prompt) return;
+      if (prompt.length > 2000) {
+        state.adminChatError = "Keep your question under 2,000 characters.";
+        renderAdminChatIfVisible();
+        return;
+      }
+      const request = ++state.adminChatRequest;
+      const generation = adminSharedGeneration;
+      const code = state.adminCode;
+      const planDate = activePlanDate();
+      const contextKey = adminChatContextKey();
+      const history = state.adminChatMessages.slice(-8);
+      const current = () => request === state.adminChatRequest && generation === adminSharedGeneration && code === state.adminCode && !!state.admin;
+      state.adminChatStatus = "loading";
+      state.adminChatPending = prompt;
+      state.adminChatError = "";
+      renderAdminChatIfVisible();
+      try {
+        const result = await adminAiOrganizerRequest({mode:"chat", planDate, prompt, history,
+          destination: destinationSummary(), drivers: adminDrivers(), stops: adminStops()});
+        if (!current()) return;
+        if (planDate !== activePlanDate() || contextKey !== adminChatContextKey()) {
+          state.adminChatError = "The ride information changed while I was answering. Send your question again for the latest plan.";
+          return;
+        }
+        if (typeof result.reply !== "string" || !result.reply.trim()) throw new Error("ai_empty_reply");
+        state.adminChatMessages = [...history, {role:"user",content:prompt}, {role:"assistant",content:result.reply.slice(0,4000)}].slice(-8);
+        state.adminChatPrompt = "";
+      } catch (error) {
+        if (!current()) return;
+        state.adminChatError = error?.message === "ai_not_configured"
+          ? "AI is not connected yet. Add the OpenAI API key in Supabase secrets to enable chat."
+          : error?.message === "invalid_admin_code"
+            ? "Your admin access could not be verified. Sign in again before retrying."
+            : "I couldn't get an answer. Your question is saved here so you can try again.";
+      } finally {
+        if (request === state.adminChatRequest) {
+          state.adminChatStatus = "idle";
+          state.adminChatPending = "";
+          renderAdminChatIfVisible();
+        }
+      }
+    }
+
+    function adminChatView() {
+      const loading = state.adminChatStatus === "loading";
+      const messages = state.adminChatMessages || [];
+      const starters = ["What needs attention before this ride?", "Who is missing a saved pickup address?", "How could we group these pickups?"];
+      return `<section class="admin-chat" aria-label="Admin chat">
+        <header class="admin-top-row">
+          <div><p class="eyebrow">RIDELIST · Admin AI</p><h1>Ask about your rides</h1><p>${escapeHtml(activePlanDate())} · Current draft and saved address gaps</p></div>
+          <button class="admin-icon-button admin-menu-button" type="button" data-action="adminMenuOpen" aria-label="Open admin menu">${peopleDetailIcon("menu")}</button>
+        </header>
+        <p class="admin-chat-intro">Ask a question, compare options, or check what needs attention. Suggestions stay here for you to review.</p>
+        <div class="admin-chat-toolbar"><button class="secondary-action" type="button" data-action="adminChatClear">New conversation</button><button class="secondary-action" type="button" data-admin-menu-page="ai">AI Organizer &rarr;</button></div>
+        ${!messages.length && !loading ? `<div class="admin-chat-starters" aria-label="Suggested questions">${starters.map(prompt => `<button class="admin-chat-starter" type="button" data-admin-chat-starter="${escapeHtml(prompt)}">${escapeHtml(prompt)} <span aria-hidden="true">&rarr;</span></button>`).join("")}</div>` : ""}
+        <div class="admin-chat-messages" role="log" aria-live="polite" aria-label="Conversation" aria-busy="${loading}">
+          ${messages.map(message => `<article class="admin-chat-message ${message.role === "user" ? "is-user" : ""}"><strong>${message.role === "user" ? "You" : "RIDELIST AI"}</strong><p>${escapeHtml(message.content)}</p></article>`).join("")}
+          ${loading ? `<article class="admin-chat-message is-user"><strong>You</strong><p>${escapeHtml(state.adminChatPending)}</p></article><p role="status">Looking at this ride plan…</p>` : ""}
+        </div>
+        ${state.adminChatError ? `<p class="admin-message error" role="alert">${escapeHtml(state.adminChatError)}</p>` : ""}
+        <form class="admin-chat-composer" data-admin-chat-form>
+          <label for="adminChatQuestion">Your question</label>
+          <textarea id="adminChatQuestion" data-admin-chat-prompt maxlength="2000" rows="3" placeholder="What would you like to check?" ${loading ? "disabled" : ""}>${escapeHtml(state.adminChatPrompt)}</textarea>
+          <button class="primary-action" data-admin-chat-send type="submit" ${loading || !String(state.adminChatPrompt || "").trim() ? "disabled" : ""}>${loading ? "Thinking…" : "Send question"}</button>
+        </form>
+        <p class="admin-chat-footnote">Uses the current draft and saved address gaps. Check suggestions before acting; chat cannot confirm addresses or traffic. Remembers the latest four exchanges and clears when you sign out, reload, or switch plans.</p>
+      </section>`;
+    }
+
     function adminAiOrganizerView() {
       const routes = adminAiRoutes().map((route) => ({
         ...route,
@@ -10535,7 +10650,7 @@
       const pendingAlertCount = state.adminNotifyDraft?.driverSlugs?.length || 0;
       const visibleChangeCount = pendingAlertCount || changed;
       const activeTab = adminActiveTab();
-      const activeView = activeTab === "people"
+      const activeView = activeTab === "chat" ? adminChatView() : activeTab === "people"
         ? adminPeopleView()
         : activeTab === "ai"
           ? adminAiOrganizerView()
@@ -10557,7 +10672,7 @@
         </div>`;
       }
 
-      if (activeTab === "ai") {
+      if (activeTab === "ai" || activeTab === "chat") {
         return `
         <div class="stack admin-control-screen admin-ai-screen">
           ${activeView}
@@ -11498,6 +11613,9 @@
         state.adminMenuOpen = false;
         render();
       }
+      if (action === "adminChatClear") { clearAdminChat(); renderAdminChatIfVisible(); }
+      const chatStarter = event.target.closest("[data-admin-chat-starter]");
+      if (chatStarter) { state.adminChatPrompt = chatStarter.dataset.adminChatStarter; requestAdminChat(); }
       if (action === "adminAiOrganize") requestAdminAiRoutes();
       if (action === "adminSharedBranding") saveAdminSharedBrandingFromForm(event.target.closest("form"));
       const sharedPickup = event.target.closest("[data-shared-person-pickup]");
@@ -11683,6 +11801,13 @@
     });
 
     screen.addEventListener("input", (event) => {
+      const chatInput = event.target.closest("[data-admin-chat-prompt]");
+      if (chatInput) {
+        state.adminChatPrompt = chatInput.value;
+        const send = screen.querySelector("[data-admin-chat-send]");
+        if (send) send.disabled = state.adminChatStatus === "loading" || !chatInput.value.trim();
+        return;
+      }
       const aiPromptInput = event.target.closest("[data-admin-ai-prompt]");
       if (aiPromptInput) {
         state.adminAiPrompt = aiPromptInput.value;
@@ -11759,6 +11884,7 @@
     });
 
     screen.addEventListener("submit", (event) => {
+      if (event.target.closest('[data-admin-chat-form]')) { event.preventDefault(); requestAdminChat(); return; }
       const quickMove=event.target.closest('[data-admin-form="quick-move"]');
       if(quickMove){event.preventDefault();quickMoveAdminShared(quickMove.dataset.riderId,new FormData(quickMove).get('driverSlug'),JSON.parse(quickMove.dataset.sharedSnapshot));return;}
       const driverProfileForm = event.target.closest("[data-driver-profile-form]");

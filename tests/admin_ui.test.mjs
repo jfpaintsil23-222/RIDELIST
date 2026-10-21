@@ -96,6 +96,9 @@ async function loadApp(fetchImpl, options = {}) {
       saveAdminPersonArea: typeof saveAdminPersonArea === "function" ? saveAdminPersonArea : undefined,
       loadAdminPeopleAreas: typeof loadAdminPeopleAreas === "function" ? loadAdminPeopleAreas : undefined,
       clearAdminPrivateState,
+      requestAdminChat: typeof requestAdminChat === "function" ? requestAdminChat : undefined,
+      clearAdminChat: typeof clearAdminChat === "function" ? clearAdminChat : undefined,
+      adminChatView: typeof adminChatView === "function" ? adminChatView : undefined,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
       returnToAdminPersonDetailFromAdd: typeof returnToAdminPersonDetailFromAdd === "function" ? returnToAdminPersonDetailFromAdd : undefined,
@@ -4162,4 +4165,85 @@ test("People Bank retains expanded sections across rendering and review marks si
   app.state.adminDraftStops = [{name:'Example Rider',phone:'+1 202 555 0100',address:'100 Example St.'}];
   assert.match(app.adminPeopleResultsHtml({showData:true}), /data-people-bank-section="off-campus" open/);
   assert.equal(app.adminPersonAddressIssues(person).length,0);
+});
+
+function chatFixture(app) {
+  app.state.adminCode='synthetic-admin';
+  app.state.planDate='2099-01-04';
+  app.state.admin={people:[],drivers:[],stops:[]};
+  app.state.adminDraftStops=[{id:'s1',name:'Example Rider',address:'10 Example Street'}];
+  app.state.adminActiveTab='chat';
+  app.state.adminChatPrompt='What needs attention?';
+}
+
+test('admin chat sends follow-ups without writing routes and escapes model output',async()=>{
+  const calls=[];
+  const app=await loadApp(async (url,init)=>{
+    if(!url.includes('/functions/v1/')) return {ok:true,json:async()=>[]};
+    calls.push(JSON.parse(init.body));return {ok:true,json:async()=>({ok:true,reply:'<img src=x onerror=alert(1)> Review the pickup.'})};
+  });
+  chatFixture(app);
+  await app.requestAdminChat();
+  assert.equal(app.state.adminChatMessages.length,2);
+  assert.equal(app.state.adminChatPrompt,'');
+  assert.equal(app.state.adminDraftStops[0].address,'10 Example Street');
+  const html=app.adminChatView();
+  assert.match(html,/&lt;img/);
+  assert.doesNotMatch(html,/<img src=x/);
+  app.state.adminChatPrompt='What should I confirm?';
+  await app.requestAdminChat();
+  assert.equal(calls.length,2);
+  assert.equal(calls[1].mode,'chat');
+  assert.equal(calls[1].history.length,2);
+  assert.equal(calls[1].history[1].role,'assistant');
+  assert.equal(app.state.adminChatMessages.length,4);
+});
+
+test('admin chat keeps a failed question for retry without duplicate messages',async()=>{
+  const app=await loadApp(async url=>url.includes('/functions/v1/')?{ok:false,json:async()=>({ok:false,error:'ai_not_configured'})}:{ok:true,json:async()=>[]});
+  chatFixture(app);
+  await app.requestAdminChat();
+  assert.equal(app.state.adminChatPrompt,'What needs attention?');
+  assert.equal(app.state.adminChatMessages.length,0);
+  assert.match(app.state.adminChatError,/not connected/i);
+  assert.equal(app.state.adminChatStatus,'idle');
+});
+
+test('admin chat discards answers after logout, clear, plan switch or changed draft',async()=>{
+  for(const change of ['logout','clear','date','draft']) {
+    let release;
+    const app=await loadApp(async url=>{
+      if(!url.includes('/functions/v1/'))return {ok:true,json:async()=>[]};
+      return new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>({ok:true,reply:'Old private answer'})});});
+    });
+    chatFixture(app);
+    const pending=app.requestAdminChat();
+    if(change==='logout')app.clearAdminPrivateState();
+    if(change==='clear')app.clearAdminChat();
+    if(change==='date')app.state.planDate='2099-01-11';
+    if(change==='draft')app.state.adminDraftStops[0].address='20 Example Street';
+    release();await pending;
+    assert.equal(app.state.adminChatMessages.length,0,change);
+    assert.notEqual(app.state.adminChatStatus,'loading',change);
+    assert.doesNotMatch(app.adminChatView(),/Old private answer/);
+  }
+});
+
+test('admin chat menu opens the conversation and keeps only eight recent messages',async()=>{
+  let sent;
+  const app=await loadApp(async (url,init)=>{
+    if(!url.includes('/functions/v1/'))return {ok:true,json:async()=>[]};
+    sent=JSON.parse(init.body);return {ok:true,json:async()=>({ok:true,reply:'No additional issue found.'})};
+  });
+  chatFixture(app);
+  app.openAdminMenuPage('chat');
+  assert.equal(app.state.adminActiveTab,'chat');
+  assert.match(app.adminView(),/Ask about your rides/);
+  app.state.adminChatMessages=Array.from({length:8},(_,i)=>({role:i%2?'assistant':'user',content:'Earlier '+i}));
+  await app.requestAdminChat();
+  assert.equal(sent.history.length,8);
+  assert.equal(app.state.adminChatMessages.length,8);
+  app.clearAdminPrivateState();
+  assert.equal(app.state.adminChatMessages.length,0);
+  assert.equal(app.state.adminChatPrompt,'');
 });

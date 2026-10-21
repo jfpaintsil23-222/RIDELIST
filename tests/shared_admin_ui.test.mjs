@@ -13,13 +13,13 @@ async function appHarness(handler=()=>undefined){
  const get=q=>{if(!elements.has(q))elements.set(q,element());return elements.get(q);};
  const document={hidden:false,activeElement:null,querySelector:get,querySelectorAll:()=>[],addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener(){}};
  const context={console:{...console,error(){},warn(){}},URLSearchParams,encodeURIComponent,crypto:{randomUUID:()=>`00000000-0000-4000-8000-${String(++seq).padStart(12,'0')}`},setTimeout:()=>1,clearTimeout(){},AbortController,
-  FormData:class{constructor(form){this.values=form?.values||{};}get(key){return this.values[key];}entries(){return Object.entries(this.values)[Symbol.iterator]();}},
+  FormData:class{constructor(form){this.values=form?.values||{};}get(key){return this.values[key];}getAll(key){const value=this.values[key];return Array.isArray(value)?value:value?[value]:[];}entries(){return Object.entries(this.values)[Symbol.iterator]();}},
   location:{href:'https://example.test/',search:''},navigator:{onLine:true},document,
   window:{isSecureContext:false,RideShared:{...core,createAdminSync:options=>createAdminSync({...options,clock:{setTimeout:()=>1,clearTimeout(){}}})},addEventListener:(name,fn)=>listeners[name]=fn,removeEventListener(){}},
   localStorage:{get length(){return storage.size;},key:i=>[...storage.keys()][i]??null,getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   fetch:async(url,init)=>{const name=url.split('/').at(-1),args=JSON.parse(init?.body||'{}');if(!name.startsWith('ride_admin_'))return {ok:true,json:async()=>[]};calls.push({name,args});const custom=await handler(name,args);const result=custom ?? (name==='ride_admin_shared_context'?{...snapshot(),actorKey:'profile:a',initialized:true}:name==='ride_admin_shared_snapshot'?snapshot():name==='ride_admin_shared_secondary'?{ok:true,actorKey:'profile:a',planDate:date,people:[],driverPool:[],brandingVersion:1,branding:{}}:name==='ride_admin_shared_operation'?{ok:false,code:'not_found'}:{ok:true});return {ok:true,json:async()=>result};}};
  vm.createContext(context);const html=await readFile(new URL('../index.html',import.meta.url),'utf8');const script=html.match(/<script>([\s\S]*)<\/script>/)[1];
- vm.runInContext(script+`\nglobalThis.app={state,adminView,adminSharedStatusHtml,adminRouteWarnings,adminPublishIssues,activeRideBranding,homeArt,quickMoveAdminShared:typeof quickMoveAdminShared==='function'?quickMoveAdminShared:undefined,compareAdminSharedConflict:typeof compareAdminSharedConflict==='function'?compareAdminSharedConflict:undefined,reapplyAdminSharedConflict:typeof reapplyAdminSharedConflict==='function'?reapplyAdminSharedConflict:undefined,loadAdminSharedRecovery:typeof loadAdminSharedRecovery==='function'?loadAdminSharedRecovery:undefined,importAdminSharedRecovery:typeof importAdminSharedRecovery==='function'?importAdminSharedRecovery:undefined,loadAdminSnapshot,signOutAdmin,saveAdminDraftFromForm,deleteAdminDraftStop,publishAdminDraft,runAdminSharedSecondary,adminEditView,render,applyAdminSharedState:typeof applyAdminSharedState==='function'?applyAdminSharedState:undefined,reviewAdminShared:typeof reviewAdminShared==='function'?reviewAdminShared:undefined,retryAdminSharedPending:typeof retryAdminSharedPending==='function'?retryAdminSharedPending:undefined};`,context);
+ vm.runInContext(script+`\nglobalThis.app={state,adminView,adminChatView,startNewSundayFromForm,adminSharedStatusHtml,adminRouteWarnings,adminPublishIssues,activeRideBranding,homeArt,quickMoveAdminShared:typeof quickMoveAdminShared==='function'?quickMoveAdminShared:undefined,compareAdminSharedConflict:typeof compareAdminSharedConflict==='function'?compareAdminSharedConflict:undefined,reapplyAdminSharedConflict:typeof reapplyAdminSharedConflict==='function'?reapplyAdminSharedConflict:undefined,loadAdminSharedRecovery:typeof loadAdminSharedRecovery==='function'?loadAdminSharedRecovery:undefined,importAdminSharedRecovery:typeof importAdminSharedRecovery==='function'?importAdminSharedRecovery:undefined,loadAdminSnapshot,signOutAdmin,saveAdminDraftFromForm,deleteAdminDraftStop,publishAdminDraft,runAdminSharedSecondary,adminEditView,render,applyAdminSharedState:typeof applyAdminSharedState==='function'?applyAdminSharedState:undefined,reviewAdminShared:typeof reviewAdminShared==='function'?reviewAdminShared:undefined,retryAdminSharedPending:typeof retryAdminSharedPending==='function'?retryAdminSharedPending:undefined};`,context);
  const app=context.app;app.state.planDate=date;return {app,calls,elements,storage,context,listeners,async start(){await app.loadAdminSnapshot('synthetic-token');await settle();}};
 }
 test('shared login hydrates protected snapshot/secondary and never selects legacy recovery winner',async()=>{const h=await appHarness();await h.start();assert.equal(h.app.state.adminShared?.actorKey,'profile:a');assert.equal(h.app.state.adminDraftStops[0].name,'Synthetic rider');assert.equal(h.calls.some(c=>c.name==='ride_admin_get_draft'),false);h.app.signOutAdmin();});
@@ -386,5 +386,32 @@ test('retry await cannot overwrite a newly installed pending identity',async()=>
  c.pendingOperation=replacement;
  resolve({ok:false,code:'not_found'});await retry;await settle();
  assert.equal(c.pendingOperation,replacement);assert.equal(h.calls.filter(call=>call.name==='ride_admin_shared_mutate').length,writes);
+ await h.app.signOutAdmin();
+});
+
+test('admin chat typing does not dirty a shared draft or discard its reviewed state',async()=>{
+ const h=await appHarness();await h.start();const c=h.app.state.adminShared;
+ h.app.state.adminActiveTab='chat';c.personalDirty=false;c.review={draftRevision:3};
+ const review=c.review;
+ const html=h.app.adminChatView();
+ const form={dataset:{adminForm:html.includes('data-admin-form="chat"')?'chat':undefined}};
+ h.listeners.input({target:{closest:selector=>selector==='[data-admin-form]' && form.dataset.adminForm?form:null}});
+ assert.equal(c.personalDirty,false);
+ assert.equal(c.review,review);
+ assert.equal([...h.storage.values()].some(value=>value.includes('Chat question')),false);
+ await h.app.signOutAdmin();
+});
+
+test('creating a new Sunday clears completed chat history and invalidates pending requests',async()=>{
+ const h=await appHarness(name=>name==='ride_admin_start_new_sunday'?{ok:true,plan:{date:'2099-01-11'},drivers:[{slug:'a',displayName:'Synthetic'}],stops:[],people:[]}:undefined);
+ await h.start();h.app.state.adminChatMessages=[{role:'user',content:'Previous plan question'},{role:'assistant',content:'Previous plan answer'}];
+ h.app.state.adminChatPrompt='Unsent previous question';h.app.state.adminChatStatus='loading';h.app.state.adminChatPending='Previous pending question';
+ const request=h.app.state.adminChatRequest;
+ await h.app.startNewSundayFromForm({values:{planDate:'2099-01-11',driverSlug:['a']}});
+ assert.equal(h.app.state.planDate,'2099-01-11');
+ assert.equal(h.app.state.adminChatMessages.length,0);
+ assert.equal(h.app.state.adminChatPrompt,'');
+ assert.equal(h.app.state.adminChatStatus,'idle');
+ assert.ok(h.app.state.adminChatRequest>request);
  await h.app.signOutAdmin();
 });

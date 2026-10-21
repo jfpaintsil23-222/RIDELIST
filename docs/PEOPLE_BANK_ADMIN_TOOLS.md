@@ -33,11 +33,34 @@ server; the request uses Responses with `store: false`, omits rider phone number
 returns suggestions for admin review. It does not publish routes or correct addresses.
 See [OpenAI response storage](https://developers.openai.com/api/docs/guides/conversation-state).
 
+## Admin chat
+
+Admin menu → Admin chat opens a read-only conversation about the selected ride draft
+and saved People Bank address gaps. It shares `ride-ai-organizer` and the same server
+key through `mode: "chat"`. Deploy `chat-core.js` alongside the existing function files.
+The existing route-organizing mode is unchanged.
+
+Chat sends the current draft's names, pickup addresses, assignments and times, plus
+server-verified counts/names of missing saved or preferred addresses. It excludes
+contact phone fields, saved home/campus address contents, and record notes. An admin's
+own question and recent conversation are also sent to OpenAI; avoid pasting secrets.
+The chat has no tools or write operations and cannot verify map addresses or traffic.
+
+Only the latest four exchanges remain in browser memory. Nothing is saved to local
+storage or an app database. A new conversation, sign-out, reload, or new plan clears
+that history. Responses arriving after a sign-out, clear or draft change are discarded.
+Questions survive ordinary request failures so the admin can retry. Model output is
+rendered as escaped plain text, and chat typing does not count as an unsaved ride edit.
+
+The UI can be previewed without credentials, but real answers require a valid OpenAI
+API key and available API billing. Mocked answers are not evidence of provider access.
+
 ## Verification
 
-`node --test tests/admin_ui.test.mjs tests/admin_edge_connections.test.mjs`
+`node --test tests/admin_ui.test.mjs tests/shared_admin_ui.test.mjs tests/admin_edge_connections.test.mjs`
 checks grouping, search, address comparisons, area-save isolation, stale responses,
-logout, provider authorization and configured/unconfigured AI behavior.
+logout, provider authorization, bounded follow-ups, plan changes, shared-edit isolation
+and configured/unconfigured AI behavior.
 
 `RIDELIST_TEST_CONTAINER=<disposable-container> node --test tests/*.test.mjs`
 also checks the area migration against PostgreSQL. Follow `tests/PUBLISH_TESTS.md`:

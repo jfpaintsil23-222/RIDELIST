@@ -8174,7 +8174,13 @@
         await clearAdminServerDraft();
         await loadAdminActivity();
         state.view = "admin";
-        state.drivers = orderDriversForDisplay(await rpc("ride_driver_directory", { p_plan_date: activePlanDate() }));
+        // Publication is confirmed. A follow-up read cannot make it fail or
+        // send the admin back through the publish/retry flow.
+        try {
+          state.drivers = orderDriversForDisplay(await rpc("ride_driver_directory", { p_plan_date: activePlanDate() }));
+        } catch {
+          state.adminMessage = "Route changes published. The driver list could not refresh. Reload when your connection is available.";
+        }
         loadAdminRouteTiming();
       } catch (error) {
         const failedBackup = saveAdminDraftBackup("publish-failed");

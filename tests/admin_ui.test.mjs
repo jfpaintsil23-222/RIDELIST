@@ -2560,6 +2560,65 @@ test("admin publish runs backend dry-run before live publish", async () => {
   assert.equal(app.state.adminMessage, "Route changes published.");
 });
 
+for (const refreshFailure of ["network", "http"]) {
+  test(`confirmed publish stays successful when driver refresh fails (${refreshFailure})`, async () => {
+    const calls = [];
+    const published = {
+      ok: true,
+      plan: { date: "2099-01-04" },
+      destination: { label: "Test destination", address: "1 Example Way" },
+      drivers: [{ slug: "demo-driver", displayName: "Demo Driver", initials: "DD", pickupCount: 1, sortOrder: 1 }],
+      stops: [{ id: "saved-stop", driverSlug: "demo-driver", stopOrder: 1, name: "Demo Rider", phone: "", address: "2 Example Way", pickupTime: "12:00 PM" }],
+      people: [],
+    };
+    const app = await loadApp(async (url, options) => {
+      if (String(url).includes("/functions/v1/ride-route-timing")) {
+        return { ok: true, json: async () => ({ ok: true, timings: {} }) };
+      }
+      const name = String(url).split("/rpc/").at(-1);
+      const body = options?.body ? JSON.parse(options.body) : null;
+      calls.push({ name, body });
+      if (name === "ride_admin_save_draft") {
+        return { ok: true, json: async () => ({ ok: true, draft: { ...body.p_draft, planDate: body.p_plan_date, savedAt: "2099-01-04T12:00:00Z" } }) };
+      }
+      if (name === "ride_admin_clear_draft") return { ok: true, json: async () => ({ ok: true }) };
+      if (name === "ride_admin_activity") return { ok: true, json: async () => ({ ok: true, events: [] }) };
+      if (name === "ride_admin_publish_plan_dry_run") return { ok: true, json: async () => ({ ok: true, issues: [], issueCount: 0 }) };
+      if (name === "ride_admin_publish_plan") return { ok: true, json: async () => published };
+      if (name === "ride_driver_directory") {
+        if (!calls.some(call => call.name === "ride_admin_publish_plan")) return { ok: true, json: async () => [] };
+        if (refreshFailure === "network") throw new Error("Failed to fetch");
+        return { ok: false, status: 503, text: async () => JSON.stringify({ message: "Temporary service failure" }) };
+      }
+      return { ok: true, json: async () => [] };
+    });
+    // Let the automatic initial directory load finish before staging the edit.
+    await new Promise(resolve => setImmediate(resolve));
+    app.state.adminCode = "synthetic-admin-code";
+    app.state.planDate = "2099-01-04";
+    app.state.admin = { ...published, stops: [] };
+    app.state.adminDraftStops = [{ ...published.stops[0], id: "temp-demo" }];
+    app.state.adminDeletedStopIds = [];
+    const existingDirectory = [{ slug: "demo-driver", display_name: "Demo Driver", pickup_count: 0 }];
+    app.state.drivers = existingDirectory;
+
+    await app.publishAdminDraft();
+
+    assert.equal(app.state.adminPublishFailed, false, "a refresh error must not change a confirmed publish result");
+    assert.equal(app.state.view, "admin");
+    assert.equal(app.state.adminLoading, false);
+    assert.match(app.state.adminMessage, /Route changes published/);
+    assert.match(app.state.adminMessage, /driver list.*refresh/i);
+    assert.equal(app.state.adminError, "");
+    assert.equal(app.state.adminDraftStops[0].id, "saved-stop");
+    assert.equal(app.readAdminDraftBackup("2099-01-04"), null);
+    assert.equal(app.state.drivers, existingDirectory, "failed refresh retains the last known directory");
+    assert.equal(calls.filter(call => call.name === "ride_admin_publish_plan").length, 1);
+    assert.equal(calls.filter(call => call.name === "ride_admin_save_draft").length, 1, "confirmed publish must not create a failed-publish draft");
+    assert.doesNotMatch(app.adminReviewView(), /Try publishing again/);
+  });
+}
+
 test("admin publish stops when backend dry-run reports blockers", async () => {
   const calls = [];
   const app = await loadApp(async (url, options) => {

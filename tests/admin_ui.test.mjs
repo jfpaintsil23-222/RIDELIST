@@ -1333,7 +1333,7 @@ test("admin AI integration keeps OpenAI keys server-side", async () => {
   assert.match(source, /ride_admin_snapshot/);
 });
 
-test("admin changes stat uses the cleaned Figma pencil icon", async () => {
+test("admin changes stat keeps its count and alert state without a decorative icon", async () => {
   const app = await loadApp();
 
   app.state.admin = {
@@ -1343,12 +1343,11 @@ test("admin changes stat uses the cleaned Figma pencil icon", async () => {
   };
   app.state.adminDraftStops = [];
   app.state.adminActiveTab = "riders";
+  app.state.adminNotifyDraft = { driverSlugs: ["example-driver"] };
 
   const html = app.adminView();
-  assert.match(html, /data-admin-tab="changes"/);
-  assert.match(html, /M5 19l3\.8-\.9L18\.8 8\.1/);
-  assert.doesNotMatch(html, /M12 20h9/);
-  assert.doesNotMatch(html, /m16\.5 3\.5 4 4L8 20H4v-4z/);
+  assert.match(html, /class="admin-stat is-alert" type="button" data-admin-tab="changes"><strong>1<\/strong><span>changes today<\/span><\/button>/);
+  assert.doesNotMatch(html, /admin-stat-glyph/);
 });
 
 test("admin sunday riders tab keeps the icon Add rider action", async () => {

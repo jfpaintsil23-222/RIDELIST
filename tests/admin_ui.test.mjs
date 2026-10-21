@@ -1750,6 +1750,22 @@ test("driver runs group FLOC stops and keep explicit shuttle runs separate", asy
   ]);
 });
 
+test("driver runs preserve rides back as a distinct route", async () => {
+  const app = await loadApp();
+  const runs = Array.from(app.driverRuns([
+    { stopOrder: 1, name: "Example Return Rider A", area: "Rides Back", routeLabel: "Rides Back - Run 1" },
+    { stopOrder: 2, name: "Example Return Rider B", area: "Rides Back", routeLabel: "Rides Back - Run 1" },
+  ]), (run) => ({
+    key: run.key,
+    label: run.label,
+    riderNames: Array.from(run.riders, (rider) => rider.name),
+  }));
+
+  assert.deepEqual(runs, [
+    { key: "rides-back-run-1", label: "Rides Back · Run 1", riderNames: ["Example Return Rider A", "Example Return Rider B"] },
+  ]);
+});
+
 test("legacy descriptive labels do not create more driver cards for one FLOC ride", async () => {
   const app = await loadApp();
   const runs = Array.from(app.driverRuns([
@@ -4246,4 +4262,10 @@ test('admin chat menu opens the conversation and keeps only eight recent message
   app.clearAdminPrivateState();
   assert.equal(app.state.adminChatMessages.length,0);
   assert.equal(app.state.adminChatPrompt,'');
+});
+
+test("return wording in a pickup address does not turn an outbound campus run into rides back", async () => {
+  const app = await loadApp();
+  assert.equal(app.driverRunLabel({ routeLabel: "TSU Zone - Run 2", area: "TSU", address: "10 Return Lane" }), "TSU Zone · Run 2");
+  assert.equal(app.driverRunLabel({ routeLabel: "Rides Back - Run 1", area: "TSU", address: "Texas Southern University, 10 Example Street" }), "Rides Back · Run 1");
 });

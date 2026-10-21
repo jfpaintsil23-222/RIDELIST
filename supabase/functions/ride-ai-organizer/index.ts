@@ -9,6 +9,8 @@ import {
   safeStopsForAi,
 } from "./organizer-core.js";
 
+import { validAdminChatRequest, buildAdminChatInput, adminChatReply } from "./chat-core.js";
+
 const corsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "POST, OPTIONS",
@@ -67,7 +69,7 @@ async function verifyAdmin(req: Request, body: Record<string, unknown>) {
   return snapshot;
 }
 
-async function callOpenAi(prompt: string) {
+async function callOpenAi(prompt: string, chatInput: unknown[] | null = null) {
   const openAiKey = Deno.env.get("OPENAI_API_KEY") || "";
   if (!openAiKey) return { ok: false, error: "ai_not_configured", status: 503 };
 
@@ -81,7 +83,8 @@ async function callOpenAi(prompt: string) {
     body: JSON.stringify({
       model,
       store: false,
-      input: [
+      ...(chatInput ? { max_output_tokens: 4096 } : {}),
+      input: chatInput || [
         {
           role: "system",
           content: "You organize church ride pickup lists into reviewable route drafts. Reply only through the provided JSON schema.",
@@ -91,14 +94,14 @@ async function callOpenAi(prompt: string) {
           content: prompt,
         },
       ],
-      text: {
+      ...(chatInput ? {} : { text: {
         format: {
           type: "json_schema",
           name: "ridelist_ai_route_plan",
           strict: true,
           schema: AI_ORGANIZER_SCHEMA,
         },
-      },
+      } }),
     }),
   });
 
@@ -138,15 +141,27 @@ async function handleOrganize(req: Request, body: Record<string, unknown>) {
   return json(result);
 }
 
+async function handleChat(req: Request, body: Record<string, unknown>) {
+  if (!validAdminChatRequest(body)) return json({ ok: false, error: "invalid_chat_request" }, 400);
+  const snapshot = await verifyAdmin(req, body);
+  if (!snapshot?.ok) return json({ ok: false, error: "invalid_admin_code" }, 403);
+  const ai = await callOpenAi("", buildAdminChatInput(body, snapshot));
+  if (!ai.ok) return json({ ok: false, error: ai.error }, ai.status || 500);
+  const reply = adminChatReply(ai.payload);
+  if (!reply) return json({ ok: false, error: "ai_empty_reply" }, 502);
+  return json({ ok: true, reply });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
 
   try {
     const body = await req.json().catch(() => ({}));
-    return await handleOrganize(req, body);
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json({ ok: false, error: "invalid_request" }, 400);
+    return body.mode === "chat" ? await handleChat(req, body) : await handleOrganize(req, body);
   } catch (error) {
-    console.error(error);
+    console.error("RIDELIST AI request failed");
     return json({ ok: false, error: "ai_organizer_failed" }, 500);
   }
 });

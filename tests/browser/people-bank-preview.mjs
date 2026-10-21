@@ -13,6 +13,10 @@ const people = [
 ];
 const areas = {p1:'tsu',p2:'hcu',p3:'uh',p4:'off-campus',p5:'shsu',p6:''};
 function rpc(name, args) {
+  if (name === 'ride-ai-organizer' && args.mode === 'chat' && args.adminCode === 'synthetic-admin') {
+    if (/setup/i.test(args.prompt)) return {ok:false,error:'ai_not_configured'};
+    return {ok:true,reply:args.history?.length ? 'Confirm the pickup point with the rider before updating People Bank. A suggested address is not a verified pickup.' : 'Example Uncertain Rider has no saved pickup address. Confirm their pickup point before assigning a route. No other issue is evident in this synthetic preview.'};
+  }
   if(args.p_admin_code !== 'synthetic-admin') return {ok:false};
   if(name === 'ride_admin_people_areas') return {ok:true,areas};
   if(name === 'ride_admin_set_people_area') {

@@ -2774,19 +2774,35 @@
       font-weight: 850;
     }
 
-    .people-bank-section {
-      border-bottom: 1px solid var(--line);
+    .people-bank-letters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+      gap: 6px;
     }
 
-    .people-bank-section > summary {
-      grid-template-columns: minmax(0, 1fr) auto auto;
-      padding: 12px;
-      min-height: 60px;
-      border-radius: 12px;
+    .people-bank-letters button {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: inherit;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
     }
 
-    .people-bank-section[open] > summary { background: var(--surface); }
-    .people-bank-section[open] .people-bank-chevron { transform: rotate(90deg); }
+    .people-bank-letters button[aria-pressed="true"],
+    .admin-control-screen .people-bank-review[aria-pressed="true"] {
+      background: #111111;
+      color: #ffffff;
+      border-color: #111111;
+    }
+
+    .people-bank-letters button:disabled { opacity: .35; cursor: default; }
+    .people-bank-letters button:focus-visible,
+    .people-bank-review:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+    .people-bank-review { justify-self: start; }
+    .people-bank-heading { margin: 8px 0 0; font-size: 20px; }
 
     .admin-zone-mark img {
       width: 100%;
@@ -4649,7 +4665,8 @@
       adminPeopleAreasStatus: "idle",
       adminPeopleAreaSaving: false,
       adminPeopleAreasRequest: 0,
-      adminPeopleSections: { review: true },
+      adminPeopleLetter: "",
+      adminPeopleReviewOnly: false,
       adminExpandedDriverSlug: "",
       adminResetDate: "",
       adminResetDriverSlugs: [],
@@ -7096,7 +7113,7 @@
       const query = String(state.adminPeopleSearch || "").trim().toLowerCase();
       const people = adminPeople()
         .slice()
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => String(a.name || "").trim().localeCompare(String(b.name || "").trim(), "en", { sensitivity: "base", numeric: true }));
 
       if (!query) return people;
       return people.filter((person) => adminPeopleSearchText(person).includes(query));
@@ -7614,7 +7631,8 @@
       state.adminPeopleAreasStatus = "idle";
       state.adminPeopleAreaSaving = false;
       ++state.adminPeopleAreasRequest;
-      state.adminPeopleSections = { review: true };
+      state.adminPeopleLetter = "";
+      state.adminPeopleReviewOnly = false;
       state.routeTimings = {};
       state.adminPlaceAutocomplete = {requestId:(state.adminPlaceAutocomplete?.requestId || 0)+1,suggestions:[],query:"",field:"",status:"idle"};
       state.adminAiPrompt = "";
@@ -9309,6 +9327,7 @@
               <strong>${escapeHtml(person.name)}</strong>
               <span>${escapeHtml(preferredAddress || "No address listed")}</span>
               <span>${escapeHtml(person.phone || "No phone listed")}</span>
+              ${options.showData ? `<span>${escapeHtml(PEOPLE_BANK_AREAS.find(area => area.id === adminPersonArea(person))?.label || "Area unassigned")}</span>` : ""}
               ${options.showData && person.notes ? `<span>${escapeHtml(person.notes)}</span>` : ""}
             </div>
             ${status ? `<span class="pill ${status === "Possible duplicate" ? "gray" : ""}">${escapeHtml(status)}</span>` : ""}
@@ -9316,19 +9335,38 @@
         </article>`;
     }
 
+    function adminPersonLetter(person) {
+      const first = String(person.name || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").charAt(0).toUpperCase();
+      return /^[A-Z]$/.test(first) ? first : "#";
+    }
+
     function adminPeopleResultsHtml(options = {}) {
       const people = adminFilteredPeople();
-      if (!people.length) {
-        return `<section class="empty-card"><p>No people match that search.</p></section>`;
-      }
+      if (!options.showData) return people.length
+        ? people.map(person => adminPeopleResultCard(person, options)).join("")
+        : `<section class="empty-card"><p>No people match that search.</p></section>`;
 
-      if (!options.showData) return people.map((person) => adminPeopleResultCard(person, options)).join("");
-      const groups = PEOPLE_BANK_AREAS.map(area => ({ ...area, people: people.filter(person => adminPersonArea(person) === area.id) }));
-      groups.push({ id: "review", label: "Needs review", people: people.filter(person => adminPeopleStatus(person)) });
-      return groups.filter(group => !state.adminPeopleSearch || group.people.length).map(group => `<details class="people-bank-section" data-people-bank-section="${group.id}" ${state.adminPeopleSearch || state.adminPeopleSections[group.id] ? "open" : ""}>
-        <summary class="admin-zone-toggle"><strong>${escapeHtml(group.label)}</strong><span class="pill gray">${group.people.length}</span><span class="people-bank-chevron" aria-hidden="true">&rsaquo;</span></summary>
-        <div class="admin-rider-list">${group.people.length ? group.people.map(person => adminPeopleResultCard(person, options)).join("") : `<section class="empty-card"><p>No people in this section.</p></section>`}</div>
-      </details>`).join("");
+      const reviewIds = new Set(adminPeople().filter(person => adminPeopleStatus(person)).map(person => person.id));
+      const matches = people.filter(person => !state.adminPeopleReviewOnly || reviewIds.has(person.id));
+      const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
+      const counts = Object.fromEntries(letters.map(letter => [letter, 0]));
+      matches.forEach(person => ++counts[adminPersonLetter(person)]);
+      const selected = letters.includes(state.adminPeopleLetter)
+        ? state.adminPeopleLetter : letters.find(letter => counts[letter]) || "A";
+      const searching = Boolean(String(state.adminPeopleSearch || "").trim());
+      const visible = searching ? matches : matches.filter(person => adminPersonLetter(person) === selected);
+      const heading = searching ? "Search results" : selected === "#" ? "Other names" : selected;
+      const emptyMessage = searching ? "No people match that search."
+        : !adminPeople().length ? "No people saved yet."
+        : state.adminPeopleReviewOnly ? "No people need review under this letter."
+        : "No people under this letter.";
+      return `
+        <button class="admin-chip-button people-bank-review" type="button" data-people-bank-review aria-pressed="${state.adminPeopleReviewOnly}">Needs review · ${reviewIds.size}</button>
+        ${searching ? "" : `<nav class="people-bank-letters" aria-label="Filter people by first letter">
+          ${letters.map(letter => `<button type="button" data-people-bank-letter="${letter}" aria-pressed="${selected === letter}" aria-label="${letter === "#" ? "Other names" : letter}, ${counts[letter]} people" ${counts[letter] ? "" : "disabled"}>${letter}</button>`).join("")}
+        </nav>`}
+        <h2 class="people-bank-heading" aria-live="polite">${heading} · ${visible.length} ${visible.length === 1 ? "person" : "people"}${state.adminPeopleReviewOnly ? " needing review" : ""}</h2>
+        ${visible.length ? visible.map(person => adminPeopleResultCard(person, options)).join("") : `<section class="empty-card"><p>${emptyMessage}</p></section>`}`;
     }
 
     function adminPeopleSearchInput(placeholder = "Search PeopleData by name, phone, or address") {
@@ -9478,15 +9516,15 @@
     function adminPeopleView() {
       return `
         <section class="admin-message">
-          People Bank · ${adminPeople().length} people stored. Unassigned areas and uncertain details appear in Needs review. Campus names suggest a section until you save an area.
+          People Bank · ${adminPeople().length} people stored. Browse by first name, or search across all letters.
         </section>
         ${state.adminPeopleAreasStatus === "unavailable" ? `<section class="admin-message">Saved areas are unavailable. <button type="button" class="secondary-action" data-action="adminPeopleAreasReload">Reload areas</button></section>` : ""}
         <button class="primary-action admin-add-rider-action" type="button" data-action="adminNew">
           <span class="admin-control-action-icon" data-detail-icon="user-plus">${peopleDetailIcon("user-plus")}</span>
           <span>Add rider</span>
         </button>
-        ${adminPeopleSearchInput("Search full PeopleData")}
-        <section class="admin-rider-list" data-admin-people-results aria-label="PeopleData">
+        ${adminPeopleSearchInput("Search all names, phones, or addresses")}
+        <section class="admin-rider-list" data-admin-people-results aria-label="People Bank">
           ${adminPeopleResultsHtml({ showData: true })}
         </section>`;
     }
@@ -11533,14 +11571,25 @@
       }
     }
 
-    screen.addEventListener("toggle", (event) => {
-      const section = event.target;
-      if (section.matches?.("[data-people-bank-section]") && section.isConnected && !state.adminPeopleSearch) {
-        state.adminPeopleSections[section.dataset.peopleBankSection] = section.open;
-      }
-    }, true);
-
     screen.addEventListener("click", (event) => {
+      const peopleLetterButton = event.target.closest("[data-people-bank-letter]");
+      if (peopleLetterButton) {
+        const letter = peopleLetterButton.dataset.peopleBankLetter;
+        if (!/^[A-Z#]$/.test(letter || "")) return;
+        state.adminPeopleLetter = letter;
+        render();
+        screen.querySelector(`[data-people-bank-letter="${letter}"]`)?.focus?.();
+        return;
+      }
+
+      if (event.target.closest("[data-people-bank-review]")) {
+        state.adminPeopleReviewOnly = !state.adminPeopleReviewOnly;
+        state.adminPeopleLetter = "";
+        render();
+        screen.querySelector("[data-people-bank-review]")?.focus?.();
+        return;
+      }
+
       const driverRunButton = event.target.closest("[data-driver-run]");
       if (driverRunButton) {
         openDriverRun(driverRunButton.dataset.driverRun);

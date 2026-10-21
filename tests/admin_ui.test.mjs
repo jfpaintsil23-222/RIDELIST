@@ -24,7 +24,8 @@ async function loadApp(fetchImpl, options = {}) {
       toggle() {},
     },
     setAttribute() {},
-    addEventListener() {},
+    listeners: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
     querySelector() {
       return element();
     },
@@ -73,6 +74,7 @@ async function loadApp(fetchImpl, options = {}) {
   vm.runInContext(`${script}
     globalThis.__app = {
       state,
+      __screen: screen,
       runAdminSharedSecondary: typeof runAdminSharedSecondary === "function" ? runAdminSharedSecondary : undefined,
       adminView,
       openAdminMenuPage: typeof openAdminMenuPage === "function" ? openAdminMenuPage : undefined,
@@ -4074,7 +4076,7 @@ test('shared linked rider edit retains explicit identity and version without mat
   const view=app.adminEditView(); assert.match(view,/name="personId" value="explicit-person"/); assert.match(view,/name="personVersion" value="7"/);
 });
 
-test("People Bank groups confirmed areas without guessing from a home address or a highway name", async () => {
+test("People Bank keeps confirmed areas without guessing from a home address or a highway name", async () => {
   const app = await loadApp();
   app.state.admin = { people: [
     { id: "tsu", name: "Alpha", campusAddress: "Texas Southern University Library", preferredAddressType: "campus" },
@@ -4086,8 +4088,7 @@ test("People Bank groups confirmed areas without guessing from a home address or
   ] };
   app.state.adminPeopleAreas = { off: "off-campus" };
   app.state.adminPeopleAreasStatus = "ready";
-  const html = app.adminPeopleResultsHtml({ showData: true });
-  for (const label of ["TSU", "HCU", "UH", "Off Campus", "Sam Houston State", "Needs review"]) assert.ok(html.includes(label), label);
+  assert.deepEqual(Array.from(app.state.admin.people, person => app.adminPersonArea(person)), ["tsu", "hcu", "uh", "shsu", "off-campus", ""]);
   assert.equal(app.adminPersonArea(app.state.admin.people[4]), "off-campus");
   assert.equal(app.adminPersonArea(app.state.admin.people[5]), "");
   app.state.adminPeopleSearch = "Gamma";
@@ -4156,15 +4157,88 @@ test("People Bank skips stale reloads during saves and discards responses after 
   assert.equal(app.state.adminPeopleAreasStatus,'idle');
 });
 
-test("People Bank retains expanded sections across rendering and review marks simple differences only", async () => {
+test("People Bank retains its letter across rendering and review marks simple differences only", async () => {
   const app = await loadApp();
   const person = {id:'p1',name:'Example Rider',phone:'2025550100',homeAddress:'100 Example Street',preferredAddressType:'home'};
   app.state.admin = {people:[person]};
   app.state.adminPeopleAreas = {p1:'off-campus'};
-  app.state.adminPeopleSections['off-campus'] = true;
+  app.state.adminPeopleLetter = 'E';
   app.state.adminDraftStops = [{name:'Example Rider',phone:'+1 202 555 0100',address:'100 Example St.'}];
-  assert.match(app.adminPeopleResultsHtml({showData:true}), /data-people-bank-section="off-campus" open/);
+  assert.match(app.adminPeopleResultsHtml({showData:true}), /data-people-bank-letter="E"[^>]*aria-pressed="true"/);
   assert.equal(app.adminPersonAddressIssues(person).length,0);
+});
+
+function peopleBankCards(html) {
+  return Array.from(html.matchAll(/data-admin-person-open="([^"]+)"/g), match => match[1]);
+}
+
+function clickPeopleBank(app, selector, dataset = {}) {
+  app.__screen.listeners.click({ target: { closest: value => value === selector ? { dataset } : null } });
+}
+
+test("People Bank shows only one alphabetical letter without duplicate review cards", async () => {
+  const app = await loadApp();
+  app.state.admin = { people: [
+    {id:'b',name:'Bruno'}, {id:'a2',name:'Ava'}, {id:'a1',name:'amy'},
+    {id:'archived',name:'Adam',active:false},
+  ] };
+  const before = JSON.stringify(app.state.admin.people);
+  const html = app.adminPeopleResultsHtml({showData:true});
+  assert.deepEqual(peopleBankCards(html), ['a1','a2']);
+  assert.match(html, /data-people-bank-letter="A"[^>]*aria-pressed="true"/);
+  assert.equal(JSON.stringify(app.state.admin.people), before);
+});
+
+test("People Bank letter clicks work and global search restores the selected letter when cleared", async () => {
+  const app = await loadApp();
+  app.state.admin = {people:[{id:'a',name:'Ava'},{id:'b',name:'Bruno'}]};
+  app.state.view = 'admin'; app.state.adminActiveTab = 'people';
+  clickPeopleBank(app, '[data-people-bank-letter]', {peopleBankLetter:'B'});
+  assert.deepEqual(peopleBankCards(app.__screen.innerHTML), ['b']);
+  const results = {innerHTML:''};
+  app.__screen.querySelector = selector => selector === '[data-admin-people-results]' ? results : null;
+  const input = {value:'Ava'};
+  const event = {target:{closest: selector => selector === '[data-admin-people-search]' ? input : null}};
+  app.__screen.listeners.input(event);
+  assert.deepEqual(peopleBankCards(results.innerHTML), ['a']);
+  input.value = '';
+  app.__screen.listeners.input(event);
+  assert.deepEqual(peopleBankCards(results.innerHTML), ['b']);
+  assert.equal(app.state.adminPeopleLetter, 'B');
+});
+
+test("People Bank keeps accented and non-Latin names reachable and handles empty letters", async () => {
+  const app = await loadApp();
+  app.state.admin = {people:[{id:'z',name:' zoe '},{id:'e',name:'Émile'},{id:'other',name:'张'},{id:'unnamed',name:''}]};
+  assert.deepEqual(peopleBankCards(app.adminPeopleResultsHtml({showData:true})), ['e']);
+  app.state.adminPeopleLetter = '#';
+  assert.deepEqual(peopleBankCards(app.adminPeopleResultsHtml({showData:true})).sort(), ['other','unnamed']);
+  app.state.adminPeopleLetter = 'Q';
+  assert.deepEqual(peopleBankCards(app.adminPeopleResultsHtml({showData:true})), []);
+  app.state.admin = {people:[]};
+  assert.deepEqual(peopleBankCards(app.adminPeopleResultsHtml({showData:true})), []);
+});
+
+test("People Bank review filter still uses letters and does not change saved contacts", async () => {
+  const app = await loadApp();
+  app.state.admin = {people:[
+    {id:'complete',name:'Amy',homeAddress:'100 Example Street',phone:'2025550100'},
+    {id:'missingA',name:'Ava'}, {id:'missingB',name:'Bruno'},
+  ]};
+  app.state.adminPeopleAreas = {complete:'off-campus'};
+  app.state.view = 'admin'; app.state.adminActiveTab = 'people';
+  const before = JSON.stringify(app.state.admin.people);
+  clickPeopleBank(app, '[data-people-bank-review]');
+  assert.deepEqual(peopleBankCards(app.__screen.innerHTML), ['missingA']);
+  clickPeopleBank(app, '[data-people-bank-letter]', {peopleBankLetter:'B'});
+  assert.deepEqual(peopleBankCards(app.__screen.innerHTML), ['missingB']);
+  clickPeopleBank(app, '[data-people-bank-review]');
+  assert.deepEqual(peopleBankCards(app.__screen.innerHTML), ['complete','missingA']);
+  assert.equal(JSON.stringify(app.state.admin.people), before);
+  app.state.adminPeopleLetter = 'B'; app.state.adminPeopleReviewOnly = true;
+  app.clearAdminPrivateState();
+  assert.equal(app.state.adminPeopleLetter, '');
+  assert.equal(app.state.adminPeopleReviewOnly, false);
 });
 
 function chatFixture(app) {

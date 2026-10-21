@@ -4502,23 +4502,30 @@
         min-height: 100dvh;
       }
     }
-    .admin-chat { padding: 24px 20px; display: grid; gap: 18px; }
-    .admin-chat h1 { margin: 4px 0 8px; font-size: 28px; letter-spacing: -1px; }
+    .admin-chat { width: 100%; max-width: 800px; box-sizing: border-box; margin-inline: auto; padding: 24px 20px; display: grid; gap: 14px; }
+    .admin-chat h1 { margin: 4px 0 8px; font-size: 26px; letter-spacing: -1px; }
     .admin-chat .admin-top-row { align-items: flex-start; }
     .admin-chat .admin-top-row p { margin: 0; font-size: 13px; color: #667085; }
-    .admin-chat-intro { margin: 0; line-height: 1.5; color: #475467; }
+    .admin-chat-intro { margin: 0; font-size: 14px; line-height: 1.5; color: #475467; }
     .admin-chat-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
-    .admin-chat-toolbar button { flex: 1; padding: 10px; font-size: 12px; }
-    .admin-chat-starters, .admin-chat-messages { display: grid; gap: 12px; }
+    .admin-chat-toolbar button { flex: 0 1 auto; width: auto; padding: 10px 14px; font-size: 12px; border-radius: 12px; }
+    .admin-chat-starters, .admin-chat-messages, .admin-chat-conversation, .admin-chat-history-messages { display: grid; gap: 12px; min-width: 0; }
+    .admin-chat-messages { max-height: min(48dvh, 440px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; align-content: start; padding: 2px 6px 2px 2px; }
+    .admin-chat-history { border: 1px solid #dce4dd; border-radius: 14px; background: #f7f9f7; }
+    .admin-chat-history summary { padding: 13px 15px; font-size: 13px; font-weight: 600; color: #344c3c; cursor: pointer; }
+    .admin-chat-history-messages { max-height: 280px; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-top: 1px solid #dce4dd; }
+    .admin-chat-section-label { margin: 0; font-size: 12px; font-weight: 600; color: #667085; }
+    .admin-chat-messages:focus-visible, .admin-chat-history-messages:focus-visible, .admin-chat-history summary:focus-visible { outline: 2px solid #437452; outline-offset: 2px; }
     .admin-chat-starter { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border: 1px solid #e3e8e3; border-radius: 14px; background: #fff; text-align: left; font: inherit; font-size: 14px; color: #24392c; cursor: pointer; }
     .admin-chat-message { border-radius: 16px; background: #fff; border: 1px solid #e3e8e3; padding: 16px; min-width: 0; }
-    .admin-chat-message.is-user { margin-left: 24px; background: #edf5ef; border-color: #d8e9dd; }
+    .admin-chat-message.is-user { margin-left: 20px; background: #edf5ef; border-color: #d8e9dd; }
     .admin-chat-message strong { font-size: 12px; color: #437452; }
     .admin-chat-message p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
-    .admin-chat-composer { display: grid; gap: 10px; }
+    .admin-chat-composer { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid #e3e8e3; }
     .admin-chat-composer label { font-weight: 700; font-size: 13px; }
-    .admin-chat-composer textarea { width: 100%; box-sizing: border-box; border: 1px solid #cdd8ce; border-radius: 14px; padding: 14px; font: inherit; font-size: 16px; resize: vertical; background: #fff; color: #24392c; }
-    .admin-chat-footnote { margin: 0; color: #667085; font-size: 12px; line-height: 1.5; }
+    .admin-chat-composer textarea { width: 100%; max-height: 150px; box-sizing: border-box; border: 1px solid #cdd8ce; border-radius: 14px; padding: 12px; font: inherit; font-size: 16px; resize: vertical; background: #fff; color: #24392c; }
+    .admin-chat-composer .primary-action { width: auto; min-width: 150px; justify-self: end; padding: 12px 18px; font-size: 14px; }
+    .admin-chat-footnote { margin: 0; color: #667085; font-size: 11px; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -10581,6 +10588,9 @@
     function adminChatView() {
       const loading = state.adminChatStatus === "loading";
       const messages = state.adminChatMessages || [];
+      const earlier = loading ? messages : messages.slice(0, -2);
+      const latest = loading ? [] : messages.slice(-2);
+      const messageCard = message => `<article class="admin-chat-message ${message.role === "user" ? "is-user" : ""}"><strong>${message.role === "user" ? "You" : "RIDELIST AI"}</strong><p>${escapeHtml(message.content)}</p></article>`;
       const starters = ["What needs attention before this ride?", "Who is missing a saved pickup address?", "How could we group these pickups?"];
       return `<section class="admin-chat" aria-label="Admin chat">
         <header class="admin-top-row">
@@ -10590,14 +10600,18 @@
         <p class="admin-chat-intro">Ask a question, compare options, or check what needs attention. Suggestions stay here for you to review.</p>
         <div class="admin-chat-toolbar"><button class="secondary-action" type="button" data-action="adminChatClear">New conversation</button><button class="secondary-action" type="button" data-admin-menu-page="ai">AI Organizer &rarr;</button></div>
         ${!messages.length && !loading ? `<div class="admin-chat-starters" aria-label="Suggested questions">${starters.map(prompt => `<button class="admin-chat-starter" type="button" data-admin-chat-starter="${escapeHtml(prompt)}">${escapeHtml(prompt)} <span aria-hidden="true">&rarr;</span></button>`).join("")}</div>` : ""}
-        <div class="admin-chat-messages" role="log" aria-live="polite" aria-label="Conversation" aria-busy="${loading}">
-          ${messages.map(message => `<article class="admin-chat-message ${message.role === "user" ? "is-user" : ""}"><strong>${message.role === "user" ? "You" : "RIDELIST AI"}</strong><p>${escapeHtml(message.content)}</p></article>`).join("")}
-          ${loading ? `<article class="admin-chat-message is-user"><strong>You</strong><p>${escapeHtml(state.adminChatPending)}</p></article><p role="status">Looking at this ride plan…</p>` : ""}
+        <div class="admin-chat-conversation">
+          ${earlier.length ? `<details class="admin-chat-history"><summary>Earlier messages · ${earlier.length / 2} ${earlier.length === 2 ? "exchange" : "exchanges"}</summary><div class="admin-chat-history-messages" tabindex="0" role="region" aria-label="Earlier messages">${earlier.map(messageCard).join("")}</div></details>` : ""}
+          ${latest.length || loading ? `<h2 class="admin-chat-section-label">Latest exchange</h2>` : ""}
+          <div class="admin-chat-messages" role="log" aria-live="polite" aria-label="Conversation" aria-busy="${loading}" ${latest.length || loading ? 'tabindex="0"' : ""}>
+            ${latest.map(messageCard).join("")}
+            ${loading ? `${messageCard({role:"user",content:state.adminChatPending})}<p role="status">Looking at this ride plan…</p>` : ""}
+          </div>
         </div>
         ${state.adminChatError ? `<p class="admin-message error" role="alert">${escapeHtml(state.adminChatError)}</p>` : ""}
         <form class="admin-chat-composer" data-admin-chat-form>
           <label for="adminChatQuestion">Your question</label>
-          <textarea id="adminChatQuestion" data-admin-chat-prompt maxlength="2000" rows="3" placeholder="What would you like to check?" ${loading ? "disabled" : ""}>${escapeHtml(state.adminChatPrompt)}</textarea>
+          <textarea id="adminChatQuestion" data-admin-chat-prompt maxlength="2000" rows="2" placeholder="What would you like to check?" ${loading ? "disabled" : ""}>${escapeHtml(state.adminChatPrompt)}</textarea>
           <button class="primary-action" data-admin-chat-send type="submit" ${loading || !String(state.adminChatPrompt || "").trim() ? "disabled" : ""}>${loading ? "Thinking…" : "Send question"}</button>
         </form>
         <p class="admin-chat-footnote">Uses the current draft and saved address gaps. Check suggestions before acting; chat cannot confirm addresses or traffic. Remembers the latest four exchanges and clears when you sign out, reload, or switch plans.</p>

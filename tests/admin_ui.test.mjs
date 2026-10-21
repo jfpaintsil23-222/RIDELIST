@@ -4283,6 +4283,47 @@ test('admin chat keeps a failed question for retry without duplicate messages',a
   assert.equal(app.state.adminChatStatus,'idle');
 });
 
+test('admin chat shows the latest exchange while keeping earlier messages collapsed',async()=>{
+  const app=await loadApp();
+  chatFixture(app);
+  app.state.adminChatMessages=[
+    {role:'user',content:'Earlier question'},
+    {role:'assistant',content:'Earlier answer <script>alert(1)</script>'},
+    {role:'user',content:'Latest question'},
+    {role:'assistant',content:'Latest answer'},
+  ];
+  const html=app.adminChatView();
+  const history=html.match(/<details\b([^>]*)>([\s\S]*?)<\/details>/);
+  assert.ok(history,'Earlier messages should be available in a collapsed disclosure');
+  assert.doesNotMatch(history[1],/\bopen(?:\s|=|$)/);
+  assert.match(history[2],/Earlier question/);
+  assert.match(history[2],/Earlier answer &lt;script&gt;/);
+  assert.doesNotMatch(history[2],/Latest question|Latest answer|<script>/);
+  const visible=html.replace(history[0],'');
+  assert.match(visible,/Latest question/);
+  assert.match(visible,/Latest answer/);
+  assert.doesNotMatch(visible,/Earlier question|Earlier answer/);
+  assert.equal(app.state.adminChatMessages.length,4,'Collapsing history must not discard context');
+});
+
+test('admin chat keeps the pending question separate from previous answers',async()=>{
+  const app=await loadApp();
+  chatFixture(app);
+  app.state.adminChatMessages=[{role:'user',content:'Previous question'},{role:'assistant',content:'Previous answer'}];
+  app.state.adminChatStatus='loading';
+  app.state.adminChatPending='Follow-up question';
+  const html=app.adminChatView();
+  const history=html.match(/<details\b[^>]*>[\s\S]*?<\/details>/);
+  assert.ok(history);
+  assert.match(history[0],/Previous question/);
+  assert.match(history[0],/Previous answer/);
+  const visible=html.replace(history[0],'');
+  assert.match(visible,/Follow-up question/);
+  assert.doesNotMatch(visible,/Previous question|Previous answer/);
+  app.clearAdminChat();
+  assert.doesNotMatch(app.adminChatView(),/<details\b|Previous answer|Follow-up question/);
+});
+
 test('admin chat discards answers after logout, clear, plan switch or changed draft',async()=>{
   for(const change of ['logout','clear','date','draft']) {
     let release;

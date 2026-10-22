@@ -24,18 +24,19 @@ async function loadApp(fetchImpl, options = {}) {
       toggle() {},
     },
     setAttribute() {},
-    addEventListener() {},
+    listeners: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
     querySelector() {
       return element();
     },
   });
 
   const context = {
-    console,
+    console: options.console || console,
     crypto: { randomUUID: () => "00000000-0000-0000-0000-000000009001" },
     encodeURIComponent,
     URLSearchParams,
-    FormData: class {},
+    FormData: options.formDataClass || class {},
     location: {
       href: `https://example.test/${options.search || ""}`,
       search: options.search || "",
@@ -73,6 +74,7 @@ async function loadApp(fetchImpl, options = {}) {
   vm.runInContext(`${script}
     globalThis.__app = {
       state,
+      __screen: screen,
       runAdminSharedSecondary: typeof runAdminSharedSecondary === "function" ? runAdminSharedSecondary : undefined,
       adminView,
       openAdminMenuPage: typeof openAdminMenuPage === "function" ? openAdminMenuPage : undefined,
@@ -90,6 +92,15 @@ async function loadApp(fetchImpl, options = {}) {
       saveAdminPersonMerge: typeof saveAdminPersonMerge === "function" ? saveAdminPersonMerge : undefined,
       saveAdminPersonArchive: typeof saveAdminPersonArchive === "function" ? saveAdminPersonArchive : undefined,
       adminDuplicateCandidates: typeof adminDuplicateCandidates === "function" ? adminDuplicateCandidates : undefined,
+      adminPeopleResultsHtml,
+      adminPersonArea: typeof adminPersonArea === "function" ? adminPersonArea : undefined,
+      adminPersonAddressIssues: typeof adminPersonAddressIssues === "function" ? adminPersonAddressIssues : undefined,
+      saveAdminPersonArea: typeof saveAdminPersonArea === "function" ? saveAdminPersonArea : undefined,
+      loadAdminPeopleAreas: typeof loadAdminPeopleAreas === "function" ? loadAdminPeopleAreas : undefined,
+      clearAdminPrivateState,
+      requestAdminChat: typeof requestAdminChat === "function" ? requestAdminChat : undefined,
+      clearAdminChat: typeof clearAdminChat === "function" ? clearAdminChat : undefined,
+      adminChatView: typeof adminChatView === "function" ? adminChatView : undefined,
       adminRiderNameSuggestions: typeof adminRiderNameSuggestions === "function" ? adminRiderNameSuggestions : undefined,
       adminAddressOptionsForPerson: typeof adminAddressOptionsForPerson === "function" ? adminAddressOptionsForPerson : undefined,
       returnToAdminPersonDetailFromAdd: typeof returnToAdminPersonDetailFromAdd === "function" ? returnToAdminPersonDetailFromAdd : undefined,
@@ -119,6 +130,7 @@ async function loadApp(fetchImpl, options = {}) {
       adminProfileOptionsHtml: typeof adminProfileOptionsHtml === "function" ? adminProfileOptionsHtml : undefined,
       adminActivityList: typeof adminActivityList === "function" ? adminActivityList : undefined,
       loadDrivers: typeof loadDrivers === "function" ? loadDrivers : undefined,
+      loadAdminRouteTiming,
       publishAdminDraft: typeof publishAdminDraft === "function" ? publishAdminDraft : undefined,
       saveAdminDriverAvailability: typeof saveAdminDriverAvailability === "function" ? saveAdminDriverAvailability : undefined,
       saveAdminNewDriver: typeof saveAdminNewDriver === "function" ? saveAdminNewDriver : undefined,
@@ -1322,7 +1334,7 @@ test("admin AI integration keeps OpenAI keys server-side", async () => {
   assert.match(source, /ride_admin_snapshot/);
 });
 
-test("admin changes stat uses the cleaned Figma pencil icon", async () => {
+test("admin changes stat keeps its count and alert state without a decorative icon", async () => {
   const app = await loadApp();
 
   app.state.admin = {
@@ -1332,12 +1344,11 @@ test("admin changes stat uses the cleaned Figma pencil icon", async () => {
   };
   app.state.adminDraftStops = [];
   app.state.adminActiveTab = "riders";
+  app.state.adminNotifyDraft = { driverSlugs: ["example-driver"] };
 
   const html = app.adminView();
-  assert.match(html, /data-admin-tab="changes"/);
-  assert.match(html, /M5 19l3\.8-\.9L18\.8 8\.1/);
-  assert.doesNotMatch(html, /M12 20h9/);
-  assert.doesNotMatch(html, /m16\.5 3\.5 4 4L8 20H4v-4z/);
+  assert.match(html, /class="admin-stat is-alert" type="button" data-admin-tab="changes"><strong>1<\/strong><span>changes today<\/span><\/button>/);
+  assert.doesNotMatch(html, /admin-stat-glyph/);
 });
 
 test("admin sunday riders tab keeps the icon Add rider action", async () => {
@@ -2215,7 +2226,7 @@ test("local Coffee and Christ rehearsal loads synthetic riders without Supabase 
 
   app.state.adminActiveTab = "people";
   const peopleHtml = app.adminView();
-  assert.match(peopleHtml, /PeopleData · 8 people stored/);
+  assert.match(peopleHtml, /People Bank · 8 people stored/);
   assert.match(peopleHtml, /Synthetic rider 3/);
   assert.match(peopleHtml, /Synthetic rider 1/);
   assert.match(peopleHtml, /Synthetic rider 2/);
@@ -2786,6 +2797,118 @@ test("admin publish explains connection failures without losing draft", async ()
   assert.equal(app.readAdminDraftBackup("2026-08-30").stops[0].name, "Faith Test");
   assert.match(app.adminReviewView(), /Try publishing again \(1\)/);
 });
+
+for (const mode of ["new", "edit"]) {
+  for (const invalidField of ["name", "address"]) {
+    test(`rider ${mode} validation retains input after whitespace-only ${invalidField} without saving it`, async () => {
+      const writes = [];
+      const app = await loadApp(async (url, options = {}) => {
+        const endpoint = String(url).split("/").at(-1);
+        if (endpoint === "ride_admin_save_draft") {
+          const body = JSON.parse(options.body);
+          writes.push(body.p_draft);
+          return { ok: true, json: async () => ({ ok: true, draft: { ...body.p_draft, planDate: body.p_plan_date } }) };
+        }
+        if (endpoint === "ride-route-timing") return { ok: true, json: async () => ({ ok: true, timings: {} }) };
+        return { ok: true, json: async () => [] };
+      }, { formDataClass: class {
+        constructor(form) { this.values = form.values; }
+        get(name) { return this.values[name] ?? null; }
+      } });
+      await new Promise(resolve => setImmediate(resolve));
+      const original = { id: "example-stop", driverSlug: "example-driver", stopOrder: 1, name: "Example Rider", address: "1 Example Way", notes: "Original note" };
+      app.state.adminCode = "synthetic-admin-code";
+      app.state.planDate = "2099-01-04";
+      app.state.admin = { plan: { date: "2099-01-04" }, drivers: [{ slug: "example-driver", displayName: "Example Driver", active: true }], stops: mode === "edit" ? [{ ...original }] : [], people: [] };
+      app.state.adminDraftStops = mode === "edit" ? [{ ...original }] : [];
+      app.state.adminDeletedStopIds = [];
+      const before = JSON.stringify(app.state.adminDraftStops);
+      const click = (selector, dataset) => app.__screen.listeners.click({ target: { closest: value => value === selector ? { dataset } : null } });
+      const openEditor = () => mode === "edit"
+        ? click("[data-admin-edit]", { adminEdit: "example-stop" })
+        : click("[data-action]", { action: "adminNew" });
+      const submit = values => app.__screen.listeners.submit({
+        preventDefault() {},
+        target: { closest: selector => selector === "[data-admin-form='rider']" ? { values } : null },
+      });
+      const entered = { ...original, id: mode === "edit" ? original.id : "", name: "Updated Example", address: "2 Example Way", pickupTime: "1:15 PM", notes: "Unsaved <example> note", [invalidField]: "   " };
+      openEditor();
+      submit(entered);
+      assert.equal(app.state.view, "adminEdit");
+      assert.match(app.state.adminError, /Name and pickup address are required/);
+      assert.equal(JSON.stringify(app.state.adminDraftStops), before, "invalid input must not replace the saved draft");
+      assert.equal(app.readAdminDraftBackup("2099-01-04"), null);
+      assert.equal(writes.length, 0);
+      assert.match(app.__screen.innerHTML, /Unsaved &lt;example&gt; note/);
+      assert.match(app.__screen.innerHTML, /value="1:15 PM"/);
+      assert.match(app.__screen.innerHTML, invalidField === "name" ? /value="2 Example Way"/ : /value="Updated Example"/);
+      assert.match(app.__screen.innerHTML, new RegExp(`name="${invalidField}" value=""`));
+      if (mode === "new") assert.match(app.__screen.innerHTML, /name="id" value=""/);
+
+      click("[data-action]", { action: "adminBack" });
+      assert.equal(app.state.view, "admin");
+      assert.equal(JSON.stringify(app.state.adminDraftStops), before);
+      openEditor();
+      assert.doesNotMatch(app.__screen.innerHTML, /Unsaved &lt;example&gt; note/);
+      submit(entered);
+      submit({ ...entered, [invalidField]: invalidField === "name" ? "Corrected Example" : "3 Example Way" });
+      assert.equal(app.state.view, "admin");
+      assert.equal(app.state.adminError, "");
+      assert.equal(app.state.adminDraftStops.length, 1);
+      assert.equal(app.state.adminDraftStops[0].notes, "Unsaved <example> note");
+      assert.equal(app.readAdminDraftBackup("2099-01-04").stops[0].notes, "Unsaved <example> note");
+      assert.equal(writes.length, 1);
+      assert.equal(app.state.admin.stops.length, mode === "edit" ? 1 : 0, "saving a draft does not publish it");
+      if (mode === "edit") assert.equal(app.state.admin.stops[0].notes, "Original note");
+    });
+  }
+}
+
+for (const outcome of ["success", "error"]) {
+  for (const startedInEditor of [false, true]) {
+    test(`admin timing ${outcome} preserves editor input when started ${startedInEditor ? "inside" : "before"} the editor`, async () => {
+      let finishTiming;
+      const timingResponse = new Promise(resolve => { finishTiming = resolve; });
+      const warnings = [];
+      const app = await loadApp(async url => String(url).endsWith("ride-route-timing")
+        ? timingResponse : { ok: true, json: async () => [] }, {
+        console: { ...console, warn: error => warnings.push(error.message) },
+        formDataClass: class { constructor(form) { this.values = form.values; } get(name) { return this.values[name] ?? null; } },
+      });
+      await new Promise(resolve => setImmediate(resolve));
+      const stop = { id: "example-stop", driverSlug: "example-driver", stopOrder: 1, name: "Example Rider", address: "1 Example Way", notes: "Original note" };
+      app.state.view = "admin";
+      app.state.adminActiveTab = "drivers";
+      app.state.adminExpandedDriverSlug = "example-driver";
+      app.state.adminCode = "synthetic-admin-code";
+      app.state.planDate = "2099-01-04";
+      app.state.admin = { plan: { date: "2099-01-04" }, drivers: [{ slug: "example-driver", displayName: "Example Driver", active: true }], stops: [{ ...stop }], people: [] };
+      app.state.adminDraftStops = [{ ...stop }];
+      let pending = startedInEditor ? null : app.loadAdminRouteTiming();
+      if (!startedInEditor) assert.match(app.__screen.innerHTML, /Checking route time/);
+      clickPeopleBank(app, "[data-admin-edit]", { adminEdit: "example-stop" });
+      app.__screen.listeners.submit({ preventDefault() {}, target: { closest: selector => selector === "[data-admin-form='rider']"
+        ? { values: { ...stop, name: "Updated Example", address: "   ", notes: "Retained during timing" } } : null } });
+      assert.match(app.__screen.innerHTML, /Retained during timing/);
+      if (startedInEditor) pending = app.loadAdminRouteTiming();
+      assert.match(app.__screen.innerHTML, /Retained during timing/, "starting timing must not replace the form");
+      finishTiming({ ok: true, json: async () => outcome === "success"
+        ? { ok: true, timings: { "example-driver": { status: "ready" } } }
+        : { ok: false, error: "synthetic_timing_failure" } });
+      await pending;
+      assert.equal(app.state.routeTimingStatus, outcome === "success" ? "ready" : "error");
+      assert.equal(app.state.view, "adminEdit");
+      assert.match(app.__screen.innerHTML, /Retained during timing/, "finishing timing must not replace the form");
+      assert.match(app.__screen.innerHTML, /value="Updated Example"/);
+      assert.equal(app.state.adminDraftStops[0].notes, "Original note");
+      assert.equal(warnings.length, outcome === "success" ? 0 : 1);
+      clickPeopleBank(app, "[data-action]", { action: "adminBack" });
+      assert.equal(app.state.view, "admin");
+      assert.doesNotMatch(app.__screen.innerHTML, /Checking route time/);
+      if (outcome === "error") assert.match(app.__screen.innerHTML, /Route timing paused/);
+    });
+  }
+}
 
 test("admin shows draft protection after rider edits are autosaved", async () => {
   const app = await loadApp();
@@ -4122,4 +4245,291 @@ test('shared linked rider edit retains explicit identity and version without mat
   const app=await loadApp(); sharedSecondaryState(app);
   app.state.adminSelectedStopId='personal-rider'; app.state.adminDraftStops=[{id:'personal-rider',name:'Arbitrary name',personId:'explicit-person',personVersion:7}];
   const view=app.adminEditView(); assert.match(view,/name="personId" value="explicit-person"/); assert.match(view,/name="personVersion" value="7"/);
+});
+
+test("People Bank keeps confirmed areas without guessing from a home address or a highway name", async () => {
+  const app = await loadApp();
+  app.state.admin = { people: [
+    { id: "tsu", name: "Alpha", campusAddress: "Texas Southern University Library", preferredAddressType: "campus" },
+    { id: "hcu", name: "Beta", campusAddress: "Houston Christian University HODO", preferredAddressType: "campus" },
+    { id: "uh", name: "Gamma", campusAddress: "University of Houston", preferredAddressType: "campus" },
+    { id: "shsu", name: "Delta", campusAddress: "Sam Houston State University", preferredAddressType: "campus" },
+    { id: "off", name: "Epsilon", homeAddress: "100 Example Street", preferredAddressType: "home" },
+    { id: "unknown", name: "Zeta", homeAddress: "200 Sam Houston Tollway", preferredAddressType: "home" },
+  ] };
+  app.state.adminPeopleAreas = { off: "off-campus" };
+  app.state.adminPeopleAreasStatus = "ready";
+  assert.deepEqual(Array.from(app.state.admin.people, person => app.adminPersonArea(person)), ["tsu", "hcu", "uh", "shsu", "off-campus", ""]);
+  assert.equal(app.adminPersonArea(app.state.admin.people[4]), "off-campus");
+  assert.equal(app.adminPersonArea(app.state.admin.people[5]), "");
+  app.state.adminPeopleSearch = "Gamma";
+  const search = app.adminPeopleResultsHtml({ showData: true });
+  assert.match(search, /Gamma/);
+  assert.doesNotMatch(search, /Alpha|Epsilon/);
+});
+
+test("People Bank flags incomplete addresses and conflicting pickups without replacing saved addresses", async () => {
+  const app = await loadApp();
+  const person = { id: "p1", name: "Example Person", phone: "2025550100", campusAddress: "Campus Vue", homeAddress: "10 Example Road", preferredAddressType: "campus" };
+  app.state.admin = { people: [person] };
+  app.state.adminDraftStops = [{ id: "s1", name: "Example Person", phone: "2025550100", address: "20 Fictional Avenue" }];
+  const before = JSON.stringify(person);
+  const issues = app.adminPersonAddressIssues(person);
+  assert.ok(issues.some(x => /street address/i.test(x)));
+  assert.ok(issues.some(x => /differs/i.test(x)));
+  assert.equal(JSON.stringify(person), before);
+  app.state.adminDraftStops[0].phone = "2025550199";
+  assert.ok(!app.adminPersonAddressIssues(person).some(x => /differs/i.test(x)), "Name alone cannot establish an address conflict for the same person");
+});
+
+test("saving a People Bank area calls the metadata endpoint and leaves live route fields untouched", async () => {
+  const calls = [];
+  const app = await loadApp(async (url, options) => {
+    if (url.endsWith("/ride_admin_set_people_area")) {
+      calls.push(JSON.parse(options.body));
+      return { ok: true, json: async () => ({ ok: true, personId: "p1", pickupArea: "shsu" }) };
+    }
+    return { ok: true, json: async () => [] };
+  });
+  app.state.admin = { people: [{ id: "p1", name: "Example Person" }] };
+  app.state.adminCode = "synthetic-admin";
+  app.state.adminSelectedPersonId = "p1";
+  app.state.adminPeopleAreas = { p1: "" };
+  app.state.adminPeopleAreasStatus = "ready";
+  app.state.adminDraftStops = [{ id: "s1", name: "Example Person", address: "10 Example Road", area: "Home" }];
+  const before = JSON.stringify(app.state.adminDraftStops);
+  await app.saveAdminPersonArea("shsu");
+  assert.deepEqual(calls, [{ p_admin_code: "synthetic-admin", p_person_id: "p1", p_area: "shsu", p_expected_area: "" }]);
+  assert.equal(app.state.adminPeopleAreas.p1, "shsu");
+  assert.equal(JSON.stringify(app.state.adminDraftStops), before);
+});
+
+test("People Bank skips stale reloads during saves and discards responses after sign-out", async () => {
+  let resolveSave;
+  let reads = 0;
+  const app = await loadApp(async url => {
+    if (url.endsWith('/ride_admin_set_people_area')) return new Promise(resolve => { resolveSave = resolve; });
+    if (url.endsWith('/ride_admin_people_areas')) { reads++; return {ok:true,json:async()=>({ok:true,areas:{p1:''}})}; }
+    return {ok:true,json:async()=>[]};
+  });
+  app.state.admin = {people:[{id:'p1',name:'Example'}]};
+  app.state.adminCode = 'synthetic-admin';
+  app.state.adminSelectedPersonId = 'p1';
+  app.state.adminPeopleAreas = {p1:''};
+  app.state.adminPeopleAreasStatus = 'ready';
+  const save = app.saveAdminPersonArea('tsu');
+  await app.loadAdminPeopleAreas();
+  assert.equal(reads,0);
+  app.clearAdminPrivateState();
+  app.state.adminCode = '';
+  resolveSave({ok:true,json:async()=>({ok:true,personId:'p1',pickupArea:'tsu'})});
+  await save;
+  assert.deepEqual(Object.keys(app.state.adminPeopleAreas),[]);
+  assert.equal(app.state.adminPeopleAreasStatus,'idle');
+});
+
+test("People Bank retains its letter across rendering and review marks simple differences only", async () => {
+  const app = await loadApp();
+  const person = {id:'p1',name:'Example Rider',phone:'2025550100',homeAddress:'100 Example Street',preferredAddressType:'home'};
+  app.state.admin = {people:[person]};
+  app.state.adminPeopleAreas = {p1:'off-campus'};
+  app.state.adminPeopleLetter = 'E';
+  app.state.adminDraftStops = [{name:'Example Rider',phone:'+1 202 555 0100',address:'100 Example St.'}];
+  assert.match(app.adminPeopleResultsHtml({showData:true}), /data-people-bank-letter="E"[^>]*aria-pressed="true"/);
+  assert.equal(app.adminPersonAddressIssues(person).length,0);
+});
+
+function peopleBankCards(html) {
+  return Array.from(html.matchAll(/data-admin-person-open="([^"]+)"/g), match => match[1]);
+}
+
+function clickPeopleBank(app, selector, dataset = {}) {
+  app.__screen.listeners.click({ target: { closest: value => value === selector ? { dataset } : null } });
+}
+
+test("People Bank shows only one alphabetical letter without duplicate review cards", async () => {
+  const app = await loadApp();
+  app.state.admin = { people: [
+    {id:'b',name:'Bruno'}, {id:'a2',name:'Ava'}, {id:'a1',name:'amy'},
+    {id:'archived',name:'Adam',active:false},
+  ] };
+  const before = JSON.stringify(app.state.admin.people);
+  const html = app.adminPeopleResultsHtml({showData:true});
+  assert.deepEqual(peopleBankCards(html), ['a1','a2']);
+  assert.match(html, /data-people-bank-letter="A"[^>]*aria-pressed="true"/);
+  assert.equal(JSON.stringify(app.state.admin.people), before);
+});
+
+test("People Bank letter clicks work and global search restores the selected letter when cleared", async () => {
+  const app = await loadApp();
+  app.state.admin = {people:[{id:'a',name:'Ava'},{id:'b',name:'Bruno'}]};
+  app.state.view = 'admin'; app.state.adminActiveTab = 'people';
+  clickPeopleBank(app, '[data-people-bank-letter]', {peopleBankLetter:'B'});
+  assert.deepEqual(peopleBankCards(app.__screen.innerHTML), ['b']);
+  const results = {innerHTML:''};
+  app.__screen.querySelector = selector => selector === '[data-admin-people-results]' ? results : null;
+  const input = {value:'Ava'};
+  const event = {target:{closest: selector => selector === '[data-admin-people-search]' ? input : null}};
+  app.__screen.listeners.input(event);
+  assert.deepEqual(peopleBankCards(results.innerHTML), ['a']);
+  input.value = '';
+  app.__screen.listeners.input(event);
+  assert.deepEqual(peopleBankCards(results.innerHTML), ['b']);
+  assert.equal(app.state.adminPeopleLetter, 'B');
+});
+
+test("People Bank keeps accented and non-Latin names reachable and handles empty letters", async () => {
+  const app = await loadApp();
+  app.state.admin = {people:[{id:'z',name:' zoe '},{id:'e',name:'Émile'},{id:'other',name:'张'},{id:'unnamed',name:''}]};
+  assert.deepEqual(peopleBankCards(app.adminPeopleResultsHtml({showData:true})), ['e']);
+  app.state.adminPeopleLetter = '#';
+  assert.deepEqual(peopleBankCards(app.adminPeopleResultsHtml({showData:true})).sort(), ['other','unnamed']);
+  app.state.adminPeopleLetter = 'Q';
+  assert.deepEqual(peopleBankCards(app.adminPeopleResultsHtml({showData:true})), []);
+  app.state.admin = {people:[]};
+  assert.deepEqual(peopleBankCards(app.adminPeopleResultsHtml({showData:true})), []);
+});
+
+test("People Bank review filter still uses letters and does not change saved contacts", async () => {
+  const app = await loadApp();
+  app.state.admin = {people:[
+    {id:'complete',name:'Amy',homeAddress:'100 Example Street',phone:'2025550100'},
+    {id:'missingA',name:'Ava'}, {id:'missingB',name:'Bruno'},
+  ]};
+  app.state.adminPeopleAreas = {complete:'off-campus'};
+  app.state.view = 'admin'; app.state.adminActiveTab = 'people';
+  const before = JSON.stringify(app.state.admin.people);
+  clickPeopleBank(app, '[data-people-bank-review]');
+  assert.deepEqual(peopleBankCards(app.__screen.innerHTML), ['missingA']);
+  clickPeopleBank(app, '[data-people-bank-letter]', {peopleBankLetter:'B'});
+  assert.deepEqual(peopleBankCards(app.__screen.innerHTML), ['missingB']);
+  clickPeopleBank(app, '[data-people-bank-review]');
+  assert.deepEqual(peopleBankCards(app.__screen.innerHTML), ['complete','missingA']);
+  assert.equal(JSON.stringify(app.state.admin.people), before);
+  app.state.adminPeopleLetter = 'B'; app.state.adminPeopleReviewOnly = true;
+  app.clearAdminPrivateState();
+  assert.equal(app.state.adminPeopleLetter, '');
+  assert.equal(app.state.adminPeopleReviewOnly, false);
+});
+
+function chatFixture(app) {
+  app.state.adminCode='synthetic-admin';
+  app.state.planDate='2099-01-04';
+  app.state.admin={people:[],drivers:[],stops:[]};
+  app.state.adminDraftStops=[{id:'s1',name:'Example Rider',address:'10 Example Street'}];
+  app.state.adminActiveTab='chat';
+  app.state.adminChatPrompt='What needs attention?';
+}
+
+test('admin chat sends follow-ups without writing routes and escapes model output',async()=>{
+  const calls=[];
+  const app=await loadApp(async (url,init)=>{
+    if(!url.includes('/functions/v1/')) return {ok:true,json:async()=>[]};
+    calls.push(JSON.parse(init.body));return {ok:true,json:async()=>({ok:true,reply:'<img src=x onerror=alert(1)> Review the pickup.'})};
+  });
+  chatFixture(app);
+  await app.requestAdminChat();
+  assert.equal(app.state.adminChatMessages.length,2);
+  assert.equal(app.state.adminChatPrompt,'');
+  assert.equal(app.state.adminDraftStops[0].address,'10 Example Street');
+  const html=app.adminChatView();
+  assert.match(html,/&lt;img/);
+  assert.doesNotMatch(html,/<img src=x/);
+  app.state.adminChatPrompt='What should I confirm?';
+  await app.requestAdminChat();
+  assert.equal(calls.length,2);
+  assert.equal(calls[1].mode,'chat');
+  assert.equal(calls[1].history.length,2);
+  assert.equal(calls[1].history[1].role,'assistant');
+  assert.equal(app.state.adminChatMessages.length,4);
+});
+
+test('admin chat keeps a failed question for retry without duplicate messages',async()=>{
+  const app=await loadApp(async url=>url.includes('/functions/v1/')?{ok:false,json:async()=>({ok:false,error:'ai_not_configured'})}:{ok:true,json:async()=>[]});
+  chatFixture(app);
+  await app.requestAdminChat();
+  assert.equal(app.state.adminChatPrompt,'What needs attention?');
+  assert.equal(app.state.adminChatMessages.length,0);
+  assert.match(app.state.adminChatError,/not connected/i);
+  assert.equal(app.state.adminChatStatus,'idle');
+});
+
+test('admin chat shows the latest exchange while keeping earlier messages collapsed',async()=>{
+  const app=await loadApp();
+  chatFixture(app);
+  app.state.adminChatMessages=[
+    {role:'user',content:'Earlier question'},
+    {role:'assistant',content:'Earlier answer <script>alert(1)</script>'},
+    {role:'user',content:'Latest question'},
+    {role:'assistant',content:'Latest answer'},
+  ];
+  const html=app.adminChatView();
+  const history=html.match(/<details\b([^>]*)>([\s\S]*?)<\/details>/);
+  assert.ok(history,'Earlier messages should be available in a collapsed disclosure');
+  assert.doesNotMatch(history[1],/\bopen(?:\s|=|$)/);
+  assert.match(history[2],/Earlier question/);
+  assert.match(history[2],/Earlier answer &lt;script&gt;/);
+  assert.doesNotMatch(history[2],/Latest question|Latest answer|<script>/);
+  const visible=html.replace(history[0],'');
+  assert.match(visible,/Latest question/);
+  assert.match(visible,/Latest answer/);
+  assert.doesNotMatch(visible,/Earlier question|Earlier answer/);
+  assert.equal(app.state.adminChatMessages.length,4,'Collapsing history must not discard context');
+});
+
+test('admin chat keeps the pending question separate from previous answers',async()=>{
+  const app=await loadApp();
+  chatFixture(app);
+  app.state.adminChatMessages=[{role:'user',content:'Previous question'},{role:'assistant',content:'Previous answer'}];
+  app.state.adminChatStatus='loading';
+  app.state.adminChatPending='Follow-up question';
+  const html=app.adminChatView();
+  const history=html.match(/<details\b[^>]*>[\s\S]*?<\/details>/);
+  assert.ok(history);
+  assert.match(history[0],/Previous question/);
+  assert.match(history[0],/Previous answer/);
+  const visible=html.replace(history[0],'');
+  assert.match(visible,/Follow-up question/);
+  assert.doesNotMatch(visible,/Previous question|Previous answer/);
+  app.clearAdminChat();
+  assert.doesNotMatch(app.adminChatView(),/<details\b|Previous answer|Follow-up question/);
+});
+
+test('admin chat discards answers after logout, clear, plan switch or changed draft',async()=>{
+  for(const change of ['logout','clear','date','draft']) {
+    let release;
+    const app=await loadApp(async url=>{
+      if(!url.includes('/functions/v1/'))return {ok:true,json:async()=>[]};
+      return new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>({ok:true,reply:'Old private answer'})});});
+    });
+    chatFixture(app);
+    const pending=app.requestAdminChat();
+    if(change==='logout')app.clearAdminPrivateState();
+    if(change==='clear')app.clearAdminChat();
+    if(change==='date')app.state.planDate='2099-01-11';
+    if(change==='draft')app.state.adminDraftStops[0].address='20 Example Street';
+    release();await pending;
+    assert.equal(app.state.adminChatMessages.length,0,change);
+    assert.notEqual(app.state.adminChatStatus,'loading',change);
+    assert.doesNotMatch(app.adminChatView(),/Old private answer/);
+  }
+});
+
+test('admin chat menu opens the conversation and keeps only eight recent messages',async()=>{
+  let sent;
+  const app=await loadApp(async (url,init)=>{
+    if(!url.includes('/functions/v1/'))return {ok:true,json:async()=>[]};
+    sent=JSON.parse(init.body);return {ok:true,json:async()=>({ok:true,reply:'No additional issue found.'})};
+  });
+  chatFixture(app);
+  app.openAdminMenuPage('chat');
+  assert.equal(app.state.adminActiveTab,'chat');
+  assert.match(app.adminView(),/Ask about your rides/);
+  app.state.adminChatMessages=Array.from({length:8},(_,i)=>({role:i%2?'assistant':'user',content:'Earlier '+i}));
+  await app.requestAdminChat();
+  assert.equal(sent.history.length,8);
+  assert.equal(app.state.adminChatMessages.length,8);
+  app.clearAdminPrivateState();
+  assert.equal(app.state.adminChatMessages.length,0);
+  assert.equal(app.state.adminChatPrompt,'');
 });

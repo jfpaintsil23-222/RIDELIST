@@ -2189,6 +2189,7 @@
     }
 
     .admin-control-stats {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px;
     }
 
@@ -2217,13 +2218,12 @@
 
     .admin-control-stats .admin-stat {
       min-height: 118px;
-      padding: 22px 18px 18px;
+      padding: 22px clamp(10px, 3vw, 18px) 18px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 42px;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-areas:
-        "count icon"
-        "label label";
-      column-gap: 10px;
+        "count"
+        "label";
       align-content: start;
       border-radius: 20px;
       box-shadow: 0 16px 34px rgba(0, 0, 0, 0.06);
@@ -2239,8 +2239,9 @@
 
     .admin-control-stats .admin-stat strong {
       grid-area: count;
-      font-size: 40px;
+      font-size: clamp(28px, 7vw, 40px);
       font-weight: 800;
+      overflow-wrap: anywhere;
     }
 
     .admin-control-stats .admin-stat.is-alert strong {
@@ -2262,24 +2263,7 @@
       font-size: 17px;
       line-height: 1.12;
       font-weight: 500;
-    }
-
-    .admin-stat-glyph {
-      grid-area: icon !important;
-      position: static;
-      display: grid;
-      place-items: center;
-      width: 42px;
-      height: 42px;
-      margin-top: -2px !important;
-      border-radius: 12px;
-      color: #050505;
-      background: #f3f3f4;
-    }
-
-    .admin-stat-glyph .people-detail-svg {
-      width: 25px;
-      height: 25px;
+      overflow-wrap: anywhere;
     }
 
     .admin-section-head {
@@ -2773,6 +2757,36 @@
       font-size: 13px;
       font-weight: 850;
     }
+
+    .people-bank-letters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+      gap: 6px;
+    }
+
+    .people-bank-letters button {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: inherit;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
+    }
+
+    .people-bank-letters button[aria-pressed="true"],
+    .admin-control-screen .people-bank-review[aria-pressed="true"] {
+      background: #111111;
+      color: #ffffff;
+      border-color: #111111;
+    }
+
+    .people-bank-letters button:disabled { opacity: .35; cursor: default; }
+    .people-bank-letters button:focus-visible,
+    .people-bank-review:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+    .people-bank-review { justify-self: start; }
+    .people-bank-heading { margin: 8px 0 0; font-size: 20px; }
 
     .admin-zone-mark img {
       width: 100%;
@@ -4472,6 +4486,30 @@
         min-height: 100dvh;
       }
     }
+    .admin-chat { width: 100%; max-width: 800px; box-sizing: border-box; margin-inline: auto; padding: 24px 20px; display: grid; gap: 14px; }
+    .admin-chat h1 { margin: 4px 0 8px; font-size: 26px; letter-spacing: -1px; }
+    .admin-chat .admin-top-row { align-items: flex-start; }
+    .admin-chat .admin-top-row p { margin: 0; font-size: 13px; color: #667085; }
+    .admin-chat-intro { margin: 0; font-size: 14px; line-height: 1.5; color: #475467; }
+    .admin-chat-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+    .admin-chat-toolbar button { flex: 0 1 auto; width: auto; padding: 10px 14px; font-size: 12px; border-radius: 12px; }
+    .admin-chat-starters, .admin-chat-messages, .admin-chat-conversation, .admin-chat-history-messages { display: grid; gap: 12px; min-width: 0; }
+    .admin-chat-messages { max-height: min(48dvh, 440px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; align-content: start; padding: 2px 6px 2px 2px; }
+    .admin-chat-history { border: 1px solid #dce4dd; border-radius: 14px; background: #f7f9f7; }
+    .admin-chat-history summary { padding: 13px 15px; font-size: 13px; font-weight: 600; color: #344c3c; cursor: pointer; }
+    .admin-chat-history-messages { max-height: 280px; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-top: 1px solid #dce4dd; }
+    .admin-chat-section-label { margin: 0; font-size: 12px; font-weight: 600; color: #667085; }
+    .admin-chat-messages:focus-visible, .admin-chat-history-messages:focus-visible, .admin-chat-history summary:focus-visible { outline: 2px solid #437452; outline-offset: 2px; }
+    .admin-chat-starter { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border: 1px solid #e3e8e3; border-radius: 14px; background: #fff; text-align: left; font: inherit; font-size: 14px; color: #24392c; cursor: pointer; }
+    .admin-chat-message { border-radius: 16px; background: #fff; border: 1px solid #e3e8e3; padding: 16px; min-width: 0; }
+    .admin-chat-message.is-user { margin-left: 20px; background: #edf5ef; border-color: #d8e9dd; }
+    .admin-chat-message strong { font-size: 12px; color: #437452; }
+    .admin-chat-message p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
+    .admin-chat-composer { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid #e3e8e3; }
+    .admin-chat-composer label { font-weight: 700; font-size: 13px; }
+    .admin-chat-composer textarea { width: 100%; max-height: 150px; box-sizing: border-box; border: 1px solid #cdd8ce; border-radius: 14px; padding: 12px; font: inherit; font-size: 16px; resize: vertical; background: #fff; color: #24392c; }
+    .admin-chat-composer .primary-action { width: auto; min-width: 150px; justify-self: end; padding: 12px 18px; font-size: 14px; }
+    .admin-chat-footnote { margin: 0; color: #667085; font-size: 11px; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -4614,10 +4652,22 @@
       adminMenuOpen: false,
       adminSearch: "",
       adminPeopleSearch: "",
+      adminPeopleAreas: {},
+      adminPeopleAreasStatus: "idle",
+      adminPeopleAreaSaving: false,
+      adminPeopleAreasRequest: 0,
+      adminPeopleLetter: "",
+      adminPeopleReviewOnly: false,
       adminExpandedDriverSlug: "",
       adminResetDate: "",
       adminResetDriverSlugs: [],
       adminDriverAddOpen: false,
+      adminChatMessages: [],
+      adminChatPrompt: "",
+      adminChatPending: "",
+      adminChatStatus: "idle",
+      adminChatError: "",
+      adminChatRequest: 0,
       adminAiPrompt: "",
       adminAiStatus: "idle",
       adminAiError: "",
@@ -5778,7 +5828,7 @@
         state.routeTimingError = "";
         state.routeTimingPlanDate = activePlanDate();
         state.routeTimings = rehearsalRouteTimingMap();
-        render();
+        if (state.view === "admin" && adminActiveTab() === "drivers") render();
         return;
       }
 
@@ -5786,7 +5836,7 @@
       state.routeTimingError = "";
       state.routeTimingPlanDate = activePlanDate();
       state.routeTimings = Object.fromEntries(adminDrivers().map((driver) => [driver.slug, { status: "loading" }]));
-      render();
+      if (state.view === "admin" && adminActiveTab() === "drivers") render();
 
       try {
         const timing = await secureRouteTimingRequest("admin", {
@@ -5806,7 +5856,8 @@
         state.routeTimingError = error.message;
         console.warn(error);
       } finally {
-        render();
+        // Timing is shown on the routes tab; other views may contain unsaved input.
+        if (state.view === "admin" && adminActiveTab() === "drivers") render();
       }
     }
 
@@ -6190,8 +6241,103 @@
 
     function adminPeopleStatus(person) {
       if (adminDuplicateCandidates(person).length) return "Possible duplicate";
-      if (!String(person?.phone || "").trim() || !preferredPersonAddress(person)) return "Needs review";
+      if (!String(person?.phone || "").trim() || !adminPersonArea(person) || adminPersonAddressIssues(person).length) return "Needs review";
       return "";
+    }
+
+    const PEOPLE_BANK_AREAS = [
+      { id: "tsu", label: "TSU" }, { id: "hcu", label: "HCU" },
+      { id: "uh", label: "UH" }, { id: "off-campus", label: "Off Campus" },
+      { id: "shsu", label: "Sam Houston State" },
+    ];
+
+    function adminPersonArea(person) {
+      const saved = state.adminPeopleAreas[person.id];
+      if (PEOPLE_BANK_AREAS.some(area => area.id === saved)) return saved;
+      // Suggestions use explicit campus names only, never street-name guesses.
+      const address = preferredPersonAddress(person);
+      if (/\b(?:texas southern university|tsu)\b/i.test(address)) return "tsu";
+      if (/\b(?:houston christian university|houston baptist university|hcu|hbu)\b/i.test(address)) return "hcu";
+      if (/\b(?:sam houston state(?: university)?|shsu)\b/i.test(address)) return "shsu";
+      if (/\b(?:university of houston|uh)\b/i.test(address) && !/\b(?:downtown|clear lake|victoria)\b/i.test(address)) return "uh";
+      return "";
+    }
+
+    function adminComparableAddress(address) {
+      return String(address || "").toLowerCase().replace(/\bstreet\b/g, "st")
+        .replace(/\broad\b/g, "rd").replace(/\bavenue\b/g, "ave")
+        .replace(/\bdrive\b/g, "dr").replace(/[^a-z0-9]/g, "");
+    }
+
+    function adminPersonAddressIssues(person) {
+      const address = preferredPersonAddress(person);
+      const issues = [];
+      if (!address.trim()) issues.push("No pickup address saved.");
+      else if (!/\b\d+[a-z]?\s+\S+/i.test(address)) issues.push("Confirm the street address or exact pickup entrance.");
+      const phone = adminPersonPhoneKey(person).replace(/^1(?=\d{10}$)/, "");
+      const addresses = [person.homeAddress, person.campusAddress, address].filter(Boolean).map(adminComparableAddress);
+      const conflicting = phone && adminStops().some(stop =>
+        adminPersonNameKey(stop) === adminPersonNameKey(person) &&
+        adminPersonPhoneKey(stop).replace(/^1(?=\d{10}$)/, "") === phone &&
+        String(stop.address || "").trim() && !addresses.includes(adminComparableAddress(stop.address)));
+      if (conflicting) issues.push("Current route pickup differs from saved addresses. Confirm whether this is a one-time pickup before changing anything.");
+      return issues;
+    }
+
+    async function loadAdminPeopleAreas() {
+      if (state.adminPeopleAreaSaving) return;
+      const request = ++state.adminPeopleAreasRequest;
+      const generation = adminSharedGeneration;
+      const code = state.adminCode;
+      state.adminPeopleAreasStatus = "loading";
+      try {
+        const data = await rpc("ride_admin_people_areas", { p_admin_code: code }, adminRpcOptions());
+        if (request !== state.adminPeopleAreasRequest || generation !== adminSharedGeneration || code !== state.adminCode || !state.admin) return;
+        if (!data?.ok || !data.areas || typeof data.areas !== "object" || Array.isArray(data.areas)) throw new Error("Areas unavailable");
+        state.adminPeopleAreas = data.areas;
+        state.adminPeopleAreasStatus = "ready";
+      } catch (error) {
+        if (request !== state.adminPeopleAreasRequest || generation !== adminSharedGeneration || code !== state.adminCode || !state.admin) return;
+        state.adminPeopleAreasStatus = "unavailable";
+      }
+      if (state.view === "adminPersonDetail" || (state.view === "admin" && state.adminActiveTab === "people")) render();
+    }
+
+    async function saveAdminPersonArea(area) {
+      const personId = state.adminSelectedPersonId;
+      if (!adminPersonById(personId) || state.adminPeopleAreasStatus !== "ready" || state.adminPeopleAreaSaving) return;
+      if (area !== "" && !PEOPLE_BANK_AREAS.some(item => item.id === area)) return;
+      const generation = adminSharedGeneration;
+      const code = state.adminCode;
+      state.adminPeopleAreaSaving = true;
+      state.adminError = "";
+      state.adminMessage = "";
+      // Invalidate a pending read so it cannot replace a newly saved label.
+      ++state.adminPeopleAreasRequest;
+      render();
+      const currentSession = () => generation === adminSharedGeneration && code === state.adminCode && Boolean(state.admin);
+      try {
+        const data = await rpc("ride_admin_set_people_area", {
+          p_admin_code: code, p_person_id: personId, p_area: area,
+          p_expected_area: state.adminPeopleAreas[personId] || "",
+        }, adminRpcOptions());
+        if (!currentSession()) return;
+        if (!data?.ok) {
+          if (data?.error === "area_conflict") throw new Error("Another admin changed this area. Reload areas and review before saving again.");
+          throw new Error("Area could not be saved. Reload areas and try again.");
+        }
+        state.adminPeopleAreas[personId] = data.pickupArea;
+        if (state.adminSelectedPersonId === personId) state.adminMessage = "Area saved. Pickup addresses are unchanged.";
+      } catch (error) {
+        if (!currentSession()) return;
+        state.adminPeopleAreasStatus = "unavailable";
+        if (state.adminSelectedPersonId === personId) state.adminError = error.message || "Save unconfirmed. Reload areas before retrying.";
+      } finally {
+        if (currentSession()) {
+          state.adminPeopleAreaSaving = false;
+          if (state.view === "adminPersonDetail" || (state.view === "admin" && state.adminActiveTab === "people")) render();
+        }
+      }
     }
 
     function personAddressByType(person, type) {
@@ -6951,6 +7097,7 @@
         person.homeAddress,
         person.preferredAddress,
         person.notes,
+        PEOPLE_BANK_AREAS.find(area => area.id === adminPersonArea(person))?.label,
       ].filter(Boolean).join(" ").toLowerCase();
     }
 
@@ -6958,7 +7105,7 @@
       const query = String(state.adminPeopleSearch || "").trim().toLowerCase();
       const people = adminPeople()
         .slice()
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => String(a.name || "").trim().localeCompare(String(b.name || "").trim(), "en", { sensitivity: "base", numeric: true }));
 
       if (!query) return people;
       return people.filter((person) => adminPeopleSearchText(person).includes(query));
@@ -7046,6 +7193,7 @@
       state.adminMessage = "";
       state.view = "adminPersonDetail";
       render();
+      if (state.adminPeopleAreasStatus === "idle") loadAdminPeopleAreas();
     }
 
     function adminPersonEditable(person) {
@@ -7308,7 +7456,8 @@
 
       if (!stop.name || !stop.address) {
         state.adminError = "Name and pickup address are required.";
-        render();
+        // Keep rejected input in the editor without changing the saved draft.
+        screen.innerHTML = adminEditView({ ...stop, id: formData.get("id") || "" });
         return;
       }
 
@@ -7452,6 +7601,7 @@
     }
 
     function clearAdminPrivateState() {
+      clearAdminChat();
       state.admin = null;
       state.adminDraftStops = [];
       state.adminDeletedStopIds = [];
@@ -7470,6 +7620,12 @@
       state.adminRiderQuery = "";
       state.adminSearch = "";
       state.adminPeopleSearch = "";
+      state.adminPeopleAreas = {};
+      state.adminPeopleAreasStatus = "idle";
+      state.adminPeopleAreaSaving = false;
+      ++state.adminPeopleAreasRequest;
+      state.adminPeopleLetter = "";
+      state.adminPeopleReviewOnly = false;
       state.routeTimings = {};
       state.adminPlaceAutocomplete = {requestId:(state.adminPlaceAutocomplete?.requestId || 0)+1,suggestions:[],query:"",field:"",status:"idle"};
       state.adminAiPrompt = "";
@@ -8310,6 +8466,7 @@
           throw new Error(created?.error || "reset_failed");
         }
 
+        clearAdminChat();
         state.planDate = created.plan?.date || planDate;
         state.plan = created.plan || null;
         state.destination = created.destination || state.destination;
@@ -9169,6 +9326,7 @@
               <strong>${escapeHtml(person.name)}</strong>
               <span>${escapeHtml(preferredAddress || "No address listed")}</span>
               <span>${escapeHtml(person.phone || "No phone listed")}</span>
+              ${options.showData ? `<span>${escapeHtml(PEOPLE_BANK_AREAS.find(area => area.id === adminPersonArea(person))?.label || "Area unassigned")}</span>` : ""}
               ${options.showData && person.notes ? `<span>${escapeHtml(person.notes)}</span>` : ""}
             </div>
             ${status ? `<span class="pill ${status === "Possible duplicate" ? "gray" : ""}">${escapeHtml(status)}</span>` : ""}
@@ -9176,13 +9334,38 @@
         </article>`;
     }
 
+    function adminPersonLetter(person) {
+      const first = String(person.name || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").charAt(0).toUpperCase();
+      return /^[A-Z]$/.test(first) ? first : "#";
+    }
+
     function adminPeopleResultsHtml(options = {}) {
       const people = adminFilteredPeople();
-      if (!people.length) {
-        return `<section class="empty-card"><p>No people match that search.</p></section>`;
-      }
+      if (!options.showData) return people.length
+        ? people.map(person => adminPeopleResultCard(person, options)).join("")
+        : `<section class="empty-card"><p>No people match that search.</p></section>`;
 
-      return people.map((person) => adminPeopleResultCard(person, options)).join("");
+      const reviewIds = new Set(adminPeople().filter(person => adminPeopleStatus(person)).map(person => person.id));
+      const matches = people.filter(person => !state.adminPeopleReviewOnly || reviewIds.has(person.id));
+      const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split("");
+      const counts = Object.fromEntries(letters.map(letter => [letter, 0]));
+      matches.forEach(person => ++counts[adminPersonLetter(person)]);
+      const selected = letters.includes(state.adminPeopleLetter)
+        ? state.adminPeopleLetter : letters.find(letter => counts[letter]) || "A";
+      const searching = Boolean(String(state.adminPeopleSearch || "").trim());
+      const visible = searching ? matches : matches.filter(person => adminPersonLetter(person) === selected);
+      const heading = searching ? "Search results" : selected === "#" ? "Other names" : selected;
+      const emptyMessage = searching ? "No people match that search."
+        : !adminPeople().length ? "No people saved yet."
+        : state.adminPeopleReviewOnly ? "No people need review under this letter."
+        : "No people under this letter.";
+      return `
+        <button class="admin-chip-button people-bank-review" type="button" data-people-bank-review aria-pressed="${state.adminPeopleReviewOnly}">Needs review · ${reviewIds.size}</button>
+        ${searching ? "" : `<nav class="people-bank-letters" aria-label="Filter people by first letter">
+          ${letters.map(letter => `<button type="button" data-people-bank-letter="${letter}" aria-pressed="${selected === letter}" aria-label="${letter === "#" ? "Other names" : letter}, ${counts[letter]} people" ${counts[letter] ? "" : "disabled"}>${letter}</button>`).join("")}
+        </nav>`}
+        <h2 class="people-bank-heading" aria-live="polite">${heading} · ${visible.length} ${visible.length === 1 ? "person" : "people"}${state.adminPeopleReviewOnly ? " needing review" : ""}</h2>
+        ${visible.length ? visible.map(person => adminPeopleResultCard(person, options)).join("") : `<section class="empty-card"><p>${emptyMessage}</p></section>`}`;
     }
 
     function adminPeopleSearchInput(placeholder = "Search PeopleData by name, phone, or address") {
@@ -9218,6 +9401,7 @@
               </button>
             </header>
             <section class="admin-menu-list" aria-label="Admin tools">
+              ${adminMenuRow("chat", "Admin chat", "Ask about rides and address gaps", "notes")}
               ${adminMenuRow("ai", "AI Organizer", "Draft route ideas", "map")}
               ${adminMenuRow("people", "People Bank", "Saved riders and details", "user")}
               ${adminMenuRow("driver-list", "Driver list", "Availability and add driver", "users")}
@@ -9236,23 +9420,24 @@
     }
 
     function openAdminMenuPage(page) {
-      const nextTab = ["ai", "people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
+      const nextTab = ["chat", "ai", "people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
       state.adminActiveTab = nextTab;
       state.adminMenuOpen = false;
       state.adminError = "";
       render();
+      if (nextTab === "people") loadAdminPeopleAreas();
     }
 
     function adminActiveTab() {
       const tab = state.adminActiveTab || "riders";
       if (tab === "routes") return "drivers";
       if (tab === "people") return "people";
-      return ["ai", "drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
+      return ["chat", "ai", "drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
     }
 
-    function adminStatButton(tab, count, label, icon, extraClass = "") {
+    function adminStatButton(tab, count, label, extraClass = "") {
       const className = `admin-stat${extraClass ? ` ${extraClass}` : ""}`;
-      return `<button class="${className}" type="button" data-admin-tab="${escapeHtml(tab)}"><strong>${escapeHtml(count)}</strong><span>${escapeHtml(label)}</span><span class="admin-stat-glyph" aria-hidden="true">${peopleDetailIcon(icon)}</span></button>`;
+      return `<button class="${className}" type="button" data-admin-tab="${escapeHtml(tab)}"><strong>${escapeHtml(count)}</strong><span>${escapeHtml(label)}</span></button>`;
     }
 
     function adminRiderInitial(name) {
@@ -9330,14 +9515,15 @@
     function adminPeopleView() {
       return `
         <section class="admin-message">
-          PeopleData · ${adminPeople().length} people stored
+          People Bank · ${adminPeople().length} people stored. Browse by first name, or search across all letters.
         </section>
+        ${state.adminPeopleAreasStatus === "unavailable" ? `<section class="admin-message">Saved areas are unavailable. <button type="button" class="secondary-action" data-action="adminPeopleAreasReload">Reload areas</button></section>` : ""}
         <button class="primary-action admin-add-rider-action" type="button" data-action="adminNew">
           <span class="admin-control-action-icon" data-detail-icon="user-plus">${peopleDetailIcon("user-plus")}</span>
           <span>Add rider</span>
         </button>
-        ${adminPeopleSearchInput("Search full PeopleData")}
-        <section class="admin-rider-list" data-admin-people-results aria-label="PeopleData">
+        ${adminPeopleSearchInput("Search all names, phones, or addresses")}
+        <section class="admin-rider-list" data-admin-people-results aria-label="People Bank">
           ${adminPeopleResultsHtml({ showData: true })}
         </section>`;
     }
@@ -9852,6 +10038,18 @@
             ${peopleDetailRow("notes", "Notes", person.notes || "No notes saved")}
           </section>
 
+          <section class="admin-form-card" aria-label="Pickup area">
+            <label><span>Pickup area</span><select data-admin-person-area ${state.adminPeopleAreasStatus !== "ready" || state.adminPeopleAreaSaving ? "disabled" : ""}>
+              <option value="">Use address suggestion</option>
+              ${PEOPLE_BANK_AREAS.map(area => `<option value="${area.id}" ${state.adminPeopleAreas[person.id] === area.id ? "selected" : ""}>${area.label}</option>`).join("")}
+            </select></label>
+            <p>${state.adminPeopleAreas[person.id] ? "Saved area" : "Choose an area to confirm this person's section."}</p>
+            <button type="button" class="secondary-action" data-action="adminPersonAreaSave" ${state.adminPeopleAreasStatus !== "ready" || state.adminPeopleAreaSaving ? "disabled" : ""}>${state.adminPeopleAreaSaving ? "Saving…" : "Save area"}</button>
+            ${state.adminPeopleAreasStatus === "unavailable" ? `<p>Area service unavailable.</p><button type="button" class="secondary-action" data-action="adminPeopleAreasReload">Reload areas</button>` : ""}
+            ${state.adminMessage ? `<p role="status">${escapeHtml(state.adminMessage)}</p>` : ""}
+          </section>
+          ${adminPersonAddressIssues(person).length ? `<section class="admin-message"><strong>Address review</strong><ul>${adminPersonAddressIssues(person).map(issue => `<li>${escapeHtml(issue)}</li>`).join("")}</ul><p>Review the saved home and campus addresses above before editing.</p></section>` : ""}
+
           ${adminSharedSecondaryMode() !== "legacy" ? `<p data-shared-secondary-status role="status">Contact saves update People Bank only. Apply saved contact explicitly to linked pickups, then publish.</p>${(state.adminShared?.snapshot?.riders || []).filter(rider => rider.personId === person.id).map(rider => `<button type="button" class="secondary-action" data-shared-person-pickup="${escapeHtml(rider.id)}">Apply saved contact to ${escapeHtml(rider.name)} pickup</button>`).join("")}` : ""}
           <div class="people-detail-primary-actions">
             <button class="people-detail-action primary" type="button" data-admin-add-person="${escapeHtml(person.id)}">
@@ -10316,6 +10514,102 @@
         </article>`;
     }
 
+    function clearAdminChat() {
+      state.adminChatRequest++;
+      state.adminChatMessages = [];
+      state.adminChatPrompt = "";
+      state.adminChatPending = "";
+      state.adminChatStatus = "idle";
+      state.adminChatError = "";
+    }
+
+    function adminChatContextKey() {
+      return JSON.stringify([activePlanDate(), adminStops(), adminDrivers(), state.admin?.people, destinationSummary()]);
+    }
+
+    function renderAdminChatIfVisible() {
+      if (state.view === "admin" && adminActiveTab() === "chat") render();
+    }
+
+    async function requestAdminChat() {
+      const prompt = String(state.adminChatPrompt || "").trim();
+      if (!state.admin || state.adminChatStatus === "loading" || !prompt) return;
+      if (prompt.length > 2000) {
+        state.adminChatError = "Keep your question under 2,000 characters.";
+        renderAdminChatIfVisible();
+        return;
+      }
+      const request = ++state.adminChatRequest;
+      const generation = adminSharedGeneration;
+      const code = state.adminCode;
+      const planDate = activePlanDate();
+      const contextKey = adminChatContextKey();
+      const history = state.adminChatMessages.slice(-8);
+      const current = () => request === state.adminChatRequest && generation === adminSharedGeneration && code === state.adminCode && !!state.admin;
+      state.adminChatStatus = "loading";
+      state.adminChatPending = prompt;
+      state.adminChatError = "";
+      renderAdminChatIfVisible();
+      try {
+        const result = await adminAiOrganizerRequest({mode:"chat", planDate, prompt, history,
+          destination: destinationSummary(), drivers: adminDrivers(), stops: adminStops()});
+        if (!current()) return;
+        if (planDate !== activePlanDate() || contextKey !== adminChatContextKey()) {
+          state.adminChatError = "The ride information changed while I was answering. Send your question again for the latest plan.";
+          return;
+        }
+        if (typeof result.reply !== "string" || !result.reply.trim()) throw new Error("ai_empty_reply");
+        state.adminChatMessages = [...history, {role:"user",content:prompt}, {role:"assistant",content:result.reply.slice(0,4000)}].slice(-8);
+        state.adminChatPrompt = "";
+      } catch (error) {
+        if (!current()) return;
+        state.adminChatError = error?.message === "ai_not_configured"
+          ? "AI is not connected yet. Add the OpenAI API key in Supabase secrets to enable chat."
+          : error?.message === "invalid_admin_code"
+            ? "Your admin access could not be verified. Sign in again before retrying."
+            : "I couldn't get an answer. Your question is saved here so you can try again.";
+      } finally {
+        if (request === state.adminChatRequest) {
+          state.adminChatStatus = "idle";
+          state.adminChatPending = "";
+          renderAdminChatIfVisible();
+        }
+      }
+    }
+
+    function adminChatView() {
+      const loading = state.adminChatStatus === "loading";
+      const messages = state.adminChatMessages || [];
+      const earlier = loading ? messages : messages.slice(0, -2);
+      const latest = loading ? [] : messages.slice(-2);
+      const messageCard = message => `<article class="admin-chat-message ${message.role === "user" ? "is-user" : ""}"><strong>${message.role === "user" ? "You" : "RIDELIST AI"}</strong><p>${escapeHtml(message.content)}</p></article>`;
+      const starters = ["What needs attention before this ride?", "Who is missing a saved pickup address?", "How could we group these pickups?"];
+      return `<section class="admin-chat" aria-label="Admin chat">
+        <header class="admin-top-row">
+          <div><p class="eyebrow">RIDELIST · Admin AI</p><h1>Ask about your rides</h1><p>${escapeHtml(activePlanDate())} · Current draft and saved address gaps</p></div>
+          <button class="admin-icon-button admin-menu-button" type="button" data-action="adminMenuOpen" aria-label="Open admin menu">${peopleDetailIcon("menu")}</button>
+        </header>
+        <p class="admin-chat-intro">Ask a question, compare options, or check what needs attention. Suggestions stay here for you to review.</p>
+        <div class="admin-chat-toolbar"><button class="secondary-action" type="button" data-action="adminChatClear">New conversation</button><button class="secondary-action" type="button" data-admin-menu-page="ai">AI Organizer &rarr;</button></div>
+        ${!messages.length && !loading ? `<div class="admin-chat-starters" aria-label="Suggested questions">${starters.map(prompt => `<button class="admin-chat-starter" type="button" data-admin-chat-starter="${escapeHtml(prompt)}">${escapeHtml(prompt)} <span aria-hidden="true">&rarr;</span></button>`).join("")}</div>` : ""}
+        <div class="admin-chat-conversation">
+          ${earlier.length ? `<details class="admin-chat-history"><summary>Earlier messages · ${earlier.length / 2} ${earlier.length === 2 ? "exchange" : "exchanges"}</summary><div class="admin-chat-history-messages" tabindex="0" role="region" aria-label="Earlier messages">${earlier.map(messageCard).join("")}</div></details>` : ""}
+          ${latest.length || loading ? `<h2 class="admin-chat-section-label">Latest exchange</h2>` : ""}
+          <div class="admin-chat-messages" role="log" aria-live="polite" aria-label="Conversation" aria-busy="${loading}" ${latest.length || loading ? 'tabindex="0"' : ""}>
+            ${latest.map(messageCard).join("")}
+            ${loading ? `${messageCard({role:"user",content:state.adminChatPending})}<p role="status">Looking at this ride plan…</p>` : ""}
+          </div>
+        </div>
+        ${state.adminChatError ? `<p class="admin-message error" role="alert">${escapeHtml(state.adminChatError)}</p>` : ""}
+        <form class="admin-chat-composer" data-admin-chat-form>
+          <label for="adminChatQuestion">Your question</label>
+          <textarea id="adminChatQuestion" data-admin-chat-prompt maxlength="2000" rows="2" placeholder="What would you like to check?" ${loading ? "disabled" : ""}>${escapeHtml(state.adminChatPrompt)}</textarea>
+          <button class="primary-action" data-admin-chat-send type="submit" ${loading || !String(state.adminChatPrompt || "").trim() ? "disabled" : ""}>${loading ? "Thinking…" : "Send question"}</button>
+        </form>
+        <p class="admin-chat-footnote">Uses the current draft and saved address gaps. Check suggestions before acting; chat cannot confirm addresses or traffic. Remembers the latest four exchanges and clears when you sign out, reload, or switch plans.</p>
+      </section>`;
+    }
+
     function adminAiOrganizerView() {
       const routes = adminAiRoutes().map((route) => ({
         ...route,
@@ -10400,7 +10694,7 @@
       const pendingAlertCount = state.adminNotifyDraft?.driverSlugs?.length || 0;
       const visibleChangeCount = pendingAlertCount || changed;
       const activeTab = adminActiveTab();
-      const activeView = activeTab === "people"
+      const activeView = activeTab === "chat" ? adminChatView() : activeTab === "people"
         ? adminPeopleView()
         : activeTab === "ai"
           ? adminAiOrganizerView()
@@ -10422,7 +10716,7 @@
         </div>`;
       }
 
-      if (activeTab === "ai") {
+      if (activeTab === "ai" || activeTab === "chat") {
         return `
         <div class="stack admin-control-screen admin-ai-screen">
           ${activeView}
@@ -10446,9 +10740,9 @@
           </section>
 
           <section class="admin-stats admin-control-stats" aria-label="Ride control stats">
-            ${adminStatButton("drivers", drivers.length, "drivers available", "users")}
-            ${adminStatButton("riders", adminStops().length, ridePlanRidersLabel(), "user")}
-            ${adminStatButton("changes", visibleChangeCount, "changes today", "changes", pendingAlertCount ? "is-alert" : "")}
+            ${adminStatButton("drivers", drivers.length, "drivers available")}
+            ${adminStatButton("riders", adminStops().length, ridePlanRidersLabel())}
+            ${adminStatButton("changes", visibleChangeCount, "changes today", pendingAlertCount ? "is-alert" : "")}
           </section>
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
@@ -10719,8 +11013,7 @@
         </section>`;
     }
 
-    function adminEditView() {
-      const stop = adminSelectedStop();
+    function adminEditView(stop = adminSelectedStop()) {
       const backAction = state.adminEditMode === "add" && state.adminSelectedPersonId ? "adminPersonAddBack" : "adminBack";
       const backLabel = backAction === "adminPersonAddBack" ? "Back to person" : "Back to admin";
       if (!stop) {
@@ -11284,6 +11577,24 @@
     }
 
     screen.addEventListener("click", (event) => {
+      const peopleLetterButton = event.target.closest("[data-people-bank-letter]");
+      if (peopleLetterButton) {
+        const letter = peopleLetterButton.dataset.peopleBankLetter;
+        if (!/^[A-Z#]$/.test(letter || "")) return;
+        state.adminPeopleLetter = letter;
+        render();
+        screen.querySelector(`[data-people-bank-letter="${letter}"]`)?.focus?.();
+        return;
+      }
+
+      if (event.target.closest("[data-people-bank-review]")) {
+        state.adminPeopleReviewOnly = !state.adminPeopleReviewOnly;
+        state.adminPeopleLetter = "";
+        render();
+        screen.querySelector("[data-people-bank-review]")?.focus?.();
+        return;
+      }
+
       const driverRunButton = event.target.closest("[data-driver-run]");
       if (driverRunButton) {
         openDriverRun(driverRunButton.dataset.driverRun);
@@ -11346,6 +11657,8 @@
       if (action === "enableRouteAlerts") enableDriverRouteAlerts();
       if (action === "admin") openAdminCodeModal();
       if (action === "adminSignOut") signOutAdmin();
+      if (action === "adminPersonAreaSave") saveAdminPersonArea(document.querySelector("[data-admin-person-area]")?.value || "");
+      if (action === "adminPeopleAreasReload") loadAdminPeopleAreas();
       if (action === "adminMenuOpen") {
         state.adminMenuOpen = true;
         render();
@@ -11354,6 +11667,9 @@
         state.adminMenuOpen = false;
         render();
       }
+      if (action === "adminChatClear") { clearAdminChat(); renderAdminChatIfVisible(); }
+      const chatStarter = event.target.closest("[data-admin-chat-starter]");
+      if (chatStarter) { state.adminChatPrompt = chatStarter.dataset.adminChatStarter; requestAdminChat(); }
       if (action === "adminAiOrganize") requestAdminAiRoutes();
       if (action === "adminSharedBranding") saveAdminSharedBrandingFromForm(event.target.closest("form"));
       const sharedPickup = event.target.closest("[data-shared-person-pickup]");
@@ -11539,6 +11855,13 @@
     });
 
     screen.addEventListener("input", (event) => {
+      const chatInput = event.target.closest("[data-admin-chat-prompt]");
+      if (chatInput) {
+        state.adminChatPrompt = chatInput.value;
+        const send = screen.querySelector("[data-admin-chat-send]");
+        if (send) send.disabled = state.adminChatStatus === "loading" || !chatInput.value.trim();
+        return;
+      }
       const aiPromptInput = event.target.closest("[data-admin-ai-prompt]");
       if (aiPromptInput) {
         state.adminAiPrompt = aiPromptInput.value;
@@ -11615,6 +11938,7 @@
     });
 
     screen.addEventListener("submit", (event) => {
+      if (event.target.closest('[data-admin-chat-form]')) { event.preventDefault(); requestAdminChat(); return; }
       const quickMove=event.target.closest('[data-admin-form="quick-move"]');
       if(quickMove){event.preventDefault();quickMoveAdminShared(quickMove.dataset.riderId,new FormData(quickMove).get('driverSlug'),JSON.parse(quickMove.dataset.sharedSnapshot));return;}
       const driverProfileForm = event.target.closest("[data-driver-profile-form]");

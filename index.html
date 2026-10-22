@@ -5828,7 +5828,7 @@
         state.routeTimingError = "";
         state.routeTimingPlanDate = activePlanDate();
         state.routeTimings = rehearsalRouteTimingMap();
-        render();
+        if (state.view === "admin" && adminActiveTab() === "drivers") render();
         return;
       }
 
@@ -5836,7 +5836,7 @@
       state.routeTimingError = "";
       state.routeTimingPlanDate = activePlanDate();
       state.routeTimings = Object.fromEntries(adminDrivers().map((driver) => [driver.slug, { status: "loading" }]));
-      render();
+      if (state.view === "admin" && adminActiveTab() === "drivers") render();
 
       try {
         const timing = await secureRouteTimingRequest("admin", {
@@ -5856,7 +5856,8 @@
         state.routeTimingError = error.message;
         console.warn(error);
       } finally {
-        render();
+        // Timing is shown on the routes tab; other views may contain unsaved input.
+        if (state.view === "admin" && adminActiveTab() === "drivers") render();
       }
     }
 
@@ -7455,7 +7456,8 @@
 
       if (!stop.name || !stop.address) {
         state.adminError = "Name and pickup address are required.";
-        render();
+        // Keep rejected input in the editor without changing the saved draft.
+        screen.innerHTML = adminEditView({ ...stop, id: formData.get("id") || "" });
         return;
       }
 
@@ -8328,7 +8330,13 @@
         await clearAdminServerDraft();
         await loadAdminActivity();
         state.view = "admin";
-        state.drivers = orderDriversForDisplay(await rpc("ride_driver_directory", { p_plan_date: activePlanDate() }));
+        // Publication is confirmed. A follow-up read cannot make it fail or
+        // send the admin back through the publish/retry flow.
+        try {
+          state.drivers = orderDriversForDisplay(await rpc("ride_driver_directory", { p_plan_date: activePlanDate() }));
+        } catch {
+          state.adminMessage = "Route changes published. The driver list could not refresh. Reload when your connection is available.";
+        }
         loadAdminRouteTiming();
       } catch (error) {
         const failedBackup = saveAdminDraftBackup("publish-failed");
@@ -11005,8 +11013,7 @@
         </section>`;
     }
 
-    function adminEditView() {
-      const stop = adminSelectedStop();
+    function adminEditView(stop = adminSelectedStop()) {
       const backAction = state.adminEditMode === "add" && state.adminSelectedPersonId ? "adminPersonAddBack" : "adminBack";
       const backLabel = backAction === "adminPersonAddBack" ? "Back to person" : "Back to admin";
       if (!stop) {

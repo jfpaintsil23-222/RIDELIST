@@ -32,11 +32,11 @@ async function loadApp(fetchImpl, options = {}) {
   });
 
   const context = {
-    console,
+    console: options.console || console,
     crypto: { randomUUID: () => "00000000-0000-0000-0000-000000009001" },
     encodeURIComponent,
     URLSearchParams,
-    FormData: class {},
+    FormData: options.formDataClass || class {},
     location: {
       href: `https://example.test/${options.search || ""}`,
       search: options.search || "",
@@ -130,6 +130,7 @@ async function loadApp(fetchImpl, options = {}) {
       adminProfileOptionsHtml: typeof adminProfileOptionsHtml === "function" ? adminProfileOptionsHtml : undefined,
       adminActivityList: typeof adminActivityList === "function" ? adminActivityList : undefined,
       loadDrivers: typeof loadDrivers === "function" ? loadDrivers : undefined,
+      loadAdminRouteTiming,
       publishAdminDraft: typeof publishAdminDraft === "function" ? publishAdminDraft : undefined,
       saveAdminDriverAvailability: typeof saveAdminDriverAvailability === "function" ? saveAdminDriverAvailability : undefined,
       saveAdminNewDriver: typeof saveAdminNewDriver === "function" ? saveAdminNewDriver : undefined,
@@ -2570,6 +2571,65 @@ test("admin publish runs backend dry-run before live publish", async () => {
   assert.equal(app.state.adminMessage, "Route changes published.");
 });
 
+for (const refreshFailure of ["network", "http"]) {
+  test(`confirmed publish stays successful when driver refresh fails (${refreshFailure})`, async () => {
+    const calls = [];
+    const published = {
+      ok: true,
+      plan: { date: "2099-01-04" },
+      destination: { label: "Test destination", address: "1 Example Way" },
+      drivers: [{ slug: "demo-driver", displayName: "Demo Driver", initials: "DD", pickupCount: 1, sortOrder: 1 }],
+      stops: [{ id: "saved-stop", driverSlug: "demo-driver", stopOrder: 1, name: "Demo Rider", phone: "", address: "2 Example Way", pickupTime: "12:00 PM" }],
+      people: [],
+    };
+    const app = await loadApp(async (url, options) => {
+      if (String(url).includes("/functions/v1/ride-route-timing")) {
+        return { ok: true, json: async () => ({ ok: true, timings: {} }) };
+      }
+      const name = String(url).split("/rpc/").at(-1);
+      const body = options?.body ? JSON.parse(options.body) : null;
+      calls.push({ name, body });
+      if (name === "ride_admin_save_draft") {
+        return { ok: true, json: async () => ({ ok: true, draft: { ...body.p_draft, planDate: body.p_plan_date, savedAt: "2099-01-04T12:00:00Z" } }) };
+      }
+      if (name === "ride_admin_clear_draft") return { ok: true, json: async () => ({ ok: true }) };
+      if (name === "ride_admin_activity") return { ok: true, json: async () => ({ ok: true, events: [] }) };
+      if (name === "ride_admin_publish_plan_dry_run") return { ok: true, json: async () => ({ ok: true, issues: [], issueCount: 0 }) };
+      if (name === "ride_admin_publish_plan") return { ok: true, json: async () => published };
+      if (name === "ride_driver_directory") {
+        if (!calls.some(call => call.name === "ride_admin_publish_plan")) return { ok: true, json: async () => [] };
+        if (refreshFailure === "network") throw new Error("Failed to fetch");
+        return { ok: false, status: 503, text: async () => JSON.stringify({ message: "Temporary service failure" }) };
+      }
+      return { ok: true, json: async () => [] };
+    });
+    // Let the automatic initial directory load finish before staging the edit.
+    await new Promise(resolve => setImmediate(resolve));
+    app.state.adminCode = "synthetic-admin-code";
+    app.state.planDate = "2099-01-04";
+    app.state.admin = { ...published, stops: [] };
+    app.state.adminDraftStops = [{ ...published.stops[0], id: "temp-demo" }];
+    app.state.adminDeletedStopIds = [];
+    const existingDirectory = [{ slug: "demo-driver", display_name: "Demo Driver", pickup_count: 0 }];
+    app.state.drivers = existingDirectory;
+
+    await app.publishAdminDraft();
+
+    assert.equal(app.state.adminPublishFailed, false, "a refresh error must not change a confirmed publish result");
+    assert.equal(app.state.view, "admin");
+    assert.equal(app.state.adminLoading, false);
+    assert.match(app.state.adminMessage, /Route changes published/);
+    assert.match(app.state.adminMessage, /driver list.*refresh/i);
+    assert.equal(app.state.adminError, "");
+    assert.equal(app.state.adminDraftStops[0].id, "saved-stop");
+    assert.equal(app.readAdminDraftBackup("2099-01-04"), null);
+    assert.equal(app.state.drivers, existingDirectory, "failed refresh retains the last known directory");
+    assert.equal(calls.filter(call => call.name === "ride_admin_publish_plan").length, 1);
+    assert.equal(calls.filter(call => call.name === "ride_admin_save_draft").length, 1, "confirmed publish must not create a failed-publish draft");
+    assert.doesNotMatch(app.adminReviewView(), /Try publishing again/);
+  });
+}
+
 test("admin publish stops when backend dry-run reports blockers", async () => {
   const calls = [];
   const app = await loadApp(async (url, options) => {
@@ -2737,6 +2797,118 @@ test("admin publish explains connection failures without losing draft", async ()
   assert.equal(app.readAdminDraftBackup("2026-08-30").stops[0].name, "Faith Test");
   assert.match(app.adminReviewView(), /Try publishing again \(1\)/);
 });
+
+for (const mode of ["new", "edit"]) {
+  for (const invalidField of ["name", "address"]) {
+    test(`rider ${mode} validation retains input after whitespace-only ${invalidField} without saving it`, async () => {
+      const writes = [];
+      const app = await loadApp(async (url, options = {}) => {
+        const endpoint = String(url).split("/").at(-1);
+        if (endpoint === "ride_admin_save_draft") {
+          const body = JSON.parse(options.body);
+          writes.push(body.p_draft);
+          return { ok: true, json: async () => ({ ok: true, draft: { ...body.p_draft, planDate: body.p_plan_date } }) };
+        }
+        if (endpoint === "ride-route-timing") return { ok: true, json: async () => ({ ok: true, timings: {} }) };
+        return { ok: true, json: async () => [] };
+      }, { formDataClass: class {
+        constructor(form) { this.values = form.values; }
+        get(name) { return this.values[name] ?? null; }
+      } });
+      await new Promise(resolve => setImmediate(resolve));
+      const original = { id: "example-stop", driverSlug: "example-driver", stopOrder: 1, name: "Example Rider", address: "1 Example Way", notes: "Original note" };
+      app.state.adminCode = "synthetic-admin-code";
+      app.state.planDate = "2099-01-04";
+      app.state.admin = { plan: { date: "2099-01-04" }, drivers: [{ slug: "example-driver", displayName: "Example Driver", active: true }], stops: mode === "edit" ? [{ ...original }] : [], people: [] };
+      app.state.adminDraftStops = mode === "edit" ? [{ ...original }] : [];
+      app.state.adminDeletedStopIds = [];
+      const before = JSON.stringify(app.state.adminDraftStops);
+      const click = (selector, dataset) => app.__screen.listeners.click({ target: { closest: value => value === selector ? { dataset } : null } });
+      const openEditor = () => mode === "edit"
+        ? click("[data-admin-edit]", { adminEdit: "example-stop" })
+        : click("[data-action]", { action: "adminNew" });
+      const submit = values => app.__screen.listeners.submit({
+        preventDefault() {},
+        target: { closest: selector => selector === "[data-admin-form='rider']" ? { values } : null },
+      });
+      const entered = { ...original, id: mode === "edit" ? original.id : "", name: "Updated Example", address: "2 Example Way", pickupTime: "1:15 PM", notes: "Unsaved <example> note", [invalidField]: "   " };
+      openEditor();
+      submit(entered);
+      assert.equal(app.state.view, "adminEdit");
+      assert.match(app.state.adminError, /Name and pickup address are required/);
+      assert.equal(JSON.stringify(app.state.adminDraftStops), before, "invalid input must not replace the saved draft");
+      assert.equal(app.readAdminDraftBackup("2099-01-04"), null);
+      assert.equal(writes.length, 0);
+      assert.match(app.__screen.innerHTML, /Unsaved &lt;example&gt; note/);
+      assert.match(app.__screen.innerHTML, /value="1:15 PM"/);
+      assert.match(app.__screen.innerHTML, invalidField === "name" ? /value="2 Example Way"/ : /value="Updated Example"/);
+      assert.match(app.__screen.innerHTML, new RegExp(`name="${invalidField}" value=""`));
+      if (mode === "new") assert.match(app.__screen.innerHTML, /name="id" value=""/);
+
+      click("[data-action]", { action: "adminBack" });
+      assert.equal(app.state.view, "admin");
+      assert.equal(JSON.stringify(app.state.adminDraftStops), before);
+      openEditor();
+      assert.doesNotMatch(app.__screen.innerHTML, /Unsaved &lt;example&gt; note/);
+      submit(entered);
+      submit({ ...entered, [invalidField]: invalidField === "name" ? "Corrected Example" : "3 Example Way" });
+      assert.equal(app.state.view, "admin");
+      assert.equal(app.state.adminError, "");
+      assert.equal(app.state.adminDraftStops.length, 1);
+      assert.equal(app.state.adminDraftStops[0].notes, "Unsaved <example> note");
+      assert.equal(app.readAdminDraftBackup("2099-01-04").stops[0].notes, "Unsaved <example> note");
+      assert.equal(writes.length, 1);
+      assert.equal(app.state.admin.stops.length, mode === "edit" ? 1 : 0, "saving a draft does not publish it");
+      if (mode === "edit") assert.equal(app.state.admin.stops[0].notes, "Original note");
+    });
+  }
+}
+
+for (const outcome of ["success", "error"]) {
+  for (const startedInEditor of [false, true]) {
+    test(`admin timing ${outcome} preserves editor input when started ${startedInEditor ? "inside" : "before"} the editor`, async () => {
+      let finishTiming;
+      const timingResponse = new Promise(resolve => { finishTiming = resolve; });
+      const warnings = [];
+      const app = await loadApp(async url => String(url).endsWith("ride-route-timing")
+        ? timingResponse : { ok: true, json: async () => [] }, {
+        console: { ...console, warn: error => warnings.push(error.message) },
+        formDataClass: class { constructor(form) { this.values = form.values; } get(name) { return this.values[name] ?? null; } },
+      });
+      await new Promise(resolve => setImmediate(resolve));
+      const stop = { id: "example-stop", driverSlug: "example-driver", stopOrder: 1, name: "Example Rider", address: "1 Example Way", notes: "Original note" };
+      app.state.view = "admin";
+      app.state.adminActiveTab = "drivers";
+      app.state.adminExpandedDriverSlug = "example-driver";
+      app.state.adminCode = "synthetic-admin-code";
+      app.state.planDate = "2099-01-04";
+      app.state.admin = { plan: { date: "2099-01-04" }, drivers: [{ slug: "example-driver", displayName: "Example Driver", active: true }], stops: [{ ...stop }], people: [] };
+      app.state.adminDraftStops = [{ ...stop }];
+      let pending = startedInEditor ? null : app.loadAdminRouteTiming();
+      if (!startedInEditor) assert.match(app.__screen.innerHTML, /Checking route time/);
+      clickPeopleBank(app, "[data-admin-edit]", { adminEdit: "example-stop" });
+      app.__screen.listeners.submit({ preventDefault() {}, target: { closest: selector => selector === "[data-admin-form='rider']"
+        ? { values: { ...stop, name: "Updated Example", address: "   ", notes: "Retained during timing" } } : null } });
+      assert.match(app.__screen.innerHTML, /Retained during timing/);
+      if (startedInEditor) pending = app.loadAdminRouteTiming();
+      assert.match(app.__screen.innerHTML, /Retained during timing/, "starting timing must not replace the form");
+      finishTiming({ ok: true, json: async () => outcome === "success"
+        ? { ok: true, timings: { "example-driver": { status: "ready" } } }
+        : { ok: false, error: "synthetic_timing_failure" } });
+      await pending;
+      assert.equal(app.state.routeTimingStatus, outcome === "success" ? "ready" : "error");
+      assert.equal(app.state.view, "adminEdit");
+      assert.match(app.__screen.innerHTML, /Retained during timing/, "finishing timing must not replace the form");
+      assert.match(app.__screen.innerHTML, /value="Updated Example"/);
+      assert.equal(app.state.adminDraftStops[0].notes, "Original note");
+      assert.equal(warnings.length, outcome === "success" ? 0 : 1);
+      clickPeopleBank(app, "[data-action]", { action: "adminBack" });
+      assert.equal(app.state.view, "admin");
+      assert.doesNotMatch(app.__screen.innerHTML, /Checking route time/);
+      if (outcome === "error") assert.match(app.__screen.innerHTML, /Route timing paused/);
+    });
+  }
+}
 
 test("admin shows draft protection after rider edits are autosaved", async () => {
   const app = await loadApp();

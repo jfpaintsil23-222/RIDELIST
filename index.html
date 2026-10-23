@@ -5550,11 +5550,13 @@
       const wordedRunNumber = wordedRun
         ? { first: 1, second: 2, third: 3 }[wordedRun[1].toLowerCase()]
         : null;
-      const zone = /\b(?:tsu|texas southern)\b/i.test(routeContext)
-        ? "TSU Zone"
-        : /\b(?:hcu|houston christian)\b/i.test(routeContext)
-          ? "HCU Zone"
-          : "FLOC";
+      const zone = /\b(?:rides?\s+back|return(?:\s+ride)?)\b/i.test([rawLabel, stop.area].filter(Boolean).join(" "))
+        ? "Rides Back"
+        : /\b(?:tsu|texas southern)\b/i.test(routeContext)
+          ? "TSU Zone"
+          : /\b(?:hcu|houston christian)\b/i.test(routeContext)
+            ? "HCU Zone"
+            : "FLOC";
       const runNumber = zone === "FLOC" ? 1 : Number(numberedRun?.[1] || wordedRunNumber || 1);
       return `${zone} · Run ${Math.min(Math.max(runNumber, 1), 3)}`;
     }

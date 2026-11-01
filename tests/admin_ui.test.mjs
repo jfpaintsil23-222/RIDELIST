@@ -77,6 +77,7 @@ async function loadApp(fetchImpl, options = {}) {
       __screen: screen,
       runAdminSharedSecondary: typeof runAdminSharedSecondary === "function" ? runAdminSharedSecondary : undefined,
       adminView,
+      adminRouteHeaderSummary,
       openAdminMenuPage: typeof openAdminMenuPage === "function" ? openAdminMenuPage : undefined,
       adminReviewView: typeof adminReviewView === "function" ? adminReviewView : undefined,
       adminResetView: typeof adminResetView === "function" ? adminResetView : undefined,
@@ -1674,12 +1675,12 @@ test("people detail values use a softer text weight", async () => {
   assert.doesNotMatch(rule, /font-weight:\s*900;/);
 });
 
-test("admin route headers summarize route area and first pickup timing", async () => {
+test("admin route headers show driver departure rather than passenger pickup time", async () => {
   const app = await loadApp();
 
   app.state.admin = {
     drivers: [
-      { slug: "joojo", displayName: "Joojo", initials: "JP" },
+      { slug: "joojo", displayName: "Joojo", initials: "JP", routeNotes: "Leave by 10:20 AM. Pickup at 11:00 AM." },
       { slug: "dawson", displayName: "Dawson", initials: "DW" },
     ],
     stops: [
@@ -1719,12 +1720,31 @@ test("admin route headers summarize route area and first pickup timing", async (
 
   const html = app.adminView();
   assert.match(html, /Cypress Route/);
-  assert.match(html, /Starts 11:00 AM/);
+  assert.match(html, /Leave by: 10:20 AM/);
+  assert.doesNotMatch(html, /Starts 11:00 AM/);
   assert.match(html, /2 Pickups/);
   assert.match(html, /data-admin-edit="stop-1"/);
   assert.match(html, /data-admin-move="stop-1"/);
   assert.match(html, /href="tel:\+12817041697"/);
   assert.match(html, /target="_blank" rel="noreferrer">Map/);
+});
+
+test("HCU route headers show the instructed arrival deadline", async () => {
+  const app = await loadApp();
+  const summary = app.adminRouteHeaderSummary(
+    { slug: "test-hcu", route_notes: "HCU at HODO: arrive by 11:20 AM; pickup at 11:30 AM." },
+    [{ stopOrder: 1, area: "HCU", pickupTime: "11:30 AM", readyBy: "11:20 AM" }],
+  );
+  assert.equal(summary.timingLabel, "Arrive by: 11:20 AM");
+});
+
+test("route headers never relabel a passenger ready or pickup time as driver departure", async () => {
+  const app = await loadApp();
+  const stops = [{ stopOrder: 1, area: "Campus", pickupTime: "12:00 PM", readyBy: "11:55 AM" }];
+  for (const routeNotes of ["", "Pickup at 12:00 PM.", "Leave by 99:70 AM.", "On call when the group arrives."]) {
+    assert.equal(app.adminRouteHeaderSummary({ slug: "test-driver", routeNotes }, stops).timingLabel, "Time pending");
+  }
+  assert.equal(app.adminRouteHeaderSummary({ routeNotes: "Leave by 11:45 AM." }, []).timingLabel, "");
 });
 
 test("driver runs group FLOC stops and keep explicit shuttle runs separate", async () => {

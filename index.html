@@ -5650,10 +5650,16 @@
 
       const summary = driverRouteSummary({ slug: driver.slug, routeLabel: driver.routeLabel, timeLabel: driver.timeLabel });
       const routeLabel = routeAreaFromStops(stops) || summary.routeLabel || "Assigned Route";
-      const pickupTime = firstPickupTime(stops);
+      // Driver instructions are separate from passenger pickup/ready-by times.
+      const instruction = String(driver.routeNotes || driver.route_notes || "").match(
+        /\b(leave|arrive)\s+by\s*:?\s*((?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*[ap]m)\b/i,
+      );
+      const timingLabel = instruction
+        ? `${instruction[1].toLowerCase() === "arrive" ? "Arrive" : "Leave"} by: ${instruction[2].replace(/\s*([ap]m)$/i, " $1").toUpperCase()}`
+        : "Time pending";
       return {
         routeLabel,
-        timingLabel: pickupTime ? `Starts ${pickupTime}` : routeTimeLabel(summary),
+        timingLabel,
       };
     }
 

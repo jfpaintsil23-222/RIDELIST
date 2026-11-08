@@ -1843,7 +1843,7 @@ test("driver dashboard shows assigned zone runs as the primary navigation", asyn
   assert.match(html, /assigned riders · 2 runs/);
   assert.match(html, /data-driver-run="tsu-zone-run-1"/);
   assert.match(html, /TSU Zone · Run 1/);
-  assert.match(html, /1 rider · Leave 11:45 AM/);
+  assert.match(html, /1 rider · Pickup: 11:45 AM/);
   assert.match(html, /TSU Zone · Run 2/);
   assert.match(html, /Weather/);
   assert.doesNotMatch(html, /route-scene/);
@@ -1921,7 +1921,7 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   assert.match(homeHtml, /Good morning, Joojo/);
   assert.match(homeHtml, /assigned riders · 1 run/);
   assert.match(homeHtml, /FLOC · Run 1/);
-  assert.match(homeHtml, /2 riders · Leave 11:00 AM/);
+  assert.match(homeHtml, /2 riders · Pickup: 11:00 AM/);
   assert.match(homeHtml, /Houston weather/);
   assert.doesNotMatch(homeHtml, /Total route/);
   assert.doesNotMatch(homeHtml, /<section class="destination-block">/);
@@ -1966,6 +1966,46 @@ test("driver dashboard summarizes route and unlocks UH route after all pickups",
   const completeHtml = app.ridesView();
   assert.match(completeHtml, /All pickups complete/);
   assert.match(completeHtml, /aria-label="Start route to UH Hilton"/);
+});
+
+test("pickup and return runs stay separate and pickup times are not departure times", async () => {
+  const app = await loadApp();
+  app.state.route = {
+    driver: { slug: "example", displayName: "Example", routeNotes: "Leave by: 11:50 AM." },
+    destination: { label: "Event venue", address: "100 Example St" },
+    riders: [
+      { stopOrder: 1, name: "Rider A", address: "10 Return Lane", area: "HCU", routeLabel: "HCU Run 1", pickupTime: "12:00 PM" },
+      { stopOrder: 2, name: "Rider B", address: "20 Example St", area: "HCU", routeLabel: "HCU Run 2", pickupTime: "12:30 PM" },
+      { stopOrder: 3, name: "Rider A", address: "10 Return Lane", area: "HCU", routeLabel: "Rides Back HCU Run 1" },
+      { stopOrder: 4, name: "Rider B", address: "20 Example St", area: "HCU", routeLabel: "Rides Back HCU Run 2" },
+    ],
+  };
+  assert.deepEqual(Array.from(app.driverRuns(app.state.route.riders), r => r.label), ["HCU Zone · Run 1", "HCU Zone · Run 2", "Rides Home · Run 1", "Rides Home · Run 2"]);
+  const home = app.driverHomeView();
+  assert.match(home, /Leave by: 11:50 AM/);
+  assert.match(home, /Pickup: 12:00 PM/);
+  assert.doesNotMatch(home, /Leave 12:00 PM/);
+  assert.equal((home.match(/Leave by: 11:50 AM/g) || []).length, 1);
+});
+
+test("return run uses drop-off labels and never routes back to the event after completion", async () => {
+  const app = await loadApp();
+  app.state.planDate = "2099-01-04";
+  app.state.route = {
+    driver: { slug: "example", displayName: "Example" },
+    destination: { label: "Event venue", address: "100 Example St" },
+    riders: [{ stopOrder: 5, name: "Rider A", address: "10 Example Lane", area: "HCU", routeLabel: "Rides Back HCU Run 1", notes: "Return home" }],
+  };
+  const pending = app.ridesView();
+  assert.match(pending, /Drop-off 1/);
+  assert.doesNotMatch(pending, /Final destination|Event venue/);
+  app.state.selectedRider = app.state.route.riders[0];
+  assert.match(app.detailView(), /Drop-off details/);
+  assert.match(app.detailView(), /Mark dropped off/);
+  app.__storage.setItem("ride-picked-2099-01-04-example-5", "1");
+  const completed = app.ridesView();
+  assert.match(completed, /All drop-offs complete/);
+  assert.doesNotMatch(completed, /Start route|100%20Example%20St/);
 });
 
 test("driver route timing remains available without cluttering the run overview", async () => {
@@ -3248,7 +3288,7 @@ test("driver login sends the typed passcode to live route timing", async () => {
   assert.equal(timingRequests.length, 1);
   assert.equal(timingRequests[0].accessCode, "rides123");
   assert.equal(app.routeTimingForDriver("john-mark").durationText, "1 hr 46 min");
-  assert.match(app.driverHomeView(), /1 rider · Leave 11:20 AM/);
+  assert.match(app.driverHomeView(), /1 rider · Pickup: 11:20 AM/);
   assert.doesNotMatch(app.driverHomeView(), /Total route:/);
 });
 

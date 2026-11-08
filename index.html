@@ -5542,6 +5542,12 @@
       return (exactTime || sorted[0] || {}).pickupTime || "";
     }
 
+    function isReturnRide(stop = {}) {
+      return /\b(?:rides?\s+(?:back|home)|return(?:\s+ride)?)\b/i.test(
+        [stop.routeLabel || stop.route_label, stop.area].filter(Boolean).join(" "),
+      );
+    }
+
     function driverRunLabel(stop = {}) {
       const rawLabel = String(stop.routeLabel || stop.route_label || "").trim();
       const routeContext = [rawLabel, stop.area, stop.address].filter(Boolean).join(" ");
@@ -5550,7 +5556,7 @@
       const wordedRunNumber = wordedRun
         ? { first: 1, second: 2, third: 3 }[wordedRun[1].toLowerCase()]
         : null;
-      const zone = /\b(?:tsu|texas southern)\b/i.test(routeContext)
+      const zone = isReturnRide(stop) ? "Rides Home" : /\b(?:tsu|texas southern)\b/i.test(routeContext)
         ? "TSU Zone"
         : /\b(?:hcu|houston christian)\b/i.test(routeContext)
           ? "HCU Zone"
@@ -5904,7 +5910,7 @@
         <a class="profile-destination-card" href="${googleMaps(destination.address)}" target="_blank" rel="noreferrer">
           <span class="destination-icon">${iconSvg("pin")}</span>
           <span class="destination-copy">
-            <strong>All routes end at<br>${escapeHtml(destination.label)}</strong>
+            <strong>Pickup destination<br>${escapeHtml(destination.label)}</strong>
             <p>${escapeHtml(destination.address)}</p>
           </span>
           <span class="destination-map-icon">${iconSvg("map")}</span>
@@ -11135,7 +11141,13 @@
 
     function driverRunRow(run) {
       const riderLabel = `${run.riderCount} ${run.riderCount === 1 ? "rider" : "riders"}`;
-      const timing = run.departureTime ? ` · Leave ${run.departureTime}` : " · Time pending";
+      const returning = run.riders.every(isReturnRide);
+      const firstPickupRun = driverRuns(state.route?.riders || []).find((item) => !item.riders.every(isReturnRide));
+      const instruction = !returning && run.key === firstPickupRun?.key
+        ? String(state.route?.driver?.routeNotes || "").match(/\b(leave|arrive)\s+by\s*:?\s*((?:1[0-2]|0?[1-9])(?::[0-5]\d)?\s*[ap]m)\b/i)
+        : null;
+      const departure = instruction ? ` · ${instruction[1].toLowerCase() === "leave" ? "Leave" : "Arrive"} by: ${instruction[2]}` : "";
+      const timing = departure + (run.departureTime ? ` · ${returning ? "Drop-off" : "Pickup"}: ${run.departureTime}` : returning ? " · After the event" : " · Time pending");
       return `
         <button class="driver-run-row" type="button" data-driver-run="${escapeHtml(run.key)}" aria-label="Open ${escapeHtml(run.label)} details">
           <span class="driver-run-copy">
@@ -11178,7 +11190,7 @@
           <section class="summary-card dark">
             <div>
               <strong class="count">${riders.length}</strong>
-              <p>assigned ${riders.length === 1 ? "rider" : "riders"} · ${runs.length} ${runs.length === 1 ? "run" : "runs"}</p>
+              <p>assigned ${riders.some(isReturnRide) ? "ride legs" : riders.length === 1 ? "rider" : "riders"} · ${runs.length} ${runs.length === 1 ? "run" : "runs"}</p>
             </div>
           </section>
 
@@ -11219,13 +11231,14 @@
     function pickupRiderRow(rider) {
       const picked = getPicked(rider.stopOrder);
       const confirmation = riderConfirmationMeta(rider);
+      const returning = isReturnRide(rider);
       const initials = String(rider.name || "R").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase();
       return `
-        <button class="pickup-rider${picked ? " is-picked" : ""}" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} pickup details">
+        <button class="pickup-rider${picked ? " is-picked" : ""}" type="button" data-rider="${Number(rider.stopOrder)}" aria-label="Open ${escapeHtml(rider.name)} ${returning ? "drop-off" : "pickup"} details">
           <span class="pickup-avatar">${picked ? "✓" : escapeHtml(initials)}</span>
           <span class="pickup-rider-copy">
             <strong>${escapeHtml(rider.name)}</strong>
-            <span>${escapeHtml(rider.readyBy ? `Pick up by ${rider.readyBy}` : "Confirmation status")}</span>
+            <span>${escapeHtml(returning ? "Ride home" : rider.readyBy ? `Pick up by ${rider.readyBy}` : "Confirmation status")}</span>
           </span>
           <span class="pickup-status ${escapeHtml(confirmation.key)}" data-confirmation-status="${escapeHtml(confirmation.key)}">${escapeHtml(confirmation.label)}</span>
           <span class="pickup-chevron" aria-hidden="true">&rsaquo;</span>
@@ -11233,16 +11246,18 @@
     }
 
     function pickupGroupHtml(group, index) {
+      const returning = group.riders.every(isReturnRide);
+      const stopLabel = returning ? "Drop-off" : "Pickup";
       return `
-        <section class="pickup-group" aria-label="Pickup ${index + 1}: ${escapeHtml(group.label)}">
+        <section class="pickup-group" aria-label="${stopLabel} ${index + 1}: ${escapeHtml(group.label)}">
           <div class="pickup-rail"><span class="pickup-number">${index + 1}</span></div>
           <div class="pickup-copy">
-            <p class="pickup-label">Pickup ${index + 1}</p>
+            <p class="pickup-label">${stopLabel} ${index + 1}</p>
             <div class="pickup-location">
               <span class="pickup-location-icon">${iconSvg("pin")}</span>
               <span>
                 <strong>${escapeHtml(group.label)}</strong>
-                <span>${escapeHtml(group.description || group.address)}</span>
+                <span>${escapeHtml(returning ? group.address : group.description || group.address)}</span>
               </span>
             </div>
             ${group.riders.map(pickupRiderRow).join("")}
@@ -11272,10 +11287,11 @@
       const run = selectedDriverRun();
       if (!run) return driverHomeView();
       const riders = run.riders;
+      const returning = riders.every(isReturnRide);
       const pickupGroups = driverPickupGroups(riders);
       const destination = state.route?.destination;
       const target = routeTarget(riders, destination);
-      const pickupLabel = `${pickupGroups.length} ${pickupGroups.length === 1 ? "pickup" : "pickups"}`;
+      const pickupLabel = `${pickupGroups.length} ${returning ? (pickupGroups.length === 1 ? "drop-off" : "drop-offs") : (pickupGroups.length === 1 ? "pickup" : "pickups")}`;
 
       return `
         <div class="stack run-detail-screen">
@@ -11300,8 +11316,9 @@
             </div>
           </section>
 
-          <div class="pickup-timeline" aria-label="Route pickups">
+          <div class="pickup-timeline" aria-label="Route ${returning ? "drop-offs" : "pickups"}">
             ${pickupGroups.map(pickupGroupHtml).join("")}
+            ${returning ? "" : `
             <section class="pickup-dropoff" aria-label="Drop-off: ${escapeHtml(destination.label)}">
               <div class="pickup-rail"><span class="pickup-number">✓</span></div>
               <div class="pickup-copy">
@@ -11314,19 +11331,19 @@
                   </span>
                 </div>
               </div>
-            </section>
+            </section>`}
           </div>
 
           ${target.allPicked ? `
-          <section class="route-complete-card" aria-label="All pickups complete">
+          <section class="route-complete-card" aria-label="All ${returning ? "drop-offs" : "pickups"} complete">
             <span class="stop-number">✓</span>
             <span>
-              <strong>All pickups complete</strong>
-              <span>Start the final route to ${escapeHtml(destination.label)}.</span>
+              <strong>All ${returning ? "drop-offs" : "pickups"} complete</strong>
+              <span>${returning ? "Your return run is complete." : `Start the final route to ${escapeHtml(destination.label)}.`}</span>
             </span>
           </section>` : ""}
 
-          <a class="primary-action route-start run-start-button" href="${googleMaps(target.address)}" target="_blank" rel="noreferrer" aria-label="${escapeHtml(target.label)}">Start route <span aria-hidden="true">&rarr;</span></a>
+          ${returning && target.allPicked ? "" : `<a class="primary-action route-start run-start-button" href="${googleMaps(target.address)}" target="_blank" rel="noreferrer" aria-label="${escapeHtml(target.label)}">Start route <span aria-hidden="true">&rarr;</span></a>`}
         </div>`;
     }
 
@@ -11343,6 +11360,7 @@
 
     function detailView() {
       const rider = state.selectedRider;
+      const returning = isReturnRide(rider);
       const driver = state.route?.driver;
       const picked = getPicked(rider.stopOrder);
       const phoneLink = telHref(rider.phone);
@@ -11354,7 +11372,7 @@
             <div class="title-row">
               <button class="back-button" type="button" data-action="rides" aria-label="Back">&larr;</button>
               <div>
-                <h1>Pickup details</h1>
+                <h1>${returning ? "Drop-off" : "Pickup"} details</h1>
                 <p>${escapeHtml(rider.area)}</p>
               </div>
             </div>
@@ -11386,7 +11404,7 @@
           </section>` : ""}
           <button class="mark-button ${picked ? "is-picked" : ""}" type="button" data-mark="${Number(rider.stopOrder)}">
             <span>✓</span>
-            <span>${picked ? "Picked up" : "Mark picked up"}</span>
+            <span>${returning ? (picked ? "Dropped off" : "Mark dropped off") : (picked ? "Picked up" : "Mark picked up")}</span>
           </button>
         </div>`;
     }

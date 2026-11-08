@@ -4919,7 +4919,7 @@
         "apikey": SUPABASE_KEY,
         "content-type": "application/json",
       };
-      if (mode === "send-route-update" && state.adminSession?.access_token) {
+      if (["send-route-update", "send-return-release"].includes(mode) && state.adminSession?.access_token) {
         headers.authorization = "Bearer " + state.adminSession.access_token;
       }
 
@@ -5033,6 +5033,13 @@
       try {
         const registration = await pushServiceWorkerRegistration();
         const subscription = await registration.pushManager.getSubscription();
+        if (subscription && state.route?.driver?.slug && state.driverAccessCode) {
+          const saved = await rpc("ride_driver_save_push_subscription", {
+            p_driver_slug: state.route.driver.slug, p_access_code: state.driverAccessCode,
+            p_plan_date: activePlanDate(), p_subscription: subscription.toJSON(), p_user_agent: navigator.userAgent || "",
+          });
+          if (!saved?.ok) throw Error("push_save_failed");
+        }
         state.pushStatus = subscription ? "enabled" : "available";
         state.pushMessage = "";
       } catch (error) {
@@ -5543,6 +5550,7 @@
     }
 
     function isReturnRide(stop = {}) {
+      if (stop.direction) return stop.direction === "return" || stop.direction === "later";
       return /\b(?:rides?\s+(?:back|home)|return(?:\s+ride)?)\b/i.test(
         [stop.routeLabel || stop.route_label, stop.area].filter(Boolean).join(" "),
       );
@@ -7472,7 +7480,10 @@
       }
 
       const index = state.adminDraftStops.findIndex((item) => item.id === stop.id);
-      if (index >= 0) state.adminDraftStops[index] = stop;
+      if (index >= 0) {
+        stop.direction = state.adminDraftStops[index].direction;
+        state.adminDraftStops[index] = stop;
+      }
       else state.adminDraftStops.push(stop);
 
       normalizeAdminDraftStops();
@@ -7612,6 +7623,10 @@
 
     function clearAdminPrivateState() {
       clearAdminChat();
+      state.adminReturnState = null;
+      state.adminReturnReview = null;
+      state.adminReturnBusy = false;
+      state.adminReturnLoading = false;
       state.admin = null;
       state.adminDraftStops = [];
       state.adminDeletedStopIds = [];
@@ -9405,6 +9420,7 @@
               </button>
             </header>
             <section class="admin-menu-list" aria-label="Admin tools">
+              ${adminMenuRow("returns", "Rides Home", "Prepare and release return rides", "map")}
               ${adminMenuRow("chat", "Admin chat", "Ask about rides and address gaps", "notes")}
               ${adminMenuRow("ai", "AI Organizer", "Draft route ideas", "map")}
               ${adminMenuRow("people", "People Bank", "Saved riders and details", "user")}
@@ -9424,19 +9440,20 @@
     }
 
     function openAdminMenuPage(page) {
-      const nextTab = ["chat", "ai", "people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
+      const nextTab = ["returns", "chat", "ai", "people", "drivers", "driver-list", "settings"].includes(page) ? page : "riders";
       state.adminActiveTab = nextTab;
       state.adminMenuOpen = false;
       state.adminError = "";
       render();
       if (nextTab === "people") loadAdminPeopleAreas();
+      if (nextTab === "returns") loadAdminReturns();
     }
 
     function adminActiveTab() {
       const tab = state.adminActiveTab || "riders";
       if (tab === "routes") return "drivers";
       if (tab === "people") return "people";
-      return ["chat", "ai", "drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
+      return ["returns", "chat", "ai", "drivers", "riders", "changes", "driver-list", "settings"].includes(tab) ? tab : "riders";
     }
 
     function adminStatButton(tab, count, label, extraClass = "") {
@@ -9533,7 +9550,7 @@
     }
 
     function adminSundayRidersView() {
-      const riders = adminFilteredStops();
+      const riders = adminFilteredStops().filter(stop => !isReturnRide(stop));
       const ridersLabel = ridePlanRidersLabel();
       const ridersByZone = Object.fromEntries(ADMIN_RIDER_ZONES.map((zone) => [
         zone.id,
@@ -10688,6 +10705,147 @@
         </section>`;
     }
 
+
+    function adminReturnScope() {
+      return { generation: adminSharedGeneration, code: state.adminCode, date: activePlanDate() };
+    }
+    function sameAdminReturnScope(scope) {
+      return scope.generation === adminSharedGeneration && scope.code === state.adminCode && scope.date === activePlanDate()
+        && Boolean(state.adminCode || state.adminSession?.access_token);
+    }
+    async function loadAdminReturns() {
+      if (!state.adminCode && !state.adminSession?.access_token) return;
+      const scope = adminReturnScope();
+      if (state.adminReturnState?.planDate !== scope.date) state.adminReturnState = null;
+      state.adminReturnLoading = true;
+      try {
+        const result = await rpc("ride_admin_return_state", { p_admin_code: state.adminCode, p_plan_date: scope.date }, adminRpcOptions());
+        if (!sameAdminReturnScope(scope)) return;
+        if (!result?.ok) throw Error(result?.error || "return_load_failed");
+        state.adminReturnState = result;
+        state.adminError = "";
+      } catch (error) {
+        if (sameAdminReturnScope(scope)) state.adminError = "Could not load rides home. Refresh to try again.";
+      } finally {
+        if (sameAdminReturnScope(scope)) { state.adminReturnLoading = false; render(); }
+      }
+    }
+    async function reviewAdminReturnRelease() {
+      if (state.adminReturnBusy) return;
+      if (adminChangedCount()) { state.adminError = "Save your route changes before releasing rides home."; render(); return; }
+      await loadAdminReturns();
+      const data = state.adminReturnState;
+      if (state.adminError || !data?.enabled || data.phase === "return") return;
+      state.adminReturnReview = { revision: data.revision, operationId: crypto.randomUUID(), planDate: data.planDate };
+      render();
+    }
+    async function sendReturnReleaseAlerts(scope = adminReturnScope()) {
+      const data = state.adminReturnState;
+      if (!sameAdminReturnScope(scope) || !data?.releaseId) return;
+      if (Number(data.alertSummary?.pending || 0) + Number(data.alertSummary?.failed || 0) + Number(data.alertSummary?.sending || 0) === 0) return;
+      await pushRequest("send-return-release", { adminCode: scope.code, planDate: scope.date, releaseId: data.releaseId });
+      if (sameAdminReturnScope(scope)) await loadAdminReturns();
+    }
+    async function retryReturnReleaseAlerts() {
+      if (state.adminReturnBusy) return;
+      const scope = adminReturnScope();
+      state.adminReturnBusy = true;
+      try { await sendReturnReleaseAlerts(scope); if (sameAdminReturnScope(scope)) state.adminMessage = "Alert status refreshed. Rides home remain released."; }
+      catch (error) { if (sameAdminReturnScope(scope)) state.adminMessage = "Rides home are released. Alerts could not be completed; you can retry."; }
+      finally { if (sameAdminReturnScope(scope)) { state.adminReturnBusy = false; render(); } }
+    }
+    async function releaseAdminReturns() {
+      const review = state.adminReturnReview;
+      if (!review || state.adminReturnBusy || isRehearsalMode()) return;
+      if (adminChangedCount()) { state.adminError = "Save your route changes before releasing rides home."; state.adminReturnReview = null; render(); return; }
+      const scope = adminReturnScope();
+      state.adminReturnBusy = true;
+      state.adminError = "";
+      render();
+      try {
+        const result = await rpc("ride_admin_release_returns", {
+          p_admin_code: scope.code, p_plan_date: scope.date,
+          p_expected_revision: review.revision, p_operation_id: review.operationId,
+        }, adminRpcOptions());
+        if (!sameAdminReturnScope(scope)) return;
+        if (!result?.ok) {
+          if (result?.error === "revision_changed") { state.adminReturnReview = null; throw Error("The return list changed. Refresh and review it again."); }
+          throw Error("Rides home could not be released. Refresh to check the current status.");
+        }
+        state.adminReturnState = result;
+        state.adminReturnReview = null;
+        state.adminMessage = "Rides home are released. Drivers will see their return assignments when they open the app.";
+        try { await sendReturnReleaseAlerts(scope); }
+        catch (error) { if (sameAdminReturnScope(scope)) state.adminMessage = "Rides home are released. Alerts are still pending; use Retry alerts."; }
+      } catch (error) {
+        if (sameAdminReturnScope(scope)) state.adminError = error.message || "Check the release status before retrying.";
+      } finally {
+        if (sameAdminReturnScope(scope)) { state.adminReturnBusy = false; render(); }
+      }
+    }
+    function adminReturnsView() {
+      if (!state.adminCode && !state.adminSession?.access_token) return "";
+      const data = state.adminReturnState;
+      const head = '<section class="empty-card"><h2>Rides Home</h2><p>Prepare returns here. Drivers see them only after release.</p></section>';
+      if (!data) return head + '<button class="secondary-action" data-action="adminReturnRefresh" type="button">Load rides home</button>';
+      const released = data.phase === "return";
+      const alerts = data.alertSummary || {};
+      const withoutAlerts = (data.drivers || []).filter(d => !d.hasAlerts).length;
+      const waiting = (data.unassignedRiders || []).filter(r => r.direction === "return");
+      const late = [...(data.laterRiders || []), ...(data.unassignedRiders || []).filter(r => r.direction === "later")];
+      const grouped = (data.drivers || []).map(d => {
+        const riders = (data.riders || []).filter(r => r.driverSlug === d.slug);
+        return '<section class="empty-card"><h3>' + escapeHtml(d.displayName || d.slug) + '</h3>'
+          + riders.map(r => '<p><strong>' + escapeHtml(r.name) + '</strong> · ' + escapeHtml(r.address || r.area || "Address pending")
+            + ' <button class="admin-chip-button" type="button" data-admin-edit="' + escapeHtml(r.id) + '">Edit</button></p>').join("") + '</section>';
+      }).join("");
+      const status = !data.enabled ? "<p>Release control is not enabled for this plan. Its existing driver visibility is unchanged.</p>" : released
+        ? '<p><strong>Released</strong> · Drivers now see rides home.</p><p>Released at: ' + escapeHtml(data.releasedAt ? new Date(data.releasedAt).toLocaleString('en-US', {timeZone:'America/Chicago'}) : 'Time unavailable') + ' (Houston)</p><p>Alerts: ' + Number(alerts.sent || 0) + ' sent to devices · ' + Number(alerts.failed || 0) + ' failed · ' + Number(alerts.sending || 0) + ' in progress · ' + Number(alerts.pending || 0) + ' pending · ' + Number(alerts.noDevice || 0) + ' drivers without alerts.'
+          + (Number(alerts.unknown || 0) ? ' ' + Number(alerts.unknown) + ' delivery results unconfirmed.' : "") + '</p>'
+        : '<p><strong>Not released</strong> · Hidden from drivers.</p><p>' + (data.riders || []).length + ' riders · ' + (data.drivers || []).length + ' drivers · ' + withoutAlerts + ' drivers without alerts.</p>';
+      const review = state.adminReturnReview ? '<section class="empty-card" role="region" aria-label="Review return release"><h3>Release everyone’s rides home?</h3><p>Event: ' + escapeHtml(data.planDate || activePlanDate()) + '</p><p>This switches all drivers to their return assignments and sends alerts to enabled devices. Later drop-offs stay separate.</p><button class="primary-action" type="button" data-action="adminReturnConfirm" ' + (state.adminReturnBusy ? 'disabled' : '') + '>Confirm release</button><button class="secondary-action" type="button" data-action="adminReturnCancel">Cancel</button></section>' : "";
+      const release = !released && !state.adminReturnReview ? '<button class="primary-action" type="button" data-action="adminReturnReview" ' + (!data.enabled || !(data.riders || []).length || state.adminReturnBusy || state.adminReturnLoading || isRehearsalMode() ? 'disabled' : '') + '>Release Rides Home</button>' : "";
+      const retry = released && (Number(alerts.pending || 0) + Number(alerts.failed || 0) + Number(alerts.sending || 0) > 0)
+        ? '<button class="secondary-action" type="button" data-action="adminReturnRetry" ' + (state.adminReturnBusy ? 'disabled' : '') + '>Retry alerts</button>' : "";
+      return head + '<section class="empty-card"><p>Event: ' + escapeHtml(data.planDate || activePlanDate()) + '</p>' + status + (!data.enabled ? '<p>This plan is not enabled for private return release yet.</p>' : "")
+        + release + retry + '<button class="secondary-action" type="button" data-action="adminReturnRefresh">Refresh</button></section>' + review
+        + (waiting.length ? '<section class="admin-message"><strong>Return driver still needed:</strong> ' + waiting.map(r => escapeHtml(r.name)).join(", ") + '</section>' : "")
+        + grouped
+        + (late.length ? '<section class="empty-card"><h3>Later drop-offs — separate</h3>' + late.map(r => '<p>' + escapeHtml(r.name) + ' · ' + escapeHtml(r.readyBy || "Time pending") + ' · ' + escapeHtml(r.address || "") + ' · ' + escapeHtml(r.driverSlug || "Driver to be assigned") + '</p>').join("") + '</section>' : "");
+    }
+    let driverPhaseRefreshBusy = false;
+    async function refreshDriverPhase() {
+      if (driverPhaseRefreshBusy || isRehearsalMode() || !state.driverAccessCode || !state.route?.driver?.slug
+          || !["driverHome", "rides", "detail", "profile"].includes(state.view) || document.hidden) return;
+      const slug = state.route.driver.slug, code = state.driverAccessCode, date = activePlanDate();
+      driverPhaseRefreshBusy = true;
+      try {
+        const next = await rpc("ride_driver_route", { p_driver_slug: slug, p_access_code: code, p_plan_date: date });
+        if (state.driverAccessCode !== code || state.route?.driver?.slug !== slug || activePlanDate() !== date) return;
+        if (!next?.ok) throw Error("route_refresh_failed");
+        const changedPhase = next.phase !== state.route.phase || next.releaseVersion !== state.route.releaseVersion;
+        state.route = next;
+        state.driverRefreshError = "";
+        if (changedPhase) {
+          state.selectedRider = null; state.selectedDriverRunKey = ""; state.routeTimings = {};
+          state.routeTimingPlanDate = ""; state.routeTimingStatus = "idle"; state.view = "driverHome";
+        } else if (state.selectedRider) {
+          state.selectedRider = next.riders?.find(r => r.stopOrder === state.selectedRider.stopOrder) || null;
+          if (!state.selectedRider && state.view === "detail") state.view = "driverHome";
+        }
+        render();
+      } catch (error) {
+        if (state.driverAccessCode === code && state.route?.driver?.slug === slug) {
+          state.driverRefreshError = "Could not check for route updates. Reconnect and refresh before relying on this list.";
+          render();
+        }
+      } finally { driverPhaseRefreshBusy = false; }
+    }
+    window.addEventListener?.("focus", refreshDriverPhase);
+    window.addEventListener?.("online", refreshDriverPhase);
+    document.addEventListener?.("visibilitychange", () => { if (!document.hidden) refreshDriverPhase(); });
+    window.setInterval?.(refreshDriverPhase, 30000);
+
     function adminView() {
       if (state.adminLoading && !state.admin) {
         return `<div class="stack"><section class="empty-card"><p>Loading admin...</p></section></div>`;
@@ -10698,7 +10856,7 @@
       const pendingAlertCount = state.adminNotifyDraft?.driverSlugs?.length || 0;
       const visibleChangeCount = pendingAlertCount || changed;
       const activeTab = adminActiveTab();
-      const activeView = activeTab === "chat" ? adminChatView() : activeTab === "people"
+      const activeView = activeTab === "returns" ? adminReturnsView() : activeTab === "chat" ? adminChatView() : activeTab === "people"
         ? adminPeopleView()
         : activeTab === "ai"
           ? adminAiOrganizerView()
@@ -10745,12 +10903,13 @@
 
           <section class="admin-stats admin-control-stats" aria-label="Ride control stats">
             ${adminStatButton("drivers", drivers.length, "drivers available")}
-            ${adminStatButton("riders", adminStops().length, ridePlanRidersLabel())}
+            ${adminStatButton("riders", adminStops().filter(stop => !isReturnRide(stop)).length, ridePlanRidersLabel())}
             ${adminStatButton("changes", visibleChangeCount, "changes today", pendingAlertCount ? "is-alert" : "")}
           </section>
 
           ${state.adminMessage ? `<section class="admin-message">${escapeHtml(state.adminMessage)}</section>` : ""}
           ${state.adminError ? `<section class="admin-message error">${escapeHtml(state.adminError)}</section>` : ""}
+          <nav class="admin-tabs" aria-label="Ride direction">${adminTabButton("riders", "Pickups")}${adminTabButton("returns", "Rides Home")}</nav>
           ${adminDraftStatusHtml(changed)}
           ${adminDraftRestoreHtml()}
           ${adminNotifyPromptHtml()}
@@ -11175,7 +11334,8 @@
 
           <section class="driver-greeting" aria-label="${escapeHtml(driver.displayName)} dashboard">
             <p>${escapeHtml(dateLabel)}</p>
-            <h1>Good morning, ${escapeHtml(driver.displayName)}</h1>
+            <h1>${state.route?.phase === "return" ? "Rides Home" : `Good morning, ${escapeHtml(driver.displayName)}`}</h1>
+            ${state.route?.phase === "return" ? `<p>${escapeHtml(driver.displayName)} · Your return assignments</p>` : ""}
           </section>
 
           <button class="driver-weather-strip" type="button" data-action="toggleWeather" aria-expanded="${state.weatherOpen ? "true" : "false"}">
@@ -11194,9 +11354,10 @@
             </div>
           </section>
 
+          ${state.driverRefreshError ? `<section class="admin-message error">${escapeHtml(state.driverRefreshError)} <button class="secondary-action" type="button" data-action="driverRouteRefresh">Refresh</button></section>` : ""}
           <section class="driver-run-list" aria-label="Assigned runs">
-            <h2>Your runs</h2>
-            ${runs.length ? runs.map(driverRunRow).join("") : `<p class="empty-state">No runs assigned.</p>`}
+            <h2>${state.route?.phase === "return" ? "Your rides home" : "Your runs"}</h2>
+            ${runs.length ? runs.map(driverRunRow).join("") : `<p class="empty-state">${state.route?.phase === "return" ? "No return rides assigned. Check with the ride coordinator." : "No runs assigned."}</p>`}
           </section>
         </div>`;
     }
@@ -11282,6 +11443,10 @@
       };
     }
 
+    function driverRefreshWarningHtml() {
+      return state.driverRefreshError ? `<section class="admin-message error" role="status">${escapeHtml(state.driverRefreshError)} <button class="secondary-action" type="button" data-action="driverRouteRefresh">Refresh</button></section>` : "";
+    }
+
     function ridesView() {
       const driver = state.route?.driver;
       const run = selectedDriverRun();
@@ -11295,6 +11460,7 @@
 
       return `
         <div class="stack run-detail-screen">
+          ${driverRefreshWarningHtml()}
           <header class="run-detail-header">
             <button class="back-button" type="button" data-action="driverHome" aria-label="Back">&larr;</button>
             <h1>${escapeHtml(driver.displayName)} route</h1>
@@ -11368,6 +11534,7 @@
 
       return `
         <div class="stack">
+          ${driverRefreshWarningHtml()}
           <section class="intro-block compact">
             <div class="title-row">
               <button class="back-button" type="button" data-action="rides" aria-label="Back">&larr;</button>
@@ -11584,7 +11751,7 @@
 	        closeCodeModal();
 	        setDriverHome();
 	        refreshDriverPushStatus();
-	        loadDriverRouteTiming(accessCode);
+	        if (route.phase !== "return") loadDriverRouteTiming(accessCode);
 	        loadWeatherForecast();
 	      } catch (error) {
         codeError.textContent = "Route could not open.";
@@ -11621,6 +11788,7 @@
       const adminTabButton = event.target.closest("[data-admin-tab]");
       if (adminTabButton) {
         state.adminActiveTab = adminTabButton.dataset.adminTab;
+        if (state.adminActiveTab === "returns") loadAdminReturns();
         state.adminMenuOpen = false;
         render();
         return;
@@ -11737,6 +11905,12 @@
         state.adminError = "";
         render();
       }
+      if (action === "adminReturnRefresh") loadAdminReturns();
+      if (action === "adminReturnReview") reviewAdminReturnRelease();
+      if (action === "adminReturnConfirm") releaseAdminReturns();
+      if (action === "adminReturnRetry") retryReturnReleaseAlerts();
+      if (action === "adminReturnCancel") { state.adminReturnReview = null; render(); }
+      if (action === "driverRouteRefresh") refreshDriverPhase();
       if (action === "adminNotifyReview") openAdminNotifyReview();
       if (action === "adminNotifyCancel") cancelAdminNotify();
       if (action === "adminNotifySend") sendAdminRouteNotifications();

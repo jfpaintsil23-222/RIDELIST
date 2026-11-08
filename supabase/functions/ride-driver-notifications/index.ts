@@ -2,6 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import webpush from "npm:web-push@3.6.7";
 import {
   buildRouteUpdatePayload,
+  buildReturnReleasePayload,
+  dispatchReturnJobs,
   isExpiredSubscriptionStatus,
   normalizeDriverSlugs,
   summarizeSendResults,
@@ -117,6 +119,36 @@ async function handleSend(body: Record<string, unknown>, authorization = "") {
   return json({ ok: true, ...summarizeSendResults(results), results });
 }
 
+
+async function handleReturnRelease(body: Record<string, unknown>, authorization = "") {
+  const adminCode = String(body.adminCode || "");
+  const planDate = String(body.planDate || "");
+  const releaseId = String(body.releaseId || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(planDate) || !/^[0-9a-f-]{36}$/i.test(releaseId)) return json({ok:false,error:"invalid_return_request"},400);
+  // Authorize before touching the provider; a missing sender setup leaves jobs pending.
+  const state = await callRpc("ride_admin_return_state", {p_admin_code:adminCode,p_plan_date:planDate}, authorization);
+  if (!state?.ok) return json({ok:false,error:"invalid_admin_code"},403);
+  if (state.releaseId !== releaseId || state.phase !== "return") return json({ok:false,error:"release_not_found"},409);
+  if (!configureWebPush().ok) return json({ok:false,error:"push_not_configured"},503);
+  const payload = JSON.stringify(buildReturnReleasePayload(releaseId));
+  const summary = {sent:0,failed:0,unknown:0,noDevice:0};
+  for (let index=0;index<100;index++) {
+    const claim = await callRpc("ride_admin_claim_return_notifications",{p_admin_code:adminCode,p_plan_date:planDate,p_release_id:releaseId},authorization);
+    if (!claim?.ok) return json(claim,403);
+    if (!claim.jobs?.length) break;
+    const result = await dispatchReturnJobs(claim.jobs,{
+      send: async (job: {subscription: Record<string,unknown>}) => { await webpush.sendNotification(job.subscription, payload); },
+      finish: async (job: {id:string,leaseToken:string},status:string,error:string) => {
+        const saved = await callRpc("ride_admin_finish_return_notification",{p_admin_code:adminCode,p_job_id:job.id,p_lease_token:job.leaseToken,p_status:status,p_error:error},authorization);
+        if (!saved?.ok) throw Error("notification_result_not_saved");
+      },
+    });
+    summary.sent+=result.sent;summary.failed+=result.failed;summary.unknown+=result.unknown;summary.noDevice+=result.noDevice;
+    if(result.failed) break; // Do not immediately reclaim the same failed job in this send attempt.
+  }
+  return json({ok:true,...summary});
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
@@ -124,6 +156,7 @@ Deno.serve(async (request: Request) => {
   try {
     const body = await request.json().catch(() => ({}));
     if (body?.mode === "public-key") return await handlePublicKey();
+    if (body?.mode === "send-return-release") return await handleReturnRelease(body, request.headers.get("authorization") || "");
     if (body?.mode === "send-route-update") return await handleSend(body, request.headers.get("authorization") || "");
     return json({ ok: false, error: "unknown_mode" }, 400);
   } catch (error) {

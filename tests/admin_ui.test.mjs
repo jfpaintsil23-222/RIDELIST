@@ -36,7 +36,7 @@ async function loadApp(fetchImpl, options = {}) {
     crypto: { randomUUID: () => "00000000-0000-0000-0000-000000009001" },
     encodeURIComponent,
     URLSearchParams,
-    FormData: class {},
+    FormData: options.FormData || class {},
     location: {
       href: `https://example.test/${options.search || ""}`,
       search: options.search || "",
@@ -77,11 +77,17 @@ async function loadApp(fetchImpl, options = {}) {
       __screen: screen,
       runAdminSharedSecondary: typeof runAdminSharedSecondary === "function" ? runAdminSharedSecondary : undefined,
       adminView,
+      adminReturnsView: typeof adminReturnsView === "function" ? adminReturnsView : undefined,
+      loadAdminReturns: typeof loadAdminReturns === "function" ? loadAdminReturns : undefined,
+      reviewAdminReturnRelease: typeof reviewAdminReturnRelease === "function" ? reviewAdminReturnRelease : undefined,
+      releaseAdminReturns: typeof releaseAdminReturns === "function" ? releaseAdminReturns : undefined,
+      refreshDriverPhase: typeof refreshDriverPhase === "function" ? refreshDriverPhase : undefined,
       adminRouteHeaderSummary,
       openAdminMenuPage: typeof openAdminMenuPage === "function" ? openAdminMenuPage : undefined,
       adminReviewView: typeof adminReviewView === "function" ? adminReviewView : undefined,
       adminResetView: typeof adminResetView === "function" ? adminResetView : undefined,
       adminEditView,
+      saveAdminDraftFromForm,
       adminPersonDetailView: typeof adminPersonDetailView === "function" ? adminPersonDetailView : undefined,
       adminPersonEditView: typeof adminPersonEditView === "function" ? adminPersonEditView : undefined,
       adminPersonReviewView: typeof adminPersonReviewView === "function" ? adminPersonReviewView : undefined,
@@ -4420,4 +4426,59 @@ test('admin chat menu opens the conversation and keeps only eight recent message
   app.clearAdminPrivateState();
   assert.equal(app.state.adminChatMessages.length,0);
   assert.equal(app.state.adminChatPrompt,'');
+});
+
+test("admin returns tab reviews private assignments and never offers a driver release button", async()=>{
+ const app=await loadApp();app.state.adminCode="synthetic-admin";app.state.planDate="2099-01-04";
+ app.state.admin={drivers:[],stops:[]};app.state.adminDraftStops=[];app.state.adminActiveTab="returns";
+ app.state.adminReturnState={ok:true,enabled:true,phase:"pickup",revision:"r1",drivers:[{slug:"example",displayName:"Example",hasAlerts:false}],riders:[{id:"r1",driverSlug:"example",name:"Return A",address:"Synthetic address",routeLabel:"Rides Back"}],laterRiders:[],unassignedRiders:[],alertSummary:{}};
+ assert.equal(typeof app.adminReturnsView,"function");assert.match(app.adminView(),/Return A|Release Rides Home/);assert.match(app.adminView(),/Not released/);
+ app.state.route={phase:"return",driver:{slug:"example",displayName:"Example"},riders:[],destination:{label:"Destinations",address:""}};
+ assert.match(app.driverHomeView(),/Rides Home/);assert.match(app.driverHomeView(),/No return rides assigned/);assert.doesNotMatch(app.driverHomeView(),/data-action="adminReturn/);
+ app.clearAdminPrivateState();assert.equal(app.state.adminReturnState,null);
+});
+test("return release succeeds even if notification sending fails, and clears its review",async()=>{
+ const calls=[];const released={ok:true,enabled:true,phase:"return",revision:"r1",releaseId:"00000000-0000-0000-0000-000000009999",drivers:[],riders:[],alertSummary:{pending:1}};
+ const app=await loadApp(async(url,options)=>{calls.push({url,body:JSON.parse(options?.body||"{}")});if(url.endsWith("/ride_admin_release_returns")||url.endsWith("/ride_admin_return_state"))return {ok:true,json:async()=>released};if(url.includes("/functions/"))throw Error("Synthetic alert failure");return {ok:true,json:async()=>[]};});
+ app.state.adminCode="synthetic-admin";app.state.planDate="2099-01-04";app.state.admin={stops:[],drivers:[]};app.state.adminDraftStops=[];
+ app.state.adminReturnReview={revision:"r1",operationId:"00000000-0000-0000-0000-000000009001"};
+ assert.equal(typeof app.releaseAdminReturns,"function");await app.releaseAdminReturns();
+ assert.equal(app.state.adminReturnState.phase,"return");assert.equal(app.state.adminReturnReview,null);assert.match(app.state.adminMessage,/released/i);assert.match(app.state.adminMessage,/alert/i);
+ assert.equal(calls.filter(c=>c.url.endsWith("/ride_admin_release_returns")).length,1);
+});
+test("phase refresh switches driver data and clears stale rider and timing state",async()=>{
+ const response={ok:true,phase:"return",releaseVersion:"new",driver:{slug:"example",displayName:"Example"},riders:[{name:"Return A",stopOrder:1,routeLabel:"Rides Back"}],destination:{label:"Destinations",address:""}};
+ const app=await loadApp(async(url)=>({ok:true,json:async()=>url.endsWith("/ride_driver_route")?response:[]}));app.state.view="driverHome";app.state.driverAccessCode="synthetic";app.state.route={ok:true,phase:"pickup",releaseVersion:"pickup",driver:{slug:"example"},riders:[{name:"Pickup A"}]};
+ app.state.selectedRider={name:"Pickup A"};app.state.routeTimings={example:{durationText:"old"}};
+ assert.equal(typeof app.refreshDriverPhase,"function");await app.refreshDriverPhase();
+ assert.equal(app.state.route.phase,"return");assert.equal(app.state.selectedRider,null);assert.deepEqual(Object.keys(app.state.routeTimings),[]);
+});
+
+
+test("pickup admin tab excludes return cards without removing them from the editable draft",async()=>{
+ const app=await loadApp();app.state.adminCode="synthetic-admin";app.state.admin={drivers:[{slug:"example",displayName:"Example"}],stops:[]};app.state.adminActiveTab="riders";app.state.adminExpandedZone="hcu";
+ app.state.adminDraftStops=[{id:"a",name:"Pickup Only",area:"HCU",driverSlug:"example",routeLabel:"Pickup HCU"},{id:"b",name:"Private Return Only",area:"HCU",driverSlug:"example",routeLabel:"Rides Back HCU"}];
+ assert.match(app.adminView(),/Pickup Only/);assert.doesNotMatch(app.adminView(),/Private Return Only/);assert.equal(app.state.adminDraftStops.length,2);
+});
+
+test("offline warning remains visible on driver navigation and rider detail screens",async()=>{
+ const app=await loadApp(async(url)=>{if(url.endsWith('/ride_driver_route'))throw Error('offline');return {ok:true,json:async()=>[]};});
+ app.state.view='rides';app.state.driverAccessCode='code';app.state.route={driver:{slug:'example',displayName:'Example'},destination:{label:'Venue',address:'100 Sample St'},riders:[{name:'Pickup A',stopOrder:101,address:'1 Example St',routeLabel:'Pickup HCU Run 1'}]};
+ await app.refreshDriverPhase();assert.match(app.ridesView(),/Could not check for route updates/);
+ app.state.selectedRider=app.state.route.riders[0];assert.match(app.detailView(),/Could not check for route updates/);
+});
+test("editing a return label preserves its explicit direction in the admin draft",async()=>{
+ const app=await loadApp(undefined,{FormData:class { constructor(form){return form;} }});
+ app.state.admin={drivers:[],stops:[]};app.state.adminSharedSupported=false;
+ app.state.adminDraftStops=[{id:'return-a',direction:'return',driverSlug:'example',stopOrder:1,name:'Example Rider',address:'1 Example St',routeLabel:'Rides Home'}];
+ app.saveAdminDraftFromForm(new Map(Object.entries({id:'return-a',driverSlug:'example',stopOrder:'1',name:'Example Rider',address:'1 Example St',routeLabel:'HCU Run 1'})));
+ assert.equal(app.state.adminDraftStops[0].direction,'return');
+});
+test("explicit return direction survives a renamed route label in driver display",async()=>{
+ const app=await loadApp();app.state.route={phase:'return',driver:{slug:'example',displayName:'Example'},destination:{label:'Destinations',address:''},riders:[{name:'Return A',direction:'return',stopOrder:1,address:'1 Example St',routeLabel:'HCU Run 1'}]};
+ assert.match(app.ridesView(),/Drop-off 1/);assert.doesNotMatch(app.ridesView(),/Final destination/);
+});
+test("return review shows event date and released timestamp and sending alert status",async()=>{
+ const app=await loadApp();app.state.adminCode='synthetic-admin';app.state.adminReturnState={ok:true,enabled:true,planDate:'2099-01-04',phase:'return',releasedAt:'2099-01-04T20:00:00Z',drivers:[],riders:[],alertSummary:{sending:1}};
+ assert.match(app.adminReturnsView(),/2099-01-04/);assert.match(app.adminReturnsView(),/Released at/);assert.match(app.adminReturnsView(),/in progress/);assert.match(app.adminReturnsView(),/adminReturnRetry/);
 });
